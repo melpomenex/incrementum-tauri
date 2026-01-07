@@ -1,0 +1,70 @@
+[package]
+name = "incrementum-tauri"
+version = "0.1.0"
+description = "Incrementum - Incremental Reading and Spaced Repetition"
+authors = ["Incrementum Team"]
+edition = "2021"
+
+[lib]
+name = "incrementum_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Async
+futures = "0.3"
+async-trait = "0.1"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+
+# Encryption
+sha2 = "0.10"
+aes-gcm = "0.10"
+hostname = "0.4"
+
+# WebSocket
+tokio-tungstenite = "0.23"
+futures-util = "0.3"
+
+# File processing
+lopdf = { version = "0.34", features = ["tokio"] }
+pdf-extract = "0.7"
+epub = "2"
+walkdir = "2"
+regex = "1"
+
+# Spaced Repetition
+fsrs = "5"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# Disable LTO to avoid bitcode compatibility issues
+[profile.release]
+lto = false

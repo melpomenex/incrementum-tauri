@@ -1,0 +1,51 @@
+/* PDF Viewer Text Layer Styles */
+/* Based on PDF.js text layer implementation */
+
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1;
+  -moz-text-size-adjust: none;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+  display: block;
+}
+
+/* Text selection highlight color */
+.textLayer ::selection {
+  background: rgba(0, 100, 255, 0.3);
+}
+
+.textLayer br::selection {
+  background: transparent;
+}
+
+.textLayer ::-moz-selection {
+  background: rgba(0, 100, 255, 0.3);
+}
+
+.textLayer br::-moz-selection {
+  background: transparent;
+}
+
+/* End of text layer styles */

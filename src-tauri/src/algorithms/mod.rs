@@ -1,0 +1,237 @@
+//! Scheduling algorithms implementation
+//!
+//! This module provides different spaced repetition algorithms:
+//! - FSRS-5 (Free Spaced Repetition Scheduler)
+//! - SM-2 (SuperMemo 2)
+
+use crate::models::{LearningItem, ReviewRating};
+use chrono::{Utc, Duration};
+
+pub mod optimizer;
+
+// Re-exports from optimizer
+pub use optimizer::calculate_review_statistics;
+
+#[cfg(test)]
+mod tests;
+
+/// SM-2 algorithm parameters
+#[derive(Debug, Clone)]
+pub struct SM2Params {
+    /// Ease factor (minimum 1.3)
+    pub ease_factor: f64,
+    /// Interval in days
+    pub interval: f64,
+    /// Number of repetitions
+    pub repetitions: u32,
+}
+
+impl Default for SM2Params {
+    fn default() -> Self {
+        Self {
+            ease_factor: 2.5,
+            interval: 0.0,
+            repetitions: 0,
+        }
+    }
+}
+
+impl SM2Params {
+    /// Calculate next interval using SM-2 algorithm
+    pub fn next_interval(&self, rating: ReviewRating) -> Self {
+        let rating_value = rating as i32;
+
+        let mut new_params = self.clone();
+
+        // SM-2 quality mapping: 0-2 = again, 3-4 = hard, 5 = good, 6 = easy
+        // Our rating: 1 = again, 2 = hard, 3 = good, 4 = easy
+        // Map to SM-2 quality:
+        let sm2_quality = match rating {
+            ReviewRating::Again => 0,  // Complete failure
+            ReviewRating::Hard => 3,   // Hard difficulty
+            ReviewRating::Good => 4,   // Good response
+            ReviewRating::Easy => 5,   // Perfect response
+        };
+
+        // If quality < 3, start over
+        if sm2_quality < 3 {
+            new_params.repetitions = 0;
+            new_params.interval = 0.0;
+        } else {
+            new_params.repetitions += 1;
+
+            // Calculate interval based on repetition number
+            match new_params.repetitions {
+                1 => new_params.interval = 1.0,
+                2 => new_params.interval = 6.0,
+                _ => {
+                    // I(n) = I(n-1) * EF
+                    new_params.interval = new_params.interval * new_params.ease_factor;
+                }
+            }
+
+            // Update ease factor
+            // EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+            let q = sm2_quality as f64;
+            new_params.ease_factor = new_params.ease_factor + (0.1 - (5.0 - q) * (0.08 + (5.0 - q) * 0.02));
+
+            // Ensure ease factor doesn't go below 1.3
+            if new_params.ease_factor < 1.3 {
+                new_params.ease_factor = 1.3;
+            }
+        }
+
+        new_params
+    }
+
+    /// Calculate next review date
+    pub fn next_review_date(&self) -> chrono::DateTime<Utc> {
+        let days = self.interval.max(0.0) as i64;
+        Utc::now() + Duration::days(days)
+    }
+}
+
+/// FSRS-5 algorithm wrapper (already implemented in review.rs)
+pub struct FsrsScheduler {
+    pub desired_retention: f32,
+}
+
+impl FsrsScheduler {
+    pub fn new(desired_retention: f32) -> Self {
+        Self {
+            desired_retention,
+        }
+    }
+
+    /// Calculate next states using FSRS (simplified version)
+    pub fn calculate_next_state(
+        &self,
+        current_stability: f64,
+        current_difficulty: f64,
+        elapsed_days: u32,
+        rating: ReviewRating,
+    ) -> (f64, f64) {
+        // This is a simplified version - the actual FSRS is used in submit_review
+        // Return (new_stability, new_difficulty)
+
+        let rating_value = rating as i32;
+
+        // Simplified FSRS-like calculation
+        let new_stability = match rating {
+            ReviewRating::Again => current_stability * 0.5,
+            ReviewRating::Hard => current_stability * 0.8,
+            ReviewRating::Good => current_stability * 1.2,
+            ReviewRating::Easy => current_stability * 1.5,
+        };
+
+        let new_difficulty = match rating {
+            ReviewRating::Again => (current_difficulty + 0.2).min(10.0),
+            ReviewRating::Hard => (current_difficulty + 0.1).min(10.0),
+            ReviewRating::Good => current_difficulty,
+            ReviewRating::Easy => (current_difficulty - 0.1).max(1.0),
+        };
+
+        (new_stability, new_difficulty)
+    }
+}
+
+/// Calculate priority score for queue items
+pub fn calculate_priority_score(
+    due_date: chrono::DateTime<Utc>,
+    interval: i32,
+    review_count: i32,
+    difficulty: f64,
+) -> f64 {
+    let now = Utc::now();
+    let is_due = due_date <= now;
+    let days_until_due = (due_date - now).num_days();
+
+    // Base priority from urgency
+    let mut priority = if is_due {
+        // Items that are due get highest priority
+        // New items (interval 0) or low intervals get higher priority
+        10.0 - (interval as f64 / 10.0)
+    } else if days_until_due <= 1 {
+        8.0
+    } else if days_until_due <= 3 {
+        6.0
+    } else if days_until_due <= 7 {
+        4.0
+    } else {
+        2.0
+    };
+
+    // Adjust for difficulty - harder items get slightly higher priority
+    priority += difficulty * 0.1;
+
+    // Adjust for review count - items with few reviews get higher priority
+    if review_count < 3 {
+        priority += 1.0;
+    }
+
+    priority.max(0.0).min(10.0)
+}
+
+/// Document scheduler - schedules documents for incremental reading
+pub struct DocumentScheduler {
+    /// Maximum documents to schedule per day
+    pub max_daily_documents: u32,
+    /// Cards per document before moving to next
+    pub cards_per_document: u32,
+}
+
+impl Default for DocumentScheduler {
+    fn default() -> Self {
+        Self {
+            max_daily_documents: 5,
+            cards_per_document: 10,
+        }
+    }
+}
+
+impl DocumentScheduler {
+    /// Calculate which documents should be scheduled for today
+    pub fn schedule_documents(
+        &self,
+        documents: Vec<(String, i32)>, // (document_id, learning_item_count)
+    ) -> Vec<String> {
+        // Sort by learning item count (fewer items first = newer content)
+        let mut sorted = documents.clone();
+        sorted.sort_by_key(|(_, count)| *count);
+
+        // Take top N documents
+        sorted
+            .into_iter()
+            .take(self.max_daily_documents as usize)
+            .map(|(id, _)| id)
+            .collect()
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct AlgorithmComparison {
+    pub algorithm: String,
+    pub avg_retention: f64,
+    pub total_reviews: i32,
+    pub avg_interval: f64,
+}
+
+/// Compare algorithm performance
+pub fn compare_algorithms(items: &[LearningItem]) -> AlgorithmComparison {
+    let total_reviews: i32 = items.iter().map(|i| i.review_count).sum();
+    let avg_interval: f64 = if total_reviews > 0 {
+        items.iter().map(|i| i.interval as f64).sum::<f64>() / items.len() as f64
+    } else {
+        0.0
+    };
+
+    // Simplified retention estimate (would need historical data for accurate calculation)
+    let avg_retention = 0.85; // Placeholder
+
+    AlgorithmComparison {
+        algorithm: "FSRS-5".to_string(),
+        avg_retention,
+        total_reviews,
+        avg_interval,
+    }
+}

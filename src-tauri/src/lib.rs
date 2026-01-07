@@ -1,0 +1,196 @@
+//! Incrementum Tauri application
+
+mod error;
+mod models;
+mod database;
+mod commands;
+mod processor;
+mod generator;
+mod algorithms;
+mod ai;
+mod youtube;
+mod sync;
+mod integrations;
+
+use database::Database;
+use std::sync::{Arc, Mutex};
+use tauri::Manager;
+
+// Global state for the database
+struct AppState {
+    db: Arc<Mutex<Option<Database>>>,
+}
+
+// Import AI command module types
+use commands::ai::AIState;
+
+impl AppState {
+    fn new() -> Self {
+        Self {
+            db: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
+// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+#[tauri::command]
+fn greet(name: &str) -> String {
+    format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            // Initialize async runtime for database setup
+            tauri::async_runtime::block_on(async {
+                // Get app data directory
+                let app_dir = app
+                    .path()
+                    .app_data_dir()
+                    .expect("Failed to get app data dir");
+
+                // Ensure directory exists
+                std::fs::create_dir_all(&app_dir)
+                    .expect("Failed to create app data dir");
+
+                let db_path = app_dir.join("incrementum.db");
+
+                // Initialize database
+                let db = Database::new(db_path)
+                    .await
+                    .expect("Failed to initialize database");
+
+                // Run migrations
+                db.migrate()
+                    .await
+                    .expect("Failed to run migrations");
+
+                // Store database in app state
+                let state = AppState::new();
+                *state.db.lock().unwrap() = Some(db);
+
+                // Create repository for use in commands
+                let repo = database::Repository::new(
+                    state.db.lock().unwrap().as_ref().unwrap().pool().clone()
+                );
+
+                app.manage(state);
+                app.manage(repo);
+                app.manage(AIState::default());
+
+                tracing_subscriber::fmt::init();
+
+                if let Some(window) = app.get_webview_window("main") {
+                    if std::env::var("INCREMENTUM_OPEN_DEVTOOLS").is_ok() {
+                        let _ = window.open_devtools();
+                    }
+                    let _ = window.eval(
+                        "console.log('Webview location:', window.location.href);",
+                    );
+                }
+
+                Ok(())
+            })
+        })
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            // Document commands
+            commands::get_documents,
+            commands::get_document,
+            commands::create_document,
+            commands::update_document,
+            commands::delete_document,
+            commands::import_document,
+            commands::import_documents,
+            // Extract commands
+            commands::get_extracts,
+            commands::get_extract,
+            commands::create_extract,
+            commands::update_extract,
+            commands::delete_extract,
+            commands::bulk_delete_extracts,
+            commands::bulk_generate_cards,
+            // Learning item commands
+            commands::get_due_items,
+            commands::create_learning_item,
+            commands::generate_learning_items_from_extract,
+            commands::get_learning_items,
+            // Category commands
+            commands::get_categories,
+            commands::create_category,
+            // Queue commands
+            commands::get_queue,
+            commands::get_queue_stats,
+            commands::postpone_item,
+            commands::bulk_suspend_items,
+            commands::bulk_unsuspend_items,
+            commands::bulk_delete_items,
+            commands::export_queue,
+            // Review commands
+            commands::start_review,
+            commands::submit_review,
+            commands::get_next_review_times,
+            commands::preview_review_intervals,
+            commands::get_review_streak,
+            // Algorithm commands
+            commands::calculate_sm2_next,
+            commands::schedule_documents,
+            commands::calculate_priority_scores,
+            commands::compare_algorithms_command,
+            commands::get_algorithm_params,
+            commands::get_review_statistics,
+            commands::optimize_algorithm_params,
+            // AI commands
+            commands::get_ai_config,
+            commands::set_ai_config,
+            commands::set_api_key,
+            commands::generate_flashcards_from_extract,
+            commands::generate_flashcards_from_content,
+            commands::answer_question,
+            commands::answer_about_extract,
+            commands::summarize_content,
+            commands::extract_key_points,
+            commands::generate_title,
+            commands::simplify_content,
+            commands::generate_questions,
+            commands::list_ollama_models,
+            commands::test_ai_connection,
+            // Analytics commands
+            commands::get_dashboard_stats,
+            commands::get_memory_stats,
+            commands::get_activity_data,
+            commands::get_category_stats,
+            // YouTube commands
+            youtube::check_ytdlp,
+            youtube::get_youtube_video_info,
+            youtube::get_youtube_formats,
+            youtube::download_youtube_video,
+            youtube::get_youtube_transcript,
+            youtube::search_youtube_videos,
+            youtube::get_youtube_playlist_info,
+            youtube::extract_youtube_video_id,
+            youtube::import_youtube_video,
+            // Sync commands
+            sync::sync_now,
+            sync::get_sync_status,
+            sync::resolve_sync_conflict,
+            sync::get_sync_log,
+            // Integration commands
+            integrations::export_to_obsidian,
+            integrations::export_extract_to_obsidian,
+            integrations::export_flashcards_to_obsidian,
+            integrations::import_from_obsidian,
+            integrations::sync_to_obsidian,
+            integrations::sync_flashcard_to_anki,
+            integrations::sync_flashcards_to_anki,
+            integrations::start_extension_server,
+            integrations::stop_extension_server,
+            integrations::get_extension_server_status,
+            integrations::send_to_extension,
+            integrations::process_extension_page,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

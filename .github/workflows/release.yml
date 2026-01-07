@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build Tauri application
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ steps.get_version.outputs.VERSION }}
+          releaseName: 'Incrementum ${{ steps.get_version.outputs.VERSION }}'
+          releaseBody: 'See https://github.com/your-org/incrementum/releases/tag/${{ steps.get_version.outputs.VERSION }} for release notes.'
+          releaseDraft: false
+          prerelease: false
+          tauriScript: npm run tauri
+
+  create-update-manifest:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create update manifest
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See https://github.com/your-org/incrementum/releases/tag/${VERSION} for release notes.",
+            "pub_date": "$(date -u +%Y-%m-%d)",
+            "platforms": {
+              "linux-x86_64": {
+                "signature": "",
+                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/incrementum_${VERSION}_amd64.deb"
+              },
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/Incrementum_${VERSION}_x64.dmg.dmg"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/Incrementum_${VERSION}_aarch64.dmg.dmg"
+              },
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/Incrementum_${VERSION}_x64-setup.exe"
+              }
+            }
+          }
+          EOF
+
+      - name: Upload update manifest
+        uses: softprops/action-gh-release@v2
+        with:
+          files: latest.json
+          generate_release_notes: true
