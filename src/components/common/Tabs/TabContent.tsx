@@ -46,7 +46,7 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
   const ContentComponent = activeTab.content;
 
   return (
-    <div className="h-full overflow-hidden">
+    <div className="h-full overflow-hidden bg-background">
       <Suspense fallback={<TabLoader />}>
         {/* Pass any tab-specific data as props */}
         <ContentComponent {...(activeTab.data || {})} />

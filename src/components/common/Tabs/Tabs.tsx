@@ -50,7 +50,7 @@ export function Tabs() {
   }, [tabs, activeTabId, setActiveTab, closeTab]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-background">
       <TabBar
         tabs={tabs}
         activeTabId={activeTabId}

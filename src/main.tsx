@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "./components/common/ThemeSystem";
 
 // Layout
 import { MainLayout } from "./components/layout/MainLayout";
@@ -91,15 +92,17 @@ console.log('Starting Incrementum app...');
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <HashRouter>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            {/* Catch-all route - MainLayout handles tab-based navigation internally */}
-            <Route path="*" element={<MainLayout />} />
-          </Routes>
-        </Suspense>
-        <DevPerformanceMonitor />
-      </HashRouter>
+      <ThemeProvider>
+        <HashRouter>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* Catch-all route - MainLayout handles tab-based navigation internally */}
+              <Route path="*" element={<MainLayout />} />
+            </Routes>
+          </Suspense>
+          <DevPerformanceMonitor />
+        </HashRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   </ErrorBoundary>
 );

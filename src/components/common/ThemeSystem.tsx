@@ -413,14 +413,22 @@ export const useThemeStore = create<ThemeStore>()(
 );
 
 /**
+ * Convert camelCase to kebab-case
+ */
+function toKebabCase(str: string): string {
+  return str.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+/**
  * Apply theme to document
  */
 export function applyTheme(theme: Theme) {
   const root = document.documentElement;
 
-  // Apply colors
+  // Apply colors with --color- prefix and kebab-case naming
   Object.entries(theme.colors).forEach(([key, value]) => {
-    root.style.setProperty(`--${key}`, value);
+    const cssVarName = toKebabCase(key);
+    root.style.setProperty(`--color-${cssVarName}`, value);
   });
 
   // Apply fonts

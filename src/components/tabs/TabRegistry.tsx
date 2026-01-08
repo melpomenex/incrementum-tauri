@@ -9,7 +9,7 @@ export const QueueTab = lazy(() => import("./QueueTab").then(m => ({ default: m.
 export const ReviewTab = lazy(() => import("./ReviewTab").then(m => ({ default: m.ReviewTab })));
 export const DocumentsTab = lazy(() => import("./DocumentsTab").then(m => ({ default: m.DocumentsTab })));
 export const AnalyticsTab = lazy(() => import("./AnalyticsTab").then(m => ({ default: m.AnalyticsTab })));
-export const SettingsTab = lazy(() => import("./SettingsTab").then(m => ({ default: m.SettingsTab })));
+export const SettingsTab = lazy(() => import("../settings/SettingsPage").then(m => ({ default: m.SettingsPage })));
 
 export const DocumentViewer = lazy(() => import("../viewer/DocumentViewer").then(m => ({ default: m.DocumentViewer })));
 export const KnowledgeNetworkTab = lazy(() => import("./knowledge/KnowledgeNetworkTab").then(m => ({ default: m.KnowledgeNetworkTab })));

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useTheme, useAvailableThemes } from "../common/ThemeSystem";
 import {
   Settings as SettingsIcon,
-  General,
+  Sliders,
   Palette,
   Keyboard,
   Brain,
@@ -18,7 +18,7 @@ import {
 import { KeyboardShortcutSettings } from "./KeyboardShortcutsSettings";
 import { AISettings as AIProviderSettings } from "./AIProviderSettings";
 import { ImportExportSettings as ImportExportSettingsComponent } from "./ImportExportSettings";
-import { SyncSettings as SyncSettingsOriginal } from "../../api/sync";
+import { SyncSettings as SyncSettingsOriginal } from "./SyncSettings";
 
 /**
  * Settings tab
@@ -38,7 +38,7 @@ export enum SettingsTab {
  * Settings tab config
  */
 export const SETTINGS_TABS = [
-  { id: SettingsTab.General, label: "General", icon: General },
+  { id: SettingsTab.General, label: "General", icon: Sliders },
   { id: SettingsTab.Appearance, label: "Appearance", icon: Palette },
   { id: SettingsTab.Shortcuts, label: "Shortcuts", icon: Keyboard },
   { id: SettingsTab.AI, label: "AI", icon: Brain },
