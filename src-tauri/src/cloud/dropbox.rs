@@ -28,7 +28,7 @@ impl Default for DropboxConfig {
         Self {
             app_key: "YOUR_APP_KEY".to_string(), // Replace with actual app key
             app_secret: "YOUR_APP_SECRET".to_string(), // Replace with actual app secret
-            redirect_uri: "http://localhost:3000/auth/callback".to_string(),
+            redirect_uri: "http://localhost:15173/auth/callback".to_string(),
         }
     }
 }

@@ -8,6 +8,7 @@ export interface QueueNavigationControlsProps {
   onPreviousDocument: () => void;
   onNextDocument: () => void;
   onNextChunk: () => void;
+  listButtonLabel?: string;
   disabled?: boolean;
   className?: string;
 }
@@ -19,6 +20,7 @@ export function QueueNavigationControls({
   onPreviousDocument,
   onNextDocument,
   onNextChunk,
+  listButtonLabel = "Next Chunk",
   disabled = false,
   className,
 }: QueueNavigationControlsProps) {
@@ -70,7 +72,8 @@ export function QueueNavigationControls({
         onClick={onNextChunk}
         disabled={!hasMoreChunks || disabled}
         className="p-2 rounded-md hover:bg-muted transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-        title="Next Chunk"
+        title={listButtonLabel}
+        aria-label={listButtonLabel}
       >
         <List className="w-4 h-4" />
       </button>

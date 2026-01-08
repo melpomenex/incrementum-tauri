@@ -172,7 +172,8 @@ pub async fn llm_chat(
     let client = Client::new();
     let model = model.unwrap_or_else(|| get_default_model(&provider));
     let max_tokens = if max_tokens == 0 { DEFAULT_MAX_TOKENS } else { max_tokens };
-    let base_url = base_url.unwrap_or_else(|| get_default_base_url(&provider));
+    let base_url = normalize_base_url(base_url, &provider);
+    let api_key = normalize_api_key(api_key);
 
     if api_key.is_none() && provider != "ollama" {
         return Err("API key is required".to_string());
@@ -236,7 +237,8 @@ pub async fn llm_stream_chat(
     let client = Client::new();
     let model = model.unwrap_or_else(|| get_default_model(&provider));
     let max_tokens = if max_tokens == 0 { DEFAULT_MAX_TOKENS } else { max_tokens };
-    let base_url = base_url.unwrap_or_else(|| get_default_base_url(&provider));
+    let base_url = normalize_base_url(base_url, &provider);
+    let api_key = normalize_api_key(api_key);
 
     if api_key.is_none() && provider != "ollama" {
         let _ = app.emit(LLM_STREAM_ERROR, serde_json::json!({
@@ -597,12 +599,11 @@ pub async fn llm_get_models(provider: String, api_key: Option<String>, base_url:
         ]),
         "openrouter" => {
             // Fetch from OpenRouter API if API key is provided
+            let api_key = normalize_api_key(api_key);
             if let Some(key) = api_key {
-                if !key.is_empty() {
-                    let client = Client::new();
-                    let url = base_url.unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
-                    return fetch_openrouter_models(&client, &url, &key).await;
-                }
+                let client = Client::new();
+                let url = normalize_base_url(base_url, "openrouter");
+                return fetch_openrouter_models(&client, &url, &key).await;
             }
             // Fallback to default list
             Ok(vec![
@@ -629,7 +630,8 @@ pub async fn llm_test_connection(
     base_url: Option<String>,
 ) -> Result<bool, String> {
     let client = Client::new();
-    let base_url = base_url.unwrap_or_else(|| get_default_base_url(&provider));
+    let base_url = normalize_base_url(base_url, &provider);
+    let api_key = normalize_api_key(Some(api_key)).unwrap_or_default();
 
     if api_key.is_empty() && provider != "ollama" {
         return Err("API key is required".to_string());
@@ -1058,6 +1060,21 @@ fn get_default_model(provider: &str) -> String {
         "openrouter" => "anthropic/claude-3.5-sonnet".to_string(),
         _ => "default".to_string(),
     }
+}
+
+fn normalize_api_key(api_key: Option<String>) -> Option<String> {
+    api_key
+        .map(|key| key.trim().to_string())
+        .filter(|key| !key.is_empty())
+}
+
+fn normalize_base_url(base_url: Option<String>, provider: &str) -> String {
+    let fallback = get_default_base_url(provider);
+    let url = base_url.unwrap_or(fallback.clone());
+    if url.trim().is_empty() {
+        return fallback;
+    }
+    url.trim_end_matches('/').to_string()
 }
 
 fn get_default_base_url(provider: &str) -> String {

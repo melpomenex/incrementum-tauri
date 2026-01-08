@@ -24,8 +24,20 @@ export function Review() {
     loadQueue,
     showAnswer,
     submitRating,
+    nextCard,
     resetSession,
   } = useReviewStore();
+
+  const handleRating = async (rating: ReviewRating) => {
+    const beforeId = currentCard?.id;
+    await submitRating(rating);
+    if (!beforeId) return;
+
+    const afterId = useReviewStore.getState().currentCard?.id;
+    if (afterId === beforeId) {
+      nextCard();
+    }
+  };
 
   useEffect(() => {
     loadQueue();
@@ -49,16 +61,16 @@ export function Review() {
 
       // Number keys for rating (only when answer is shown)
       if (isAnswerShown && currentCard && !isSubmitting) {
-        if (e.key === "1") submitRating(1 as ReviewRating);
-        if (e.key === "2") submitRating(2 as ReviewRating);
-        if (e.key === "3") submitRating(3 as ReviewRating);
-        if (e.key === "4") submitRating(4 as ReviewRating);
+        if (e.key === "1") handleRating(1 as ReviewRating);
+        if (e.key === "2") handleRating(2 as ReviewRating);
+        if (e.key === "3") handleRating(3 as ReviewRating);
+        if (e.key === "4") handleRating(4 as ReviewRating);
       }
     };
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [isAnswerShown, currentCard, isSubmitting, showAnswer, submitRating]);
+  }, [isAnswerShown, currentCard, isSubmitting, showAnswer, submitRating, nextCard]);
 
   if (isLoading) {
     return (
@@ -155,7 +167,7 @@ export function Review() {
             {/* Rating Buttons */}
             <div className="mt-6">
               <RatingButtons
-                onSelectRating={submitRating}
+                onSelectRating={handleRating}
                 disabled={isSubmitting}
                 previewIntervals={null} // TODO: Add preview intervals
               />

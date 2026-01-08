@@ -57,7 +57,7 @@ jobs:
         with:
           tagName: ${{ steps.get_version.outputs.VERSION }}
           releaseName: 'Incrementum ${{ steps.get_version.outputs.VERSION }}'
-          releaseBody: 'See https://github.com/your-org/incrementum/releases/tag/${{ steps.get_version.outputs.VERSION }} for release notes.'
+          releaseBody: 'See https://github.com/melpomenex/incrementum-tauri/releases/tag/${{ steps.get_version.outputs.VERSION }} for release notes.'
           releaseDraft: false
           prerelease: false
           tauriScript: npm run tauri
@@ -75,24 +75,24 @@ jobs:
           cat > latest.json << EOF
           {
             "version": "${VERSION}",
-            "notes": "See https://github.com/your-org/incrementum/releases/tag/${VERSION} for release notes.",
+            "notes": "See https://github.com/melpomenex/incrementum-tauri/releases/tag/${VERSION} for release notes.",
             "pub_date": "$(date -u +%Y-%m-%d)",
             "platforms": {
               "linux-x86_64": {
                 "signature": "",
-                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/incrementum_${VERSION}_amd64.deb"
+                "url": "https://github.com/melpomenex/incrementum-tauri/releases/download/${VERSION}/incrementum_${VERSION}_amd64.deb"
               },
               "darwin-x86_64": {
                 "signature": "",
-                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/Incrementum_${VERSION}_x64.dmg.dmg"
+                "url": "https://github.com/melpomenex/incrementum-tauri/releases/download/${VERSION}/Incrementum_${VERSION}_x64.dmg.dmg"
               },
               "darwin-aarch64": {
                 "signature": "",
-                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/Incrementum_${VERSION}_aarch64.dmg.dmg"
+                "url": "https://github.com/melpomenex/incrementum-tauri/releases/download/${VERSION}/Incrementum_${VERSION}_aarch64.dmg.dmg"
               },
               "windows-x86_64": {
                 "signature": "",
-                "url": "https://github.com/your-org/incrementum/releases/download/${VERSION}/Incrementum_${VERSION}_x64-setup.exe"
+                "url": "https://github.com/melpomenex/incrementum-tauri/releases/download/${VERSION}/Incrementum_${VERSION}_x64-setup.exe"
               }
             }
           }

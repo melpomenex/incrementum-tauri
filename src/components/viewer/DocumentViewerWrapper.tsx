@@ -14,18 +14,23 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
     type: "document",
     documentId,
   });
+  const [assistantInputActive, setAssistantInputActive] = useState(false);
 
   return (
     <div className="flex h-full">
       {/* Document Viewer */}
       <div className="flex-1 h-full overflow-hidden">
-        <BaseDocumentViewer documentId={documentId} />
+        <BaseDocumentViewer
+          documentId={documentId}
+          disableHoverRating={assistantInputActive}
+        />
       </div>
 
       {/* Assistant Panel */}
       <AssistantPanel
         context={assistantContext}
         className="flex-shrink-0"
+        onInputHoverChange={setAssistantInputActive}
       />
     </div>
   );

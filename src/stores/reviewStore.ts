@@ -42,6 +42,7 @@ interface ReviewState {
   submitRating: (rating: ReviewRating) => Promise<void>;
   loadPreviewIntervals: () => Promise<void>;
   nextCard: () => void;
+  goToIndex: (index: number) => void;
   resetSession: () => void;
   getEstimatedTimeRemaining: () => number; // in seconds
 }
@@ -122,27 +123,51 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     const timeTaken = Math.floor((Date.now() - sessionStartTime) / 1000); // seconds since session start
     set({ isSubmitting: true, error: null });
 
-    try {
-      await submitReview(currentCard.id, rating, timeTaken);
+    // Optimistically advance to keep the review flow moving.
+    const newCorrectCount = rating >= 3 ? correctCount + 1 : correctCount;
+    const newReviewsCompleted = reviewsCompleted + 1;
+    const newAverageTime = (reviewsCompleted * (get().averageTimePerCard || 0) + timeTaken) / (reviewsCompleted + 1);
+    const { queue, currentIndex } = get();
+    const remainingQueue = queue.filter((item) => item.id !== currentCard.id);
 
-      // Update statistics and average time per card
-      const newCorrectCount = rating >= 3 ? correctCount + 1 : correctCount;
-      const newReviewsCompleted = reviewsCompleted + 1;
-      const newAverageTime = (reviewsCompleted * (get().averageTimePerCard || 0) + timeTaken) / (reviewsCompleted + 1);
-
+    if (remainingQueue.length === 0) {
       set({
+        queue: [],
+        currentCard: null,
+        currentIndex: 0,
+        isAnswerShown: false,
+        isSubmitting: false,
+        previewIntervals: null,
         reviewsCompleted: newReviewsCompleted,
         correctCount: newCorrectCount,
         averageTimePerCard: newAverageTime,
-        sessionStartTime: Date.now(), // Reset for next card
+        sessionStartTime: Date.now(),
+      });
+    } else {
+      const nextIndex = Math.min(currentIndex, remainingQueue.length - 1);
+      set({
+        queue: remainingQueue,
+        currentIndex: nextIndex,
+        currentCard: remainingQueue[nextIndex],
+        isAnswerShown: false,
+        isSubmitting: false,
+        previewIntervals: null,
+        reviewsCompleted: newReviewsCompleted,
+        correctCount: newCorrectCount,
+        averageTimePerCard: newAverageTime,
+        sessionStartTime: Date.now(),
       });
 
-      // Move to next card
-      get().nextCard();
+      setTimeout(() => {
+        get().loadPreviewIntervals();
+      }, 100);
+    }
+
+    try {
+      await submitReview(currentCard.id, rating, timeTaken);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Failed to submit review",
-        isSubmitting: false,
       });
     }
   },
@@ -191,6 +216,35 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     }
   },
 
+  goToIndex: (index: number) => {
+    const { queue } = get();
+    if (queue.length === 0) {
+      set({
+        currentIndex: 0,
+        currentCard: null,
+        isAnswerShown: false,
+        isSubmitting: false,
+        previewIntervals: null,
+        sessionStartTime: Date.now(),
+      });
+      return;
+    }
+
+    const clampedIndex = Math.max(0, Math.min(index, queue.length - 1));
+    set({
+      currentIndex: clampedIndex,
+      currentCard: queue[clampedIndex],
+      isAnswerShown: false,
+      isSubmitting: false,
+      previewIntervals: null,
+      sessionStartTime: Date.now(),
+    });
+
+    setTimeout(() => {
+      get().loadPreviewIntervals();
+    }, 100);
+  },
+
   resetSession: () => {
     set({
       queue: [],
@@ -222,4 +276,3 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     return remainingCards * 30;
   },
 }));
-

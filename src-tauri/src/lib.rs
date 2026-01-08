@@ -8,6 +8,7 @@ mod processor;
 mod generator;
 mod algorithms;
 mod ai;
+mod anki;
 mod youtube;
 mod sync;
 mod integrations;
@@ -272,6 +273,9 @@ pub fn run() {
             commands::scheduler_update_config,
             commands::scheduler_get_status,
             commands::scheduler_trigger_backup,
+            // Anki import commands
+            anki::import_anki_package_to_learning_items,
+            anki::import_anki_package_bytes_to_learning_items,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

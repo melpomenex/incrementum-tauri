@@ -64,6 +64,8 @@ pdf-extract = "0.7"
 epub = "2"
 walkdir = "2"
 regex = "1"
+zip = "0.6"
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Spaced Repetition
 fsrs = "5"

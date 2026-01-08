@@ -30,7 +30,7 @@ impl Default for OneDriveConfig {
             // Microsoft Graph API default scopes for Incrementum
             client_id: "YOUR_CLIENT_ID".to_string(), // Replace with actual client ID
             client_secret: "YOUR_CLIENT_SECRET".to_string(), // Replace with actual client secret
-            redirect_uri: "http://localhost:3000/auth/callback".to_string(),
+            redirect_uri: "http://localhost:15173/auth/callback".to_string(),
             scopes: vec![
                 "User.Read".to_string(),
                 "Files.ReadWrite.AppFolder".to_string(),

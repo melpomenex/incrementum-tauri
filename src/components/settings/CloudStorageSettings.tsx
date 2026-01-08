@@ -3,9 +3,11 @@
  * Configure cloud backup and sync providers (OneDrive, Google Drive, Dropbox)
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { listen } from "@tauri-apps/api/event";
+import { useSearchParams } from "react-router-dom";
 import {
   Cloud,
   CloudOff,
@@ -72,6 +74,7 @@ const PROVIDER_INFO = {
 };
 
 export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
+  const [searchParams] = useSearchParams();
   const [state, setState] = useState<CloudStorageState>({
     provider: null,
     isAuthenticated: false,
@@ -90,6 +93,43 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
     useState<CloudProviderType | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Handle OAuth callback from URL query params
+  useEffect(() => {
+    const oauthSuccess = searchParams.get("oauth_success");
+    const oauthError = searchParams.get("oauth_error");
+    const pendingProvider = sessionStorage.getItem("pending_oauth_provider") as CloudProviderType;
+
+    if (oauthSuccess === "true" && pendingProvider) {
+      // OAuth was successful
+      setState(prev => ({
+        ...prev,
+        provider: pendingProvider,
+        isAuthenticated: true,
+        accountInfo: {
+          account_id: "connected",
+          account_name: "Connected User",
+        },
+      }));
+      setConnectingProvider(null);
+      setOauthUrl(null);
+      sessionStorage.removeItem("pending_oauth_provider");
+
+      // Clean up URL params
+      window.history.replaceState({}, "", "/settings");
+
+      onChange();
+    } else if (oauthError && pendingProvider) {
+      // OAuth failed
+      setError(decodeURIComponent(oauthError));
+      setConnectingProvider(null);
+      setOauthUrl(null);
+      sessionStorage.removeItem("pending_oauth_provider");
+
+      // Clean up URL params
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, [searchParams, onChange]);
 
   const handleConnect = async (providerType: CloudProviderType) => {
     setConnectingProvider(providerType);

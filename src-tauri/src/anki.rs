@@ -5,15 +5,19 @@
 //! - media (JSON file mapping filenames to content)
 //! - Actual media files
 
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Seek, Write};
 use std::fs::File;
-use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 use zip::ZipArchive;
 use rusqlite::{Connection, Result as SqliteResult};
 use serde_json::Value;
 use crate::error::{Result, IncrementumError};
+use crate::database::Repository;
+use crate::models::{Document, FileType, LearningItem, ItemType, ItemState};
+use chrono::{Duration, Utc};
+use tauri::State;
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct AnkiNote {
     pub id: i64,
     pub guid: String,
@@ -24,7 +28,7 @@ pub struct AnkiNote {
     pub timestamp: i64,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct AnkiField {
     pub name: String,
     pub value: String,
@@ -56,11 +60,43 @@ pub async fn parse_apkg(apkg_path: &str) -> Result<Vec<AnkiDeck>> {
     let mut archive = ZipArchive::new(file)
         .map_err(|e| IncrementumError::NotFound(format!("Cannot unzip .apkg file: {}", e)))?;
 
-    // Extract collection.anki2 to a temporary location
-    let mut collection_file = archive.by_name("collection.anki2")
-        .map_err(|e| IncrementumError::NotFound(format!("collection.anki2 not found in archive: {}", e)))?;
+    parse_apkg_from_archive(&mut archive)
+}
 
-    let temp_db_path = std::env::temp_dir().join("anki_collection.anki2");
+fn parse_apkg_from_archive<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+) -> Result<Vec<AnkiDeck>> {
+    let mut best_decks: Option<Vec<AnkiDeck>> = None;
+    let mut best_notes = 0usize;
+
+    for name in ["collection.anki2", "collection.anki21"] {
+        if let Ok(decks) = parse_collection_from_archive(archive, name) {
+            let total_notes: usize = decks.iter().map(|deck| deck.notes.len()).sum();
+            if total_notes > best_notes {
+                best_notes = total_notes;
+                best_decks = Some(decks);
+            }
+        }
+    }
+
+    best_decks.ok_or_else(|| {
+        IncrementumError::NotFound("No valid collection.anki2 or collection.anki21 found in archive".to_string())
+    })
+}
+
+fn parse_collection_from_archive<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    name: &str,
+) -> Result<Vec<AnkiDeck>> {
+    // Extract collection file to a temporary location
+    let mut collection_file = archive.by_name(name)
+        .map_err(|e| IncrementumError::NotFound(format!("{} not found in archive: {}", name, e)))?;
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_db_path = std::env::temp_dir().join(format!("anki_collection_{}_{}.db", name.replace('.', "_"), nanos));
     let mut temp_file = File::create(&temp_db_path)
         .map_err(|e| IncrementumError::NotFound(format!("Cannot create temp file: {}", e)))?;
 
@@ -127,17 +163,27 @@ pub async fn parse_apkg(apkg_path: &str) -> Result<Vec<AnkiDeck>> {
     Ok(anki_decks)
 }
 
+pub async fn parse_apkg_from_bytes(apkg_bytes: Vec<u8>) -> Result<Vec<AnkiDeck>> {
+    let cursor = Cursor::new(apkg_bytes);
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| IncrementumError::NotFound(format!("Cannot unzip .apkg file: {}", e)))?;
+
+    parse_apkg_from_archive(&mut archive)
+}
+
 fn extract_notes_from_deck(
     conn: &Connection,
-    _deck_id: i64,
+    deck_id: i64,
     models: &Value,
 ) -> Result<Vec<AnkiNote>> {
     let mut notes = Vec::new();
 
-    let mut stmt = conn.prepare("SELECT id, guid, mid, tags, flds, mod FROM notes")
+    let mut stmt = conn.prepare(
+        "SELECT id, guid, mid, tags, flds, mod FROM notes WHERE id IN (SELECT DISTINCT nid FROM cards WHERE did = ?1)"
+    )
         .map_err(|e| IncrementumError::NotFound(format!("Cannot prepare notes query: {}", e)))?;
 
-    let note_rows = stmt.query_map([], |row| {
+    let note_rows = stmt.query_map([deck_id], |row| {
         Ok((
             row.get::<_, i64>(0)?,
             row.get::<_, String>(1)?,
@@ -201,13 +247,13 @@ fn extract_notes_from_deck(
     Ok(notes)
 }
 
-fn extract_cards_from_deck(conn: &Connection, _deck_id: i64) -> Result<Vec<AnkiCard>> {
+fn extract_cards_from_deck(conn: &Connection, deck_id: i64) -> Result<Vec<AnkiCard>> {
     let mut cards = Vec::new();
 
-    let mut stmt = conn.prepare("SELECT id, nid, ord, ivl, factor, due FROM cards")
+    let mut stmt = conn.prepare("SELECT id, nid, ord, ivl, factor, due FROM cards WHERE did = ?1")
         .map_err(|e| IncrementumError::NotFound(format!("Cannot prepare cards query: {}", e)))?;
 
-    let card_rows = stmt.query_map([], |row| {
+    let card_rows = stmt.query_map([deck_id], |row| {
         Ok((
             row.get::<_, i64>(0)?,
             row.get::<_, i64>(1)?,
@@ -253,6 +299,78 @@ fn get_model_field_names(models: &Value, model_id: i64) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn normalize_cloze_text(text: &str) -> String {
+    text.replace("{{c", "[[c").replace("}}", "]]")
+}
+
+fn find_question_field(note: &AnkiNote) -> Option<&AnkiField> {
+    note.fields.iter().find(|field| {
+        let name = field.name.to_lowercase();
+        name.contains("front") || name.contains("question") || name.contains("text")
+    })
+}
+
+fn find_answer_field(note: &AnkiNote) -> Option<&AnkiField> {
+    note.fields.iter().find(|field| {
+        let name = field.name.to_lowercase();
+        name.contains("back") || name.contains("answer")
+    })
+}
+
+fn find_cloze_field(note: &AnkiNote) -> Option<&AnkiField> {
+    note.fields.iter().find(|field| field.value.contains("{{c"))
+}
+
+fn build_learning_item(
+    note: &AnkiNote,
+    card: &AnkiCard,
+    document_id: Option<&str>,
+    deck_name: &str,
+) -> Option<LearningItem> {
+    let cloze_field = find_cloze_field(note);
+    let (item_type, question, answer, cloze_text) = if let Some(field) = cloze_field {
+        let cloze = normalize_cloze_text(&field.value);
+        (ItemType::Cloze, cloze.clone(), None, Some(cloze))
+    } else {
+        let question_field = find_question_field(note)
+            .or_else(|| note.fields.get(0));
+        let answer_field = find_answer_field(note)
+            .or_else(|| note.fields.get(1));
+
+        let question = question_field?.value.trim().to_string();
+        if question.is_empty() {
+            return None;
+        }
+
+        let answer = answer_field
+            .map(|field| field.value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
+        (ItemType::Flashcard, question, answer, None)
+    };
+
+    let mut item = LearningItem::new(item_type, question);
+    if let Some(doc_id) = document_id {
+        item.document_id = Some(doc_id.to_string());
+    }
+    item.answer = answer;
+    item.cloze_text = cloze_text;
+    item.interval = card.interval;
+    item.ease_factor = card.ease;
+    if card.interval > 0 {
+        item.due_date = Utc::now() + Duration::days(card.interval as i64);
+        item.state = ItemState::Review;
+    }
+
+    let mut tags = note.tags.clone();
+    tags.push("anki-import".to_string());
+    tags.push(note.model_name.clone());
+    tags.push(deck_name.to_string());
+    item.tags = tags;
+
+    Some(item)
+}
+
 #[tauri::command]
 pub async fn import_anki_package(apkg_path: String) -> Result<String> {
     let decks = parse_apkg(&apkg_path).await?;
@@ -264,6 +382,76 @@ pub async fn import_anki_package(apkg_path: String) -> Result<String> {
 }
 
 #[tauri::command]
+pub async fn import_anki_package_to_learning_items(
+    apkg_path: String,
+    repo: State<'_, Repository>,
+) -> Result<Vec<LearningItem>> {
+    let decks = parse_apkg(&apkg_path).await?;
+    let mut created_items = Vec::new();
+    let mut imported_note_guids = std::collections::HashSet::new();
+
+    for deck in decks {
+        let mut deck_doc = Document::new(
+            deck.name.clone(),
+            format!("anki://deck/{}", deck.id),
+            FileType::Other,
+        );
+        deck_doc.tags = vec!["anki-import".to_string(), deck.name.clone()];
+        let deck_doc = repo.create_document(&deck_doc).await?;
+
+        for card in &deck.cards {
+            if let Some(note) = deck.notes.iter().find(|note| note.id == card.note_id).cloned() {
+                // Skip if we've already imported this note (by GUID)
+                if !imported_note_guids.insert(note.guid.clone()) {
+                    continue;
+                }
+                if let Some(item) = build_learning_item(&note, card, Some(&deck_doc.id), &deck.name) {
+                    let created = repo.create_learning_item(&item).await?;
+                    created_items.push(created);
+                }
+            }
+        }
+    }
+
+    Ok(created_items)
+}
+
+#[tauri::command]
+pub async fn import_anki_package_bytes_to_learning_items(
+    apkg_bytes: Vec<u8>,
+    repo: State<'_, Repository>,
+) -> Result<Vec<LearningItem>> {
+    let decks = parse_apkg_from_bytes(apkg_bytes).await?;
+    let mut created_items = Vec::new();
+    let mut imported_note_guids = std::collections::HashSet::new();
+
+    for deck in decks {
+        let mut deck_doc = Document::new(
+            deck.name.clone(),
+            format!("anki://deck/{}", deck.id),
+            FileType::Other,
+        );
+        deck_doc.tags = vec!["anki-import".to_string(), deck.name.clone()];
+        let deck_doc = repo.create_document(&deck_doc).await?;
+
+        for card in &deck.cards {
+            if let Some(note) = deck.notes.iter().find(|note| note.id == card.note_id).cloned() {
+                // Skip if we've already imported this note (by GUID)
+                if !imported_note_guids.insert(note.guid.clone()) {
+                    continue;
+                }
+                if let Some(item) = build_learning_item(&note, card, Some(&deck_doc.id), &deck.name) {
+                    let created = repo.create_learning_item(&item).await?;
+                    created_items.push(created);
+                }
+            }
+        }
+    }
+
+    Ok(created_items)
+}
+
+#[tauri::command]
 pub fn validate_anki_package(path: String) -> Result<bool> {
     let file = File::open(&path)
         .map_err(|e| IncrementumError::NotFound(format!("Cannot open file: {}", e)))?;
@@ -271,8 +459,8 @@ pub fn validate_anki_package(path: String) -> Result<bool> {
     let archive = ZipArchive::new(file)
         .map_err(|e| IncrementumError::NotFound(format!("Not a valid .apkg file: {}", e)))?;
 
-    // Check for collection.anki2
-    let has_collection = archive.file_names().any(|name| name == "collection.anki2");
+    // Check for collection.anki2 or collection.anki21
+    let has_collection = archive.file_names().any(|name| name == "collection.anki2" || name == "collection.anki21");
 
     if !has_collection {
         return Err(IncrementumError::NotFound("collection.anki2 not found in package".to_string()));

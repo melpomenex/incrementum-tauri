@@ -20,9 +20,10 @@ type DocumentType = "pdf" | "epub" | "markdown" | "html";
 
 interface DocumentViewerProps {
   documentId: string;
+  disableHoverRating?: boolean;
 }
 
-export function DocumentViewer({ documentId }: DocumentViewerProps) {
+export function DocumentViewer({ documentId, disableHoverRating = false }: DocumentViewerProps) {
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
   const { closeTab, tabs } = useTabsStore();
 
@@ -575,7 +576,7 @@ export function DocumentViewer({ documentId }: DocumentViewerProps) {
       />
 
       {/* Hover Rating Controls - for quick document rating */}
-      {viewMode === "document" && (
+      {viewMode === "document" && !disableHoverRating && (
         <HoverRatingControls
           context="document"
           documentId={documentId}

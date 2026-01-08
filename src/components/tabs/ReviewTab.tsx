@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReviewStore } from "../../stores/reviewStore";
 import { ReviewCard } from "../../components/review/ReviewCard";
 import { RatingButtons } from "../../components/review/RatingButtons";
@@ -27,8 +27,48 @@ export function ReviewTab() {
     loadQueue,
     showAnswer,
     submitRating,
+    nextCard,
+    goToIndex,
     resetSession,
   } = useReviewStore();
+  const [isQueueListOpen, setIsQueueListOpen] = useState(false);
+  const queueListRef = useRef<HTMLDivElement | null>(null);
+
+  const handleRating = async (rating: ReviewRating) => {
+    const beforeId = currentCard?.id;
+    await submitRating(rating);
+    if (!beforeId) return;
+
+    const afterId = useReviewStore.getState().currentCard?.id;
+    if (afterId === beforeId) {
+      nextCard();
+    }
+  };
+
+  useEffect(() => {
+    if (!isQueueListOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!queueListRef.current) return;
+      if (e.target instanceof Node && queueListRef.current.contains(e.target)) {
+        return;
+      }
+      setIsQueueListOpen(false);
+    };
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsQueueListOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isQueueListOpen]);
 
   useEffect(() => {
     loadQueue();
@@ -52,16 +92,16 @@ export function ReviewTab() {
 
       // Number keys for rating (only when answer is shown)
       if (isAnswerShown && currentCard && !isSubmitting) {
-        if (e.key === "1") submitRating(1 as ReviewRating);
-        if (e.key === "2") submitRating(2 as ReviewRating);
-        if (e.key === "3") submitRating(3 as ReviewRating);
-        if (e.key === "4") submitRating(4 as ReviewRating);
+        if (e.key === "1") handleRating(1 as ReviewRating);
+        if (e.key === "2") handleRating(2 as ReviewRating);
+        if (e.key === "3") handleRating(3 as ReviewRating);
+        if (e.key === "4") handleRating(4 as ReviewRating);
       }
     };
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [isAnswerShown, currentCard, isSubmitting, showAnswer, submitRating]);
+  }, [isAnswerShown, currentCard, isSubmitting, showAnswer, submitRating, nextCard]);
 
   if (isLoading) {
     return (
@@ -137,15 +177,52 @@ export function ReviewTab() {
 
         {/* Queue Navigation */}
         {queue.length > 0 && (
-          <QueueNavigationControls
-            currentDocumentIndex={currentIndex}
-            totalDocuments={queue.length}
-            hasMoreChunks={false}
-            onPreviousDocument={() => {}}
-            onNextDocument={() => {}}
-            onNextChunk={() => {}}
-            disabled={isSubmitting}
-          />
+          <div className="relative">
+            <QueueNavigationControls
+              currentDocumentIndex={currentIndex}
+              totalDocuments={queue.length}
+              hasMoreChunks={queue.length > 0}
+              onPreviousDocument={() => goToIndex(currentIndex - 1)}
+              onNextDocument={() => goToIndex(currentIndex + 1)}
+              onNextChunk={() => setIsQueueListOpen((prev) => !prev)}
+              listButtonLabel="Review Queue"
+              disabled={isSubmitting}
+            />
+
+            {isQueueListOpen && (
+              <div
+                ref={queueListRef}
+                className="absolute right-0 mt-2 w-80 bg-card border border-border rounded-lg shadow-lg z-50"
+              >
+                <div className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                  Review Queue
+                </div>
+                <div className="max-h-80 overflow-auto">
+                  {queue.map((item, index) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        goToIndex(index);
+                        setIsQueueListOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                        index === currentIndex
+                          ? "bg-muted text-foreground"
+                          : "hover:bg-muted/60 text-foreground"
+                      }`}
+                    >
+                      <div className="text-xs text-muted-foreground mb-1">
+                        {index + 1} / {queue.length}
+                      </div>
+                      <div className="line-clamp-2">
+                        {item.question || item.cloze_text || "Untitled card"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -173,22 +250,11 @@ export function ReviewTab() {
             {/* Rating Buttons */}
             <div className="mt-6">
               <RatingButtons
-                onSelectRating={submitRating}
+                onSelectRating={handleRating}
                 disabled={isSubmitting}
                 previewIntervals={previewIntervals}
               />
             </div>
-
-            {/* Hover Rating Controls - appears on hover at bottom */}
-            <HoverRatingControls
-              context="review"
-              itemId={currentCard.id}
-              documentId={currentCard.document_id}
-              onRatingSubmitted={submitRating}
-              disabled={isSubmitting}
-              forceVisible={isAnswerShown}
-              previewIntervals={previewIntervals}
-            />
           </>
         ) : (
           <>

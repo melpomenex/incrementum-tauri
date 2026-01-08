@@ -30,7 +30,7 @@ impl Default for GoogleDriveConfig {
             // Google OAuth default scopes for Incrementum
             client_id: "YOUR_CLIENT_ID.apps.googleusercontent.com".to_string(), // Replace with actual client ID
             client_secret: "YOUR_CLIENT_SECRET".to_string(), // Replace with actual client secret
-            redirect_uri: "http://localhost:3000/auth/callback".to_string(),
+            redirect_uri: "http://localhost:15173/auth/callback".to_string(),
             scopes: vec![
                 "https://www.googleapis.com/auth/drive.appdata".to_string(), // App folder access
                 "https://www.googleapis.com/auth/drive.file".to_string(), // Files created by app

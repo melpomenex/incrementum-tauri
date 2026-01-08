@@ -3,6 +3,7 @@
  */
 
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Download, Upload, FileDown, FileUp, RefreshCw } from "lucide-react";
 import { SettingsSection, SettingsRow } from "./SettingsPage";
 
@@ -72,6 +73,27 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
 
     setIsProcessing(true);
     try {
+      const fileName = importFile.name.toLowerCase();
+      if (fileName.endsWith(".apkg")) {
+        const filePath = (importFile as File & { path?: string }).path;
+        if (filePath) {
+          const imported = await invoke<unknown[]>("import_anki_package_to_learning_items", {
+            apkgPath: filePath,
+          });
+          alert(`Imported ${imported.length} Anki card(s) as learning items`);
+          onChange();
+          return;
+        }
+
+        const apkgBytes = new Uint8Array(await importFile.arrayBuffer());
+        const imported = await invoke<unknown[]>("import_anki_package_bytes_to_learning_items", {
+          apkgBytes: Array.from(apkgBytes),
+        });
+        alert(`Imported ${imported.length} Anki card(s) as learning items`);
+        onChange();
+        return;
+      }
+
       const text = await importFile.text();
       const data = JSON.parse(text);
 
@@ -232,7 +254,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
             <div className="flex items-center gap-3">
               <input
                 type="file"
-                accept=".json,.csv,.incrementum"
+                accept=".json,.csv,.incrementum,.apkg"
                 onChange={(e) => setImportFile(e.target.files?.[0] || null)}
                 className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-muted file:text-muted-foreground hover:file:bg-muted/80"
               />

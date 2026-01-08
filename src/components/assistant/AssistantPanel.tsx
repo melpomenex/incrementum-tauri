@@ -41,12 +41,14 @@ interface AssistantPanelProps {
   context?: AssistantContext;
   onToolCall?: (tool: string, params: Record<string, unknown>) => Promise<unknown>;
   className?: string;
+  onInputHoverChange?: (isHovered: boolean) => void;
 }
 
 export function AssistantPanel({
   context,
   onToolCall,
   className = "",
+  onInputHoverChange,
 }: AssistantPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [width, setWidth] = useState(400);
@@ -55,6 +57,8 @@ export function AssistantPanel({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<"openai" | "anthropic" | "ollama" | "openrouter">("openai");
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [isInputHovered, setIsInputHovered] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -73,6 +77,10 @@ export function AssistantPanel({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    onInputHoverChange?.(isInputFocused || isInputHovered);
+  }, [isInputFocused, isInputHovered, onInputHoverChange]);
 
   // Add context message when context changes
   useEffect(() => {
@@ -159,6 +167,11 @@ export function AssistantPanel({
           content: `No ${selectedProvider} provider configured. Please add an API key in Settings.`,
         };
       }
+      if (!provider.apiKey || !provider.apiKey.trim()) {
+        return {
+          content: `No ${selectedProvider} API key configured. Please add it in Settings.`,
+        };
+      }
 
       // Convert messages to LLM format
       const llmMessages = [
@@ -187,7 +200,7 @@ export function AssistantPanel({
           content: llmContext.content,
         },
         provider.apiKey,
-        provider.baseUrl
+        provider.baseUrl && provider.baseUrl.trim() ? provider.baseUrl : undefined
       );
 
       return { content: response.content };
@@ -439,6 +452,10 @@ export function AssistantPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
+              onMouseEnter={() => setIsInputHovered(true)}
+              onMouseLeave={() => setIsInputHovered(false)}
               placeholder="Ask about your document, or type /help for commands..."
               className="flex-1 px-3 py-2 bg-background border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm"
               rows={2}

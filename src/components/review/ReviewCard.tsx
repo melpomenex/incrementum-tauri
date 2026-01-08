@@ -33,9 +33,11 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
               // This is the clozed content
               if (showAnswer) {
                 return (
-                  <span key={idx} className="bg-primary/20 px-1 rounded font-semibold">
-                    {part}
-                  </span>
+                  <span
+                    key={idx}
+                    className="bg-primary/20 px-1 rounded font-semibold"
+                    dangerouslySetInnerHTML={{ __html: part }}
+                  />
                 );
               }
               return (
@@ -44,7 +46,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
                 </span>
               );
             }
-            return <span key={idx}>{part}</span>;
+            return <span key={idx} dangerouslySetInnerHTML={{ __html: part }} />;
           })}
         </div>
       );
@@ -52,7 +54,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
 
     return (
       <div className="text-lg leading-relaxed">
-        {card.question}
+        <span dangerouslySetInnerHTML={{ __html: card.question }} />
       </div>
     );
   };
@@ -66,7 +68,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
           Answer
         </div>
         <div className="text-base leading-relaxed text-foreground">
-          {card.answer}
+          <span dangerouslySetInnerHTML={{ __html: card.answer }} />
         </div>
       </div>
     );

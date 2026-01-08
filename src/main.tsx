@@ -9,6 +9,9 @@ import { ThemeProvider } from "./components/common/ThemeSystem";
 import { MainLayout } from "./components/layout/MainLayout";
 import { DevPerformanceMonitor } from "./components/common/PerformanceMonitor";
 
+// Auth callback route
+import AuthCallback from "./routes/auth-callback";
+
 // Loading fallback component
 function PageLoader() {
   return (
@@ -96,6 +99,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <HashRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
+              {/* OAuth callback route - must be before catch-all */}
+              <Route path="/auth/callback" element={<AuthCallback />} />
               {/* Catch-all route - MainLayout handles tab-based navigation internally */}
               <Route path="*" element={<MainLayout />} />
             </Routes>
