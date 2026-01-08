@@ -11,6 +11,9 @@ mod ai;
 mod youtube;
 mod sync;
 mod integrations;
+mod ocr;
+mod segmentation;
+mod notifications;
 
 use database::Database;
 use std::sync::{Arc, Mutex};
@@ -190,6 +193,38 @@ pub fn run() {
             integrations::get_extension_server_status,
             integrations::send_to_extension,
             integrations::process_extension_page,
+            // RSS commands
+            commands::create_rss_feed,
+            commands::get_rss_feeds,
+            commands::get_rss_feed,
+            commands::update_rss_feed,
+            commands::delete_rss_feed,
+            commands::create_rss_article,
+            commands::get_rss_articles,
+            commands::mark_rss_article_read,
+            commands::toggle_rss_article_queued,
+            commands::update_rss_feed_fetched,
+            commands::get_rss_feed_unread_count,
+            commands::cleanup_old_rss_articles,
+            // Segmentation commands
+            commands::segment_document,
+            commands::auto_segment_and_create_extracts,
+            commands::preview_segmentation,
+            commands::extract_key_points_from_text,
+            commands::batch_segment_documents,
+            commands::get_recommended_segmentation,
+            // Notification commands
+            commands::check_notification_permission,
+            commands::request_notification_permission,
+            commands::send_notification,
+            commands::send_study_reminder,
+            commands::send_cards_due_notification,
+            commands::send_review_completed_notification,
+            commands::send_document_imported_notification,
+            commands::schedule_study_reminders,
+            commands::get_notification_settings,
+            commands::update_notification_settings,
+            commands::create_custom_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

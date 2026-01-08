@@ -6,7 +6,7 @@ import { QueueStatsDisplay } from "../../components/queue/QueueStats";
 import { BulkActionBar } from "../../components/queue/BulkActionBar";
 import { QueueContextMenu } from "../../components/queue/QueueContextMenu";
 import { ExportQueueDialog } from "../../components/queue/ExportQueueDialog";
-import { DynamicVirtualList } from "../../components/common/VirtualList";
+import { VirtualList } from "../../components/common/VirtualList";
 import type { QueueItem } from "../../types/queue";
 import { ReviewTab, DocumentViewer, DocumentsTab } from "./TabRegistry";
 
@@ -294,9 +294,10 @@ export function QueueTab() {
           </div>
 
           {/* Virtual Scrolled Items List */}
-          <DynamicVirtualList
+          <VirtualList
             items={filteredItems}
-            renderItem={(item) => (
+            itemHeight={200}
+            renderItem={(item, index) => (
               <div
                 className={`p-4 mb-3 bg-card border border-border rounded-lg hover:shadow-md transition-shadow ${
                   selectedIds.has(item.id) ? "ring-2 ring-primary" : ""
@@ -402,7 +403,6 @@ export function QueueTab() {
               </div>
             )}
             className="max-h-[60vh]"
-            estimateSize={200}
           />
         </div>
       )}

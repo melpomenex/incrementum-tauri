@@ -2,14 +2,18 @@
 //!
 //! This module provides different spaced repetition algorithms:
 //! - FSRS-5 (Free Spaced Repetition Scheduler)
-//! - SM-2 (SuperMemo 2)
+//! - SM-2, SM-5, SM-8, SM-15 (SuperMemo algorithms)
 
 use crate::models::{LearningItem, ReviewRating};
 use chrono::{Utc, Duration};
 
 pub mod optimizer;
+pub mod fsrs;
+pub mod supermemo;
 
-// Re-exports from optimizer
+// Re-exports
+pub use fsrs::{FSRSParams, FSRSScheduler, FSRSState};
+pub use supermemo::{SM2Algorithm, SM2State, SM5Algorithm, SM5State, SM8Algorithm, SM8State, SM15Algorithm, SM15State};
 pub use optimizer::calculate_review_statistics;
 
 #[cfg(test)]

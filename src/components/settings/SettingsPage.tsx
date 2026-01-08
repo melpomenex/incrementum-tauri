@@ -14,11 +14,15 @@ import {
   FolderOpen,
   Bell,
   Shield,
+  BookOpen,
+  GraduationCap,
 } from "lucide-react";
 import { KeyboardShortcutSettings } from "./KeyboardShortcutsSettings";
 import { AISettings as AIProviderSettings } from "./AIProviderSettings";
 import { ImportExportSettings as ImportExportSettingsComponent } from "./ImportExportSettings";
 import { SyncSettings as SyncSettingsOriginal } from "./SyncSettings";
+import { LearningSettings } from "./LearningSettings";
+import { DocumentsSettings } from "./DocumentsSettings";
 
 /**
  * Settings tab
@@ -26,6 +30,8 @@ import { SyncSettings as SyncSettingsOriginal } from "./SyncSettings";
 export enum SettingsTab {
   General = "general",
   Appearance = "appearance",
+  Learning = "learning",
+  Documents = "documents",
   Shortcuts = "shortcuts",
   AI = "ai",
   Sync = "sync",
@@ -40,6 +46,8 @@ export enum SettingsTab {
 export const SETTINGS_TABS = [
   { id: SettingsTab.General, label: "General", icon: Sliders },
   { id: SettingsTab.Appearance, label: "Appearance", icon: Palette },
+  { id: SettingsTab.Learning, label: "Learning", icon: GraduationCap },
+  { id: SettingsTab.Documents, label: "Documents", icon: BookOpen },
   { id: SettingsTab.Shortcuts, label: "Shortcuts", icon: Keyboard },
   { id: SettingsTab.AI, label: "AI", icon: Brain },
   { id: SettingsTab.Sync, label: "Sync", icon: Cloud },
@@ -143,6 +151,8 @@ export function SettingsPage() {
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === SettingsTab.General && <GeneralSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Appearance && <AppearanceSettings onChange={() => setHasChanges(true)} />}
+          {activeTab === SettingsTab.Learning && <LearningSettings />}
+          {activeTab === SettingsTab.Documents && <DocumentsSettings />}
           {activeTab === SettingsTab.Shortcuts && <ShortcutSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.AI && <AISettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Sync && <SyncSettings onChange={() => setHasChanges(true)} />}

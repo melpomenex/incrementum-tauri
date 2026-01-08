@@ -418,6 +418,7 @@ export function DocumentViewer() {
               fileData={fileData}
               pageNumber={pageNumber}
               scale={scale}
+              zoomMode={zoomMode}
               onPageChange={handlePageChange}
               onLoad={handleDocumentLoad}
             />

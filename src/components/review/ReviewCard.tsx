@@ -95,8 +95,8 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
         )}
       </div>
 
-      {/* Card Content */}
-      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+      {/* Card Content with Animation */}
+      <div className="bg-card border border-border rounded-lg p-6 shadow-sm transition-all duration-300">
         {/* Question */}
         <div className="mb-2">
           <div className="text-sm uppercase tracking-wide text-muted-foreground mb-3 font-medium">
@@ -105,28 +105,30 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
           {renderQuestion()}
         </div>
 
-        {/* Answer (shown when revealed) */}
-        {renderAnswer()}
-
-        {/* Card Stats (shown when answer is revealed) */}
+        {/* Answer (shown when revealed) with fade-in animation */}
         {showAnswer && (
-          <div className="mt-6 pt-4 border-t border-border">
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1">
-                  <Brain className="w-4 h-4" />
-                  <span>Reviewed {card.review_count}x</span>
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+            {renderAnswer()}
+
+            {/* Card Stats */}
+            <div className="mt-6 pt-4 border-t border-border">
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <Brain className="w-4 h-4" />
+                    <span>Reviewed {card.review_count}x</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <FileText className="w-4 h-4" />
+                    <span>Interval: {card.interval}d</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <FileText className="w-4 h-4" />
-                  <span>Interval: {card.interval}d</span>
-                </div>
+                {card.state === "new" && (
+                  <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded text-xs">
+                    New
+                  </span>
+                )}
               </div>
-              {card.state === "new" && (
-                <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded text-xs">
-                  New
-                </span>
-              )}
             </div>
           </div>
         )}
@@ -137,7 +139,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
         <div className="mt-6 flex justify-center">
           <button
             onClick={onShowAnswer}
-            className="px-8 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity font-medium text-lg shadow-md"
+            className="px-8 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-all hover:scale-105 active:scale-95 font-medium text-lg shadow-md"
           >
             Show Answer
           </button>

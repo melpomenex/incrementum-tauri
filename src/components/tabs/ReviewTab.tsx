@@ -20,6 +20,7 @@ export function ReviewTab() {
     sessionStartTime,
     currentIndex,
     streak,
+    previewIntervals,
     getEstimatedTimeRemaining,
     loadQueue,
     showAnswer,
@@ -157,7 +158,7 @@ export function ReviewTab() {
               <RatingButtons
                 onSelectRating={submitRating}
                 disabled={isSubmitting}
-                previewIntervals={null} // TODO: Add preview intervals
+                previewIntervals={previewIntervals}
               />
             </div>
           </>

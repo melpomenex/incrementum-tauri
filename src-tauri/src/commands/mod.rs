@@ -11,6 +11,9 @@ pub mod category;
 pub mod queue;
 pub mod queue_bulk;
 pub mod review;
+pub mod rss;
+pub mod segmentation;
+pub mod notifications;
 
 // Re-export error types for use in commands
 pub use crate::error::Result;
@@ -26,3 +29,6 @@ pub use category::*;
 pub use queue::*;
 pub use queue_bulk::*;
 pub use review::*;
+pub use rss::*;
+pub use segmentation::*;
+pub use notifications::*;

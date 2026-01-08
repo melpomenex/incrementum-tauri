@@ -15,6 +15,7 @@ interface PDFViewerProps {
   fileData: ArrayBuffer;
   pageNumber: number;
   scale: number;
+  zoomMode?: ZoomMode;
   onPageChange?: (pageNumber: number) => void;
   onLoad?: (numPages: number, outline: any[]) => void;
 }
@@ -26,19 +27,33 @@ export function PDFViewer({
   fileData,
   pageNumber,
   scale,
+  zoomMode: externalZoomMode,
   onPageChange,
   onLoad,
 }: PDFViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [outline, setOutline] = useState<any[]>([]);
   const [showTOC, setShowTOC] = useState(false);
-  const [zoomMode, setZoomMode] = useState<ZoomMode>("custom");
+  const [zoomMode, setZoomMode] = useState<ZoomMode>(externalZoomMode || "custom");
+
+  // Pan state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 });
+
+  // Update zoom mode when external prop changes
+  useEffect(() => {
+    if (externalZoomMode) {
+      setZoomMode(externalZoomMode);
+    }
+  }, [externalZoomMode]);
 
   useEffect(() => {
     let mounted = true;
@@ -261,6 +276,43 @@ export function PDFViewer({
     }
   };
 
+  // Pan/drag handlers for zoomed content
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Only enable drag when zoomed in and not clicking on links
+    if (scale > 1 || zoomMode === "custom") {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - scrollPosition.x, y: e.clientY - scrollPosition.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const container = scrollContainerRef.current;
+    if (container) {
+      const newX = e.clientX - dragStart.x;
+      const newY = e.clientY - dragStart.y;
+      container.scrollLeft = -newX;
+      container.scrollTop = -newY;
+      setScrollPosition({ x: newX, y: newY });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+
+  // Sync scroll position
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      setScrollPosition({ x: -container.scrollLeft, y: -container.scrollTop });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-background" onKeyDown={handleKeyDown} tabIndex={0}>
       {error && (
@@ -378,28 +430,40 @@ export function PDFViewer({
 
           {/* Canvas Container */}
           <div
-            ref={containerRef}
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
             className="flex-1 overflow-auto flex items-center justify-center bg-muted/30 p-4"
           >
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-muted-foreground">Loading PDF...</div>
-              </div>
-            ) : (
-              <div className="relative shadow-lg border border-border bg-white">
-                <canvas
-                  ref={canvasRef}
-                  className={cn(
-                    "block"
-                  )}
-                />
-                <div
-                  ref={textLayerRef}
-                  className="absolute top-0 left-0 overflow-hidden"
-                  style={{ transformOrigin: "0 0" }}
-                />
-              </div>
-            )}
+            <div
+              ref={containerRef}
+              className={cn(
+                "relative",
+                isDragging && "cursor-grabbing",
+                !isDragging && (scale > 1 || zoomMode === "custom") && "cursor-grab"
+              )}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
+            >
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-muted-foreground">Loading PDF...</div>
+                </div>
+              ) : (
+                <div className="relative shadow-lg border border-border bg-white transition-transform duration-200">
+                  <canvas
+                    ref={canvasRef}
+                    className="block"
+                  />
+                  <div
+                    ref={textLayerRef}
+                    className="absolute top-0 left-0 overflow-hidden pointer-events-none"
+                    style={{ transformOrigin: "0 0" }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Page Navigation Footer */}
