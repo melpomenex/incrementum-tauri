@@ -269,7 +269,7 @@ export function PDFViewer({
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1">
         {/* Table of Contents Sidebar */}
         {showTOC && (
           <div className="w-64 border-r border-border bg-card overflow-y-auto flex-shrink-0">
@@ -295,7 +295,7 @@ export function PDFViewer({
         )}
 
         {/* Main Viewer Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col">
           {/* Viewer Toolbar */}
           <div className="flex items-center justify-between p-2 border-b border-border bg-card">
             <div className="flex items-center gap-1">

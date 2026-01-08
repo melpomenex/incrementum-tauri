@@ -19,40 +19,75 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
     let mounted = true;
     let bookInstance: any = null;
     let renditionInstance: any = null;
+    let retryCount = 0;
+    const maxRetries = 10;
 
     const loadEPUB = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
+        console.log("EPUBViewer: Loading EPUB, fileData length:", fileData.byteLength);
+
         // Create book from ArrayBuffer
         const book = ePub(fileData);
         bookInstance = book;
 
+        console.log("EPUBViewer: Book created, waiting for ready...");
         // Wait for book to be ready
         await book.ready;
+        console.log("EPUBViewer: Book is ready");
 
         if (!mounted) return;
 
         // Get table of contents
         const tocData = await book.loaded.navigation;
+        console.log("EPUBViewer: TOC loaded with", tocData.toc.length, "items");
         setToc(tocData.toc);
         onLoad?.(tocData.toc);
 
-        // Initialize rendition
-        if (viewerRef.current) {
+        // Initialize rendition with retry for the ref to be ready
+        const initializeRendition = async (): Promise<boolean> => {
+          console.log("EPUBViewer: Checking if viewerRef is available...", viewerRef.current);
+
+          if (!viewerRef.current) {
+            if (retryCount < maxRetries) {
+              retryCount++;
+              console.log(`EPUBViewer: viewerRef not ready, retry ${retryCount}/${maxRetries}...`);
+              await new Promise(resolve => setTimeout(resolve, 100));
+              return initializeRendition();
+            } else {
+              console.error("EPUBViewer: viewerRef never became available");
+              return false;
+            }
+          }
+
+          console.log("EPUBViewer: Initializing rendition...");
           const rendition = book.renderTo(viewerRef.current, {
             width: "100%",
             height: "100%",
             spread: "none",
+            flow: "scrolled",
+            allowScriptedContent: true,
           });
 
           renditionInstance = rendition;
           setRendition(rendition);
 
           // Display the book
+          console.log("EPUBViewer: Displaying book...");
           await rendition.display();
-          if (!mounted) return;
+          console.log("EPUBViewer: Book displayed successfully");
+
+          // Force a resize to ensure proper rendering
+          setTimeout(() => {
+            if (rendition && mounted) {
+              console.log("EPUBViewer: Forcing resize...");
+              rendition.resize();
+            }
+          }, 100);
+
+          if (!mounted) return true;
 
           // Get total locations (pages)
           await book.locations.generate(1024);
@@ -64,8 +99,13 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
               console.log("Selected text:", selection.toString());
             }
           });
-        }
+
+          return true;
+        };
+
+        await initializeRendition();
       } catch (err) {
+        console.error("EPUBViewer: Error loading EPUB:", err);
         if (!mounted) return;
         setError(err instanceof Error ? err.message : "Failed to load EPUB");
       } finally {
@@ -107,19 +147,30 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background relative">
       {error && (
         <div className="p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg m-4">
           Failed to load EPUB: {error}
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-muted-foreground">Loading EPUB...</div>
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+          <div className="text-center">
+            <div className="inline-block w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+            <div className="text-muted-foreground">Loading EPUB...</div>
+          </div>
         </div>
-      ) : (
-        <div className="flex flex-1 overflow-hidden">
+      )}
+
+      {/* Always render this div so the ref is available */}
+      <div
+        ref={viewerRef}
+        className="flex flex-1"
+        style={{ opacity: isLoading ? 0 : 1 }}
+      >
+        <div className="flex flex-1">
           {/* Sidebar - Table of Contents */}
           {toc.length > 0 && (
             <div className="w-64 border-r border-border bg-card overflow-y-auto">
@@ -143,35 +194,18 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
           {/* Main Viewer */}
           <div className="flex-1 flex flex-col">
             <div
-              ref={viewerRef}
+              id="epub-viewer-area"
               className={cn(
                 "flex-1 overflow-auto",
                 "bg-background"
               )}
-              style={{ minHeight: "500px" }}
+              style={{ minHeight: "600px", height: "100%" }}
             />
 
-            {/* Page Navigation */}
-            <div className="flex items-center justify-center gap-4 p-4 border-t border-border bg-card">
-              <button
-                onClick={handlePrevPage}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-muted-foreground">
-                Navigate using arrows or table of contents
-              </span>
-              <button
-                onClick={handleNextPage}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
-              >
-                Next
-              </button>
-            </div>
+
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
