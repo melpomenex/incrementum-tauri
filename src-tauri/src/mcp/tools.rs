@@ -299,7 +299,7 @@ impl MCPToolRegistry {
         let content = args["content"].as_str();
         let file_path = args["file_path"].as_str().unwrap_or("");
         let file_type_str = args["file_type"].as_str().unwrap_or("other");
-        let file_type = self.parse_file_type(file_type_str);
+        let file_type = Self::parse_file_type(file_type_str);
 
         let mut doc = Document::new(title.to_string(), file_path.to_string(), file_type);
         if let Some(content) = content {
@@ -514,12 +514,8 @@ impl MCPToolRegistry {
         let text = args["text"].as_str().ok_or("text is required")?;
         let document_id = args["document_id"].as_str();
 
-        let mut item = LearningItem::new(
-            document_id.map(|s| s.to_string()),
-            ItemType::Cloze,
-            text.to_string(),
-            None,
-        );
+        let mut item = LearningItem::new(ItemType::Cloze, text.to_string());
+        item.document_id = document_id.map(|s| s.to_string());
         item.cloze_text = Some(text.to_string());
 
         match self.repository.create_learning_item(&item).await {
@@ -553,12 +549,9 @@ impl MCPToolRegistry {
         let answer = args["answer"].as_str().ok_or("answer is required")?;
         let document_id = args["document_id"].as_str();
 
-        let item = LearningItem::new(
-            document_id.map(|s| s.to_string()),
-            ItemType::Qa,
-            question.to_string(),
-            Some(answer.to_string()),
-        );
+        let mut item = LearningItem::new(ItemType::Qa, question.to_string());
+        item.document_id = document_id.map(|s| s.to_string());
+        item.answer = Some(answer.to_string());
 
         match self.repository.create_learning_item(&item).await {
             Ok(created) => Ok(ToolCallResult {
@@ -867,12 +860,8 @@ impl MCPToolRegistry {
                     _ => ItemType::Flashcard,
                 };
 
-                let item = LearningItem::new(
-                    None,
-                    item_type,
-                    question.to_string(),
-                    answer.map(|a| a.to_string()),
-                );
+                let mut item = LearningItem::new(item_type, question.to_string());
+                item.answer = answer.map(|a| a.to_string());
 
                 match self.repository.create_learning_item(&item).await {
                     Ok(created) => {

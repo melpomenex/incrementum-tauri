@@ -16,6 +16,7 @@ import {
   Shield,
   BookOpen,
   GraduationCap,
+  RefreshCw,
 } from "lucide-react";
 import { KeyboardShortcutSettings } from "./KeyboardShortcutsSettings";
 import { AISettings as AIProviderSettings } from "./AIProviderSettings";
@@ -23,6 +24,7 @@ import { ImportExportSettings as ImportExportSettingsComponent } from "./ImportE
 import { SyncSettings as SyncSettingsOriginal } from "./SyncSettings";
 import { LearningSettings } from "./LearningSettings";
 import { DocumentsSettings } from "./DocumentsSettings";
+import { CloudStorageSettings } from "./CloudStorageSettings";
 
 /**
  * Settings tab
@@ -35,6 +37,7 @@ export enum SettingsTab {
   Shortcuts = "shortcuts",
   AI = "ai",
   Sync = "sync",
+  CloudStorage = "cloud-storage",
   ImportExport = "import-export",
   Notifications = "notifications",
   Privacy = "privacy",
@@ -50,7 +53,8 @@ export const SETTINGS_TABS = [
   { id: SettingsTab.Documents, label: "Documents", icon: BookOpen },
   { id: SettingsTab.Shortcuts, label: "Shortcuts", icon: Keyboard },
   { id: SettingsTab.AI, label: "AI", icon: Brain },
-  { id: SettingsTab.Sync, label: "Sync", icon: Cloud },
+  { id: SettingsTab.Sync, label: "Sync", icon: RefreshCw },
+  { id: SettingsTab.CloudStorage, label: "Cloud Storage", icon: Cloud },
   { id: SettingsTab.ImportExport, label: "Import/Export", icon: FolderOpen },
   { id: SettingsTab.Notifications, label: "Notifications", icon: Bell },
   { id: SettingsTab.Privacy, label: "Privacy", icon: Shield },
@@ -156,6 +160,7 @@ export function SettingsPage() {
           {activeTab === SettingsTab.Shortcuts && <ShortcutSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.AI && <AISettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Sync && <SyncSettings onChange={() => setHasChanges(true)} />}
+          {activeTab === SettingsTab.CloudStorage && <CloudStorageSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.ImportExport && <ImportExportSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Notifications && <NotificationSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Privacy && <PrivacySettings onChange={() => setHasChanges(true)} />}

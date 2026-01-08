@@ -5,11 +5,20 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+export interface MCPServerInfo {
+  name: string;
+  version: string;
+  protocolVersion: string;
+}
+
 export interface MCPServerConfig {
   id: string;
   name: string;
-  endpoint: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
   transport: "stdio" | "sse";
+  transportUrl?: string;
   enabled: boolean;
 }
 
@@ -28,17 +37,25 @@ export interface MCPToolCallResult {
 }
 
 /**
- * List all MCP servers
+ * List all connected MCP servers
  */
-export async function listMCPServers(): Promise<MCPServerConfig[]> {
-  return await invoke<MCPServerConfig[]>("mcp_list_servers");
+export async function listMCPServers(): Promise<MCPServerInfo[]> {
+  return await invoke<MCPServerInfo[]>("mcp_list_servers");
 }
 
 /**
- * Add an MCP server
+ * Add and connect to an MCP server
  */
-export async function addMCPServer(config: Omit<MCPServerConfig, "id">): Promise<void> {
-  return await invoke("mcp_add_server", { config });
+export async function addMCPServer(config: MCPServerConfig): Promise<string> {
+  return await invoke<string>("mcp_add_server", {
+    id: config.id,
+    name: config.name,
+    command: config.command,
+    args: config.args,
+    env: config.env,
+    transport: config.transport,
+    transportUrl: config.transportUrl,
+  });
 }
 
 /**
@@ -49,7 +66,7 @@ export async function removeMCPServer(id: string): Promise<void> {
 }
 
 /**
- * Update an MCP server
+ * Update an MCP server configuration
  */
 export async function updateMCPServer(
   id: string,
@@ -59,14 +76,28 @@ export async function updateMCPServer(
 }
 
 /**
- * List available tools from all MCP servers
+ * List available tools from all connected MCP servers
  */
 export async function listMCPTools(): Promise<MCPTool[]> {
   return await invoke<MCPTool[]>("mcp_list_tools");
 }
 
 /**
- * Call an MCP tool
+ * Get tools from a specific MCP server
+ */
+export async function getServerTools(id: string): Promise<MCPTool[]> {
+  return await invoke<MCPTool[]>("mcp_get_server_tools", { id });
+}
+
+/**
+ * Get info about a specific MCP server
+ */
+export async function getServerInfo(id: string): Promise<MCPServerInfo | null> {
+  return await invoke<MCPServerInfo | null>("mcp_get_server_info", { id });
+}
+
+/**
+ * Call a tool on a specific MCP server
  */
 export async function callMCPTool(
   serverId: string,
@@ -81,7 +112,7 @@ export async function callMCPTool(
 }
 
 /**
- * Get Incrementum's MCP tools
+ * Get Incrementum's built-in MCP tools
  */
 export async function getIncrementumMCPTools(): Promise<MCPTool[]> {
   return await invoke<MCPTool[]>("mcp_get_incrementum_tools");

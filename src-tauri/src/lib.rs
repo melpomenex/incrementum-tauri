@@ -15,6 +15,10 @@ mod ocr;
 mod segmentation;
 mod notifications;
 mod mcp;
+mod cloud;
+mod cloud_sync;
+mod backup;
+mod scheduler;
 
 use database::Database;
 use std::sync::{Arc, Mutex};
@@ -46,6 +50,7 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Initialize async runtime for database setup
             tauri::async_runtime::block_on(async {
@@ -242,6 +247,31 @@ pub fn run() {
             commands::llm::llm_stream_chat,
             commands::llm::llm_get_models,
             commands::llm::llm_test_connection,
+            // Cloud OAuth commands
+            commands::oauth_start,
+            commands::oauth_callback,
+            commands::oauth_get_account,
+            commands::oauth_disconnect,
+            commands::oauth_is_authenticated,
+            // Cloud Backup commands
+            commands::backup_create,
+            commands::backup_restore,
+            commands::backup_list,
+            commands::backup_delete,
+            // Cloud Sync commands
+            commands::cloud_sync_init,
+            commands::cloud_sync_now,
+            commands::cloud_sync_get_status,
+            commands::cloud_sync_resolve_conflicts,
+            commands::cloud_list_files,
+            commands::cloud_import_files,
+            // Scheduler commands
+            commands::scheduler_init,
+            commands::scheduler_start,
+            commands::scheduler_stop,
+            commands::scheduler_update_config,
+            commands::scheduler_get_status,
+            commands::scheduler_trigger_backup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

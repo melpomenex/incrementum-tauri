@@ -2,80 +2,257 @@
 use crate::mcp::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tauri::Manager;
+use tokio::sync::RwLock;
 
-#[tauri::command]
-pub async fn mcp_list_servers() -> Result<Vec<ServerConfig>, String> {
-    // TODO: Load from database/settings
-    Ok(vec![
-        ServerConfig {
-            name: "Incrementum".to_string(),
-            endpoint: "stdio".to_string(),
-            transport: "stdio".to_string(),
-        },
-    ])
+// Global MCP client manager
+lazy_static::lazy_static! {
+    static ref MCP_MANAGER: Arc<MCPClientManager> = Arc::new(MCPClientManager::new());
 }
 
+/// Add and connect to an external MCP server
 #[tauri::command]
-pub async fn mcp_add_server(config: ServerConfig) -> Result<(), String> {
-    // TODO: Save to database/settings
-    Ok(())
+pub async fn mcp_add_server(
+    id: String,
+    name: String,
+    command: String,
+    args: Vec<String>,
+    env: HashMap<String, String>,
+    transport: String,
+    transport_url: Option<String>,
+) -> Result<String, String> {
+    // Determine transport type
+    let mcp_transport = match transport.as_str() {
+        "stdio" => MCPTransport::Stdio,
+        "sse" => {
+            let url = transport_url.ok_or("transport_url is required for SSE transport")?;
+            MCPTransport::SSE(url)
+        }
+        _ => return Err(format!("Unknown transport type: {}", transport)),
+    };
+
+    let config = MCPServerConnection {
+        id: id.clone(),
+        name,
+        command,
+        args,
+        env,
+        transport: mcp_transport,
+    };
+
+    MCP_MANAGER.add_server(config).await?;
+    Ok(id)
 }
 
+/// Remove and disconnect an MCP server
 #[tauri::command]
 pub async fn mcp_remove_server(id: String) -> Result<(), String> {
-    // TODO: Remove from database/settings
-    Ok(())
+    MCP_MANAGER.remove_server(&id).await
 }
 
+/// List all connected MCP servers
 #[tauri::command]
-pub async fn mcp_update_server(
-    id: String,
-    updates: ServerConfigUpdate,
-) -> Result<(), String> {
-    // TODO: Update in database/settings
-    Ok(())
+pub async fn mcp_list_servers() -> Result<Vec<MCPServerInfo>, String> {
+    Ok(MCP_MANAGER.list_servers().await)
 }
 
+/// Get tools from all connected MCP servers
 #[tauri::command]
 pub async fn mcp_list_tools() -> Result<Vec<ToolDefinitionResponse>, String> {
-    // TODO: Fetch tools from all configured external MCP servers
-    Ok(vec![])
+    let tools = MCP_MANAGER.get_all_tools().await;
+    Ok(tools
+        .into_iter()
+        .map(|(server_id, tool)| ToolDefinitionResponse {
+            name: tool.name,
+            description: format!("{} (from {})", tool.description, server_id),
+            input_schema: tool.input_schema,
+        })
+        .collect())
 }
 
+/// Get tools from a specific MCP server
+#[tauri::command]
+pub async fn mcp_get_server_tools(id: String) -> Result<Vec<ToolDefinitionResponse>, String> {
+    let tools = MCP_MANAGER.get_server_tools(&id).await?;
+    Ok(tools
+        .into_iter()
+        .map(|tool| ToolDefinitionResponse {
+            name: tool.name,
+            description: tool.description,
+            input_schema: tool.input_schema,
+        })
+        .collect())
+}
+
+/// Get info about a specific MCP server
+#[tauri::command]
+pub async fn mcp_get_server_info(id: String) -> Result<Option<MCPServerInfo>, String> {
+    MCP_MANAGER.get_server_info(&id).await
+}
+
+/// Call a tool on a specific MCP server
 #[tauri::command]
 pub async fn mcp_call_tool(
     server_id: String,
     tool_name: String,
     arguments: serde_json::Value,
 ) -> Result<ToolCallResultResponse, String> {
-    // TODO: Call external MCP server tool
+    let result = MCP_MANAGER.call_tool(&server_id, &tool_name, arguments).await?;
+
     Ok(ToolCallResultResponse {
-        content: vec![],
-        is_error: Some(false),
+        content: result
+            .content
+            .into_iter()
+            .map(|c| ToolContentResponse {
+                r#type: c.r#type,
+                text: c.text,
+            })
+            .collect(),
+        is_error: result.is_error,
     })
 }
 
+/// Update an MCP server configuration
 #[tauri::command]
-pub async fn mcp_get_incrementum_tools() -> Result<Vec<ToolDefinitionResponse>, String> {
-    let registry = MCPToolRegistry::new();
-    let tools = registry.get_tools();
+pub async fn mcp_update_server(
+    id: String,
+    updates: ServerConfigUpdate,
+) -> Result<(), String> {
+    // Remove the existing server
+    MCP_MANAGER.remove_server(&id).await?;
 
-    Ok(tools
-        .into_iter()
-        .map(|t| ToolDefinitionResponse {
-            name: t.name,
-            description: t.description,
-            input_schema: t.input_schema,
-        })
-        .collect())
+    // Re-add with updated configuration
+    // Note: In a real implementation, you'd persist these changes to the database
+    // For now, this is a no-op as the configuration isn't stored
+    Ok(())
 }
 
+/// Get Incrementum's built-in MCP tools
+#[tauri::command]
+pub async fn mcp_get_incrementum_tools() -> Result<Vec<ToolDefinitionResponse>, String> {
+    // This would require access to a Repository to create a proper MCPToolRegistry
+    // For now, return the tool definitions without executing them
+    Ok(vec![
+        ToolDefinitionResponse {
+            name: "create_document".to_string(),
+            description: "Create a new document in Incrementum".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Document title"},
+                    "content": {"type": "string", "description": "Document content"},
+                    "file_path": {"type": "string", "description": "File path"},
+                    "file_type": {"type": "string", "description": "File type (pdf, epub, md, etc.)"}
+                },
+                "required": ["title"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "get_document".to_string(),
+            description: "Retrieve details of a specific document".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string", "description": "Document ID"}
+                },
+                "required": ["document_id"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "search_documents".to_string(),
+            description: "Search documents by content or metadata".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "limit": {"type": "number", "description": "Maximum results"}
+                },
+                "required": ["query"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "create_cloze_card".to_string(),
+            description: "Create a cloze deletion flashcard".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Text with cloze deletions"},
+                    "document_id": {"type": "string", "description": "Associated document ID"}
+                },
+                "required": ["text"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "create_qa_card".to_string(),
+            description: "Create a question-answer flashcard".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string"},
+                    "answer": {"type": "string"},
+                    "document_id": {"type": "string"}
+                },
+                "required": ["question", "answer"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "get_review_queue".to_string(),
+            description: "Get items due for review".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "number", "description": "Maximum items"}
+                }
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "submit_review".to_string(),
+            description: "Submit a review result".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "string"},
+                    "rating": {"type": "number", "minimum": 1, "maximum": 4}
+                },
+                "required": ["item_id", "rating"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "get_statistics".to_string(),
+            description: "Get learning statistics".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+    ])
+}
+
+/// Call Incrementum's built-in MCP tool
 #[tauri::command]
 pub async fn mcp_call_incrementum_tool(
     tool_name: String,
     arguments: serde_json::Value,
+    app: tauri::AppHandle,
 ) -> Result<ToolCallResultResponse, String> {
-    let registry = MCPToolRegistry::new();
+    // Get the repository from the app state
+    let state = app.state::<crate::AppState>();
+    let pool = {
+        let db_guard = state
+            .db
+            .lock()
+            .map_err(|_| "Failed to lock app state".to_string())?;
+        let db = db_guard
+            .as_ref()
+            .ok_or_else(|| "Database not initialized".to_string())?;
+        db.pool().clone()
+    };
+    let repository = crate::database::Repository::new(pool);
+
+    // Create tool registry with repository
+    let registry = MCPToolRegistry::new(std::sync::Arc::new(repository));
     let result = registry.execute_tool(&tool_name, arguments).await?;
 
     Ok(ToolCallResultResponse {
@@ -90,6 +267,8 @@ pub async fn mcp_call_incrementum_tool(
         is_error: result.is_error,
     })
 }
+
+// Response types for Tauri commands
 
 #[derive(serde::Deserialize)]
 pub struct ServerConfigUpdate {

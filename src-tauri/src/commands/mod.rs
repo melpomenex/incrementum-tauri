@@ -16,6 +16,8 @@ pub mod segmentation;
 pub mod notifications;
 pub mod mcp;
 pub mod llm;
+pub mod cloud;
+pub mod scheduler;
 
 // Re-export error types for use in commands
 pub use crate::error::Result;
@@ -36,3 +38,11 @@ pub use segmentation::*;
 pub use notifications::*;
 pub use mcp::*;
 pub use llm::*;
+
+// Cloud commands
+pub use cloud::oauth::*;
+pub use cloud::backup::*;
+pub use cloud::sync::*;
+
+// Scheduler commands
+pub use scheduler::*;
