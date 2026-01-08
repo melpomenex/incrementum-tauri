@@ -173,3 +173,17 @@ pub async fn delete_document(
     repo.delete_document(&id).await?;
     Ok(())
 }
+
+#[tauri::command]
+pub async fn read_document_file(
+    file_path: String,
+) -> Result<String> {
+    use std::fs;
+    use base64::{Engine as _, engine::general_purpose};
+
+    let bytes = fs::read(&file_path)
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to read file: {}", e)))?;
+
+    let base64_string = general_purpose::STANDARD.encode(&bytes);
+    Ok(base64_string)
+}

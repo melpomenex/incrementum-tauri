@@ -87,6 +87,37 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     return id;
   },
 
+  // Add a new tab in background (without focusing it)
+  addTabInBackground: (tab) => {
+    const id = crypto.randomUUID();
+    const newTab: Tab = { ...tab, id };
+
+    set((state) => {
+      // Check if tab of same type with same data already exists
+      const existingTab = state.tabs.find(
+        (t) =>
+          t.type === tab.type &&
+          JSON.stringify(t.data) === JSON.stringify(tab.data)
+      );
+
+      if (existingTab) {
+        // Tab already exists, don't create a duplicate
+        return state;
+      }
+
+      return {
+        tabs: [...state.tabs, newTab],
+        // Keep current tab active, don't switch to the new tab
+        activeTabId: state.activeTabId,
+      };
+    });
+
+    // Auto-save after adding
+    get().saveTabs();
+
+    return id;
+  },
+
   // Close a tab
   closeTab: (tabId) => {
     set((state) => {

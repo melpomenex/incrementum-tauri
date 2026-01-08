@@ -1,23 +1,30 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X } from "lucide-react";
-import { useDocumentStore } from "../../stores";
+import { useDocumentStore, useTabsStore } from "../../stores";
 import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { EPUBViewer } from "./EPUBViewer";
 import { ExtractsList } from "../extracts/ExtractsList";
 import { LearningCardsList } from "../learning/LearningCardsList";
 import { CreateExtractDialog } from "../extracts/CreateExtractDialog";
+import { QueueNavigationControls } from "../queue/QueueNavigationControls";
+import { HoverRatingControls } from "../review/HoverRatingControls";
+import { useQueueNavigation } from "../../hooks/useQueueNavigation";
 import { cn } from "../../utils";
+import * as documentsApi from "../../api/documents";
+import type { ReviewRating } from "../../api/review";
 
 type ViewMode = "document" | "extracts" | "cards";
 
 type DocumentType = "pdf" | "epub" | "markdown" | "html";
 
-export function DocumentViewer() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+interface DocumentViewerProps {
+  documentId: string;
+}
+
+export function DocumentViewer({ documentId }: DocumentViewerProps) {
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
+  const { closeTab, tabs } = useTabsStore();
 
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
@@ -32,17 +39,18 @@ export function DocumentViewer() {
   const [selectedText, setSelectedText] = useState("");
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
 
+  // Queue navigation
+  const queueNav = useQueueNavigation();
+
   useEffect(() => {
-    if (id) {
-      const doc = documents.find((d) => d.id === id);
+    if (documentId) {
+      const doc = documents.find((d) => d.id === documentId);
       if (doc) {
         setCurrentDocument(doc);
         loadDocumentData(doc);
-      } else {
-        navigate("/documents");
       }
     }
-  }, [id, documents, setCurrentDocument, navigate]);
+  }, [documentId, documents, setCurrentDocument]);
 
   // Handle text selection
   useEffect(() => {
@@ -110,8 +118,17 @@ export function DocumentViewer() {
 
     if (doc.fileType === "pdf" || doc.fileType === "epub") {
       try {
-        const response = await fetch(`file://${doc.filePath}`);
-        const arrayBuffer = await response.arrayBuffer();
+        // Read file through Tauri backend instead of fetch
+        const base64Data = await documentsApi.readDocumentFile(doc.filePath);
+
+        // Convert base64 to ArrayBuffer
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const arrayBuffer = bytes.buffer;
+
         setFileData(arrayBuffer);
       } catch (error) {
         console.error(`Failed to load ${doc.fileType}:`, error);
@@ -180,6 +197,23 @@ export function DocumentViewer() {
     console.log("Searching for:", searchQuery);
   };
 
+  // Handle rating from keyboard shortcuts
+  const handleRating = async (rating: ReviewRating) => {
+    // For now, just log the rating. In a full implementation, this would:
+    // 1. Either create a learning item from the document
+    // 2. Or submit a review for an existing learning item
+    console.log(`DocumentViewer: Rated document ${documentId} as ${rating}`);
+    // TODO: Integrate with actual learning item creation/review
+  };
+
+  // Handle back button - close the current tab
+  const handleBack = () => {
+    const currentTab = tabs.find(t => t.data?.documentId === documentId);
+    if (currentTab) {
+      closeTab(currentTab.id);
+    }
+  };
+
   if (!currentDocument) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -197,7 +231,7 @@ export function DocumentViewer() {
       <div className="flex items-center justify-between p-4 bg-card border-b border-border">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate("/documents")}
+            onClick={handleBack}
             className="p-2 rounded-md hover:bg-muted transition-colors"
             title="Back to Documents"
           >
@@ -300,6 +334,18 @@ export function DocumentViewer() {
               <Brain className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Queue Navigation Controls */}
+          {viewMode === "document" && queueNav.totalDocuments > 0 && (
+            <QueueNavigationControls
+              currentDocumentIndex={queueNav.currentDocumentIndex}
+              totalDocuments={queueNav.totalDocuments}
+              hasMoreChunks={queueNav.canGoToNextChunk}
+              onPreviousDocument={queueNav.goToPreviousDocument}
+              onNextDocument={queueNav.goToNextDocument}
+              onNextChunk={queueNav.goToNextChunk}
+            />
+          )}
 
           {/* Page Navigation and Zoom */}
           {hasPageNavigation && viewMode === "document" && (
@@ -428,6 +474,7 @@ export function DocumentViewer() {
             <EPUBViewer
               fileData={fileData}
               fileName={currentDocument.title}
+              documentId={currentDocument.id}
               onLoad={handleDocumentLoad}
             />
           </div>
@@ -484,6 +531,15 @@ export function DocumentViewer() {
         }}
         onCreate={handleExtractCreated}
       />
+
+      {/* Hover Rating Controls - for quick document rating */}
+      {viewMode === "document" && (
+        <HoverRatingControls
+          context="document"
+          documentId={documentId}
+          onRatingSubmitted={handleRating}
+        />
+      )}
     </div>
   );
 }

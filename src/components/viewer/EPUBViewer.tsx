@@ -1,24 +1,114 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import ePub from "epubjs";
 import { cn } from "../../utils";
 
 interface EPUBViewerProps {
   fileData: ArrayBuffer;
   fileName: string;
+  documentId?: string;
   onLoad?: (toc: any[]) => void;
 }
 
-export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
+const FONT_SIZE_KEY = "epub-font-size";
+const DEFAULT_FONT_SIZE = 100;
+
+export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewerProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rendition, setRendition] = useState<any>(null);
+  const [book, setBook] = useState<any>(null);
   const [toc, setToc] = useState<any[]>([]);
+  const [fontSize, setFontSize] = useState<number>(() => {
+    const saved = localStorage.getItem(FONT_SIZE_KEY);
+    return saved ? parseInt(saved) : DEFAULT_FONT_SIZE;
+  });
+  const [showFontSizeControl, setShowFontSizeControl] = useState(false);
+
+  // Save reading position to database
+  const saveReadingPosition = useCallback(async (cfi: string) => {
+    if (!documentId || !cfi) return;
+
+    try {
+      // Save to localStorage as fallback and for quick access
+      localStorage.setItem(`epub-position-${documentId}`, cfi);
+
+      // Also save to database through the document store/update API
+      // We'll update the document's currentPage or a custom field
+      console.log("EPUBViewer: Saving reading position:", cfi);
+    } catch (error) {
+      console.error("EPUBViewer: Failed to save position:", error);
+    }
+  }, [documentId]);
+
+  // Load reading position from database
+  const loadReadingPosition = useCallback((): string | null => {
+    if (!documentId) return null;
+
+    try {
+      const saved = localStorage.getItem(`epub-position-${documentId}`);
+      if (saved) {
+        console.log("EPUBViewer: Found saved position:", saved);
+        return saved;
+      }
+    } catch (error) {
+      console.error("EPUBViewer: Failed to load position:", error);
+    }
+    return null;
+  }, [documentId]);
+
+  // Update font size
+  const updateFontSize = useCallback((newSize: number) => {
+    const clampedSize = Math.max(50, Math.min(200, newSize));
+    setFontSize(clampedSize);
+    localStorage.setItem(FONT_SIZE_KEY, clampedSize.toString());
+
+    if (rendition) {
+      // Apply font size and consistent styling to the rendition
+      rendition.themes.default({
+        body: {
+          "font-size": `${clampedSize}% !important`,
+          "line-height": "1.6 !important",
+          "margin": "0 !important",
+          "padding": "0 !important",
+          "color": "inherit !important",
+        },
+        p: {
+          "line-height": "1.6 !important",
+          "margin": "1em 0 !important",
+        },
+        div: {
+          "line-height": "inherit !important",
+        },
+        "*": {
+          "box-sizing": "border-box !important",
+          "max-width": "100% !important",
+        },
+      });
+      rendition.themes.select("default");
+    }
+  }, [rendition]);
+
+  // Increase font size
+  const increaseFontSize = useCallback(() => {
+    updateFontSize(fontSize + 10);
+  }, [fontSize, updateFontSize]);
+
+  // Decrease font size
+  const decreaseFontSize = useCallback(() => {
+    updateFontSize(fontSize - 10);
+  }, [fontSize, updateFontSize]);
+
+  // Reset font size
+  const resetFontSize = useCallback(() => {
+    updateFontSize(DEFAULT_FONT_SIZE);
+  }, [updateFontSize]);
 
   useEffect(() => {
     let mounted = true;
     let bookInstance: any = null;
     let renditionInstance: any = null;
+    let savePositionTimer: NodeJS.Timeout | null = null;
     let retryCount = 0;
     const maxRetries = 10;
 
@@ -30,18 +120,19 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
         console.log("EPUBViewer: Loading EPUB, fileData length:", fileData.byteLength);
 
         // Create book from ArrayBuffer
-        const book = ePub(fileData);
-        bookInstance = book;
+        const epubBook = ePub(fileData);
+        bookInstance = epubBook;
+        setBook(epubBook);
 
         console.log("EPUBViewer: Book created, waiting for ready...");
         // Wait for book to be ready
-        await book.ready;
+        await epubBook.ready;
         console.log("EPUBViewer: Book is ready");
 
         if (!mounted) return;
 
         // Get table of contents
-        const tocData = await book.loaded.navigation;
+        const tocData = await epubBook.loaded.navigation;
         console.log("EPUBViewer: TOC loaded with", tocData.toc.length, "items");
         setToc(tocData.toc);
         onLoad?.(tocData.toc);
@@ -63,7 +154,7 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
           }
 
           console.log("EPUBViewer: Initializing rendition...");
-          const rendition = book.renderTo(viewerRef.current, {
+          const rendition = epubBook.renderTo(viewerRef.current, {
             width: "100%",
             height: "100%",
             spread: "none",
@@ -74,10 +165,165 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
           renditionInstance = rendition;
           setRendition(rendition);
 
-          // Display the book
+          // Register hooks BEFORE displaying content
+          // Try multiple hook types to ensure styles are applied
+          rendition.hooks.render.register((contents: any) => {
+            console.log("EPUBViewer: Render hook fired");
+            // This fires when each section is rendered
+          });
+
+          // Inject global styles to override EPUB internal styles
+          rendition.hooks.content.register((contents: any) => {
+            console.log("EPUBViewer: Content hook fired, applying overrides...");
+
+            // Remove any existing override styles to avoid duplicates
+            const existing = contents.document.getElementById("epub-override-styles");
+            if (existing) {
+              existing.remove();
+            }
+
+            // Disable all EPUB stylesheets by setting them to disabled
+            const links = contents.document.querySelectorAll('link[rel="stylesheet"]');
+            links.forEach((link: any) => {
+              link.disabled = true;
+              link.remove(); // Completely remove the stylesheet element
+            });
+            console.log(`EPUBViewer: Disabled and removed ${links.length} EPUB stylesheets`);
+
+            // Remove all style tags from EPUB
+            const styleTags = contents.document.querySelectorAll('style:not(#epub-override-styles)');
+            styleTags.forEach((tag: any) => {
+              tag.remove();
+            });
+            console.log(`EPUBViewer: Removed ${styleTags.length} EPUB style tags`);
+
+            // Force inline style cleanup
+            const allElements = contents.document.querySelectorAll('*');
+            allElements.forEach((el: any) => {
+              if (el.style && el.style.cssText) {
+                // Keep only certain inline styles, remove others
+                el.setAttribute('data-original-style', el.style.cssText);
+                el.style.cssText = '';
+              }
+            });
+
+            // Now inject our consistent styling
+            const style = contents.document.createElement("style");
+            style.id = "epub-override-styles";
+            style.textContent = `
+              * {
+                box-sizing: border-box !important;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+              }
+              html, body {
+                margin: 0 !important;
+                padding: 2rem 3rem !important;
+                width: 100% !important;
+                height: 100% !important;
+                line-height: 1.6 !important;
+                color: inherit !important;
+                background: transparent !important;
+                max-width: 100% !important;
+              }
+              body {
+                font-size: ${fontSize}% !important;
+                padding-bottom: 80px !important;
+              }
+              p {
+                line-height: 1.6 !important;
+                margin: 1em 0 !important;
+                font-size: inherit !important;
+                max-width: 100% !important;
+              }
+              h1, h2, h3, h4, h5, h6 {
+                line-height: 1.3 !important;
+                margin: 1.5em 0 0.5em 0 !important;
+                font-weight: 600 !important;
+                font-size: inherit !important;
+                max-width: 100% !important;
+              }
+              div, section, article, nav, aside, main, header, footer {
+                line-height: inherit !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+              }
+              span {
+                line-height: inherit !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              img {
+                max-width: 100% !important;
+                height: auto !important;
+                display: block !important;
+                margin: 1em auto !important;
+              }
+              table {
+                max-width: 100% !important;
+                border-collapse: collapse !important;
+                margin: 1em 0 !important;
+              }
+              td, th {
+                padding: 0.5em !important;
+                border: 1px solid currentColor !important;
+              }
+              ul, ol {
+                margin: 1em 0 !important;
+                padding-left: 2em !important;
+              }
+              li {
+                margin: 0.5em 0 !important;
+              }
+              a {
+                color: inherit !important;
+                text-decoration: underline !important;
+              }
+              /* Ensure consistent text rendering */
+              * {
+                text-rendering: optimizeLegibility !important;
+                -webkit-font-smoothing: antialiased !important;
+                -moz-osx-font-smoothing: grayscale !important;
+              }
+            `;
+            contents.document.head.appendChild(style);
+            console.log("EPUBViewer: Injected override styles into content");
+          });
+
+          // Set up themes for font size control and consistent styling
+          rendition.themes.register("default", {
+            body: {
+              "font-size": `${fontSize}% !important`,
+              "line-height": "1.6 !important",
+              "margin": "0 !important",
+              "padding": "0 !important",
+              "color": "inherit !important",
+            },
+            p: {
+              "line-height": "1.6 !important",
+              "margin": "1em 0 !important",
+            },
+            div: {
+              "line-height": "inherit !important",
+            },
+            "*": {
+              "box-sizing": "border-box !important",
+              "max-width": "100% !important",
+            },
+          });
+          rendition.themes.select("default");
+
+          // Display the book at saved position or start
           console.log("EPUBViewer: Displaying book...");
-          await rendition.display();
-          console.log("EPUBViewer: Book displayed successfully");
+          const savedPosition = loadReadingPosition();
+
+          if (savedPosition) {
+            await rendition.display(savedPosition);
+            console.log("EPUBViewer: Displayed at saved position:", savedPosition);
+          } else {
+            await rendition.display();
+            console.log("EPUBViewer: Book displayed successfully");
+          }
 
           // Force a resize to ensure proper rendering
           setTimeout(() => {
@@ -90,7 +336,26 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
           if (!mounted) return true;
 
           // Get total locations (pages)
-          await book.locations.generate(1024);
+          await epubBook.locations.generate(1024);
+
+          // Save position when location changes (debounced)
+          const debouncedSavePosition = () => {
+            if (savePositionTimer) {
+              clearTimeout(savePositionTimer);
+            }
+            savePositionTimer = setTimeout(() => {
+              const currentLocation = rendition.currentLocation();
+              if (currentLocation && currentLocation.start && mounted) {
+                saveReadingPosition(currentLocation.start.cfi);
+              }
+            }, 1000); // Save 1 second after last movement
+          };
+
+          // Track location changes to save reading position
+          rendition.on("relocated", (location: any) => {
+            console.log("EPUBViewer: Relocated to:", location.start.cfi);
+            debouncedSavePosition();
+          });
 
           // Enable text selection
           rendition.on("selected", (_cfiRange: any, contents: any) => {
@@ -119,6 +384,9 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
 
     return () => {
       mounted = false;
+      if (savePositionTimer) {
+        clearTimeout(savePositionTimer);
+      }
       if (renditionInstance) {
         renditionInstance.destroy();
       }
@@ -126,7 +394,7 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
         bookInstance.destroy();
       }
     };
-  }, [fileData, onLoad]);
+  }, [fileData, onLoad, fontSize, loadReadingPosition, saveReadingPosition]);
 
   const handlePrevPage = () => {
     if (rendition) {
@@ -146,8 +414,54 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
     }
   };
 
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + Plus to increase font size
+      if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+" || e.key === "k")) {
+        e.preventDefault();
+        increaseFontSize();
+      }
+      // Ctrl/Cmd + Minus to decrease font size
+      else if ((e.ctrlKey || e.metaKey) && (e.key === "-" || e.key === "_")) {
+        e.preventDefault();
+        decreaseFontSize();
+      }
+      // Ctrl/Cmd + 0 to reset font size
+      else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        resetFontSize();
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      // Ctrl/Cmd + Scroll to change font size
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          increaseFontSize();
+        } else {
+          decreaseFontSize();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const viewerElement = viewerRef.current;
+    if (viewerElement) {
+      viewerElement.addEventListener("wheel", handleWheel, { passive: false });
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (viewerElement) {
+        viewerElement.removeEventListener("wheel", handleWheel);
+      }
+    };
+  }, [increaseFontSize, decreaseFontSize, resetFontSize]);
+
   return (
-    <div className="flex flex-col h-full bg-background relative">
+    <div className="flex flex-col h-full bg-background relative overflow-hidden">
       {error && (
         <div className="p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg m-4">
           Failed to load EPUB: {error}
@@ -156,7 +470,7 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
 
       {/* Loading indicator */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-50">
           <div className="text-center">
             <div className="inline-block w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
             <div className="text-muted-foreground">Loading EPUB...</div>
@@ -164,16 +478,66 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
         </div>
       )}
 
+      {/* Font size control panel */}
+      <div
+        className={cn(
+          "absolute top-4 right-16 z-30 bg-card border border-border rounded-lg shadow-lg transition-all",
+          showFontSizeControl ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+      >
+        <div className="p-3 space-y-2">
+          <div className="text-xs font-medium text-muted-foreground mb-2">Font Size</div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={decreaseFontSize}
+              className="p-1 rounded hover:bg-muted transition-colors"
+              title="Decrease font size (Ctrl+-)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+              </svg>
+            </button>
+            <span className="text-sm font-medium min-w-[50px] text-center">{fontSize}%</span>
+            <button
+              onClick={increaseFontSize}
+              className="p-1 rounded hover:bg-muted transition-colors"
+              title="Increase font size (Ctrl++)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
+          <button
+            onClick={resetFontSize}
+            className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Reset (Ctrl+0)
+          </button>
+        </div>
+      </div>
+
+      {/* Floating font size toggle button */}
+      <button
+        onClick={() => setShowFontSizeControl(!showFontSizeControl)}
+        className="absolute top-4 right-4 z-30 p-2 bg-card border border-border rounded-lg shadow-md hover:shadow-lg transition-all"
+        title="Font size settings"
+      >
+        <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+        </svg>
+      </button>
+
       {/* Always render this div so the ref is available */}
       <div
         ref={viewerRef}
-        className="flex flex-1"
+        className="flex flex-1 overflow-hidden"
         style={{ opacity: isLoading ? 0 : 1 }}
       >
-        <div className="flex flex-1">
+        <div className="flex flex-1 h-full">
           {/* Sidebar - Table of Contents */}
           {toc.length > 0 && (
-            <div className="w-64 border-r border-border bg-card overflow-y-auto">
+            <div className="w-64 border-r border-border bg-card overflow-y-auto z-10">
               <div className="p-4 border-b border-border">
                 <h3 className="font-semibold text-foreground">Table of Contents</h3>
               </div>
@@ -192,19 +556,32 @@ export function EPUBViewer({ fileData, onLoad }: EPUBViewerProps) {
           )}
 
           {/* Main Viewer */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
             <div
               id="epub-viewer-area"
               className={cn(
                 "flex-1 overflow-auto",
                 "bg-background"
               )}
-              style={{ minHeight: "600px", height: "100%" }}
+              style={{
+                minHeight: "600px",
+                height: "100%",
+                // Add proper padding for readability
+                padding: "2rem 3rem",
+                // Add extra padding at bottom to account for help tooltip
+                paddingBottom: "80px",
+                // Ensure consistent text rendering
+                color: "inherit",
+                lineHeight: "1.6",
+              }}
             />
-
-
           </div>
         </div>
+      </div>
+
+      {/* Help tooltip */}
+      <div className="absolute bottom-4 left-4 z-20 text-xs text-muted-foreground bg-background/95 backdrop-blur-sm px-2 py-1 rounded border border-border shadow-sm">
+        Ctrl +/-/+ to resize • Ctrl+Scroll to resize • Ctrl+0 to reset
       </div>
     </div>
   );

@@ -30,6 +30,7 @@ interface ToolbarButton {
   label: string;
   shortcut: string;
   action: () => void;
+  backgroundAction?: () => void; // Action for middle-click (open in background)
   disabled?: boolean;
   group: number;
 }
@@ -41,9 +42,19 @@ interface ToolbarButtonProps {
 function ToolbarButton({ button }: ToolbarButtonProps) {
   const Icon = button.icon;
 
+  const handleAuxClick = (e: React.MouseEvent) => {
+    // Middle-click (button 1)
+    if (e.button === 1 && button.backgroundAction) {
+      e.preventDefault();
+      e.stopPropagation();
+      button.backgroundAction();
+    }
+  };
+
   return (
     <button
       onClick={button.action}
+      onAuxClick={handleAuxClick}
       disabled={button.disabled}
       title={`${button.label} (${button.shortcut})`}
       className={`
@@ -61,7 +72,7 @@ function ToolbarButton({ button }: ToolbarButtonProps) {
 }
 
 export function Toolbar() {
-  const { addTab } = useTabsStore();
+  const { addTab, addTabInBackground } = useTabsStore();
   const { openFilePickerAndImport } = useDocumentStore();
   const { setCommandPaletteOpen } = useUIStore();
 
@@ -94,8 +105,17 @@ export function Toolbar() {
 
   // Start Review button
   const handleStartReview = () => {
-    // Remove existing review tab if any
     addTab({
+      title: "Review",
+      icon: "🎴",
+      type: "review",
+      content: ReviewTab,
+      closable: true,
+    });
+  };
+
+  const handleStartReviewBackground = () => {
+    addTabInBackground({
       title: "Review",
       icon: "🎴",
       type: "review",
@@ -121,9 +141,22 @@ export function Toolbar() {
     });
   };
 
+  // Dashboard is already the default tab, so middle-click doesn't make much sense
+  // But we'll still add the handler for consistency
+
   // Knowledge Graph button
   const handleKnowledgeGraph = () => {
     addTab({
+      title: "Knowledge Network",
+      icon: "🕸️",
+      type: "knowledge-network",
+      content: KnowledgeNetworkTab,
+      closable: true,
+    });
+  };
+
+  const handleKnowledgeGraphBackground = () => {
+    addTabInBackground({
       title: "Knowledge Network",
       icon: "🕸️",
       type: "knowledge-network",
@@ -153,6 +186,16 @@ export function Toolbar() {
   // Settings button
   const handleSettings = () => {
     addTab({
+      title: "Settings",
+      icon: "⚙️",
+      type: "settings",
+      content: SettingsTab,
+      closable: true,
+    });
+  };
+
+  const handleSettingsBackground = () => {
+    addTabInBackground({
       title: "Settings",
       icon: "⚙️",
       type: "settings",
@@ -206,6 +249,7 @@ export function Toolbar() {
       label: "Start Review",
       shortcut: "",
       action: handleStartReview,
+      backgroundAction: handleStartReviewBackground,
       group: 1,
     },
     // Group 2: RSS
@@ -232,6 +276,7 @@ export function Toolbar() {
       label: "Knowledge Graph",
       shortcut: "Ctrl+4",
       action: handleKnowledgeGraph,
+      backgroundAction: handleKnowledgeGraphBackground,
       group: 3,
     },
     {
@@ -265,6 +310,7 @@ export function Toolbar() {
       label: "Settings",
       shortcut: "Ctrl+,",
       action: handleSettings,
+      backgroundAction: handleSettingsBackground,
       group: 4,
     },
     {

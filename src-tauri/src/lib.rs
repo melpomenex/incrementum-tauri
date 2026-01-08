@@ -107,6 +107,7 @@ pub fn run() {
             commands::delete_document,
             commands::import_document,
             commands::import_documents,
+            commands::read_document_file,
             // Extract commands
             commands::get_extracts,
             commands::get_extract,

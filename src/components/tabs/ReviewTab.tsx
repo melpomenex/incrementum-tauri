@@ -4,6 +4,8 @@ import { ReviewCard } from "../../components/review/ReviewCard";
 import { RatingButtons } from "../../components/review/RatingButtons";
 import { ReviewProgress } from "../../components/review/ReviewProgress";
 import { ReviewComplete } from "../../components/review/ReviewComplete";
+import { QueueNavigationControls } from "../queue/QueueNavigationControls";
+import { HoverRatingControls } from "../review/HoverRatingControls";
 import { AlertCircle } from "lucide-react";
 import { ReviewRating } from "../../api/review";
 
@@ -125,11 +127,26 @@ export function ReviewTab() {
   return (
     <div className="h-full flex flex-col p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-foreground">Review</h1>
-        <p className="text-muted-foreground">
-          Practice with spaced repetition
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Review</h1>
+          <p className="text-muted-foreground">
+            Practice with spaced repetition
+          </p>
+        </div>
+
+        {/* Queue Navigation */}
+        {queue.length > 0 && (
+          <QueueNavigationControls
+            currentDocumentIndex={currentIndex}
+            totalDocuments={queue.length}
+            hasMoreChunks={false}
+            onPreviousDocument={() => {}}
+            onNextDocument={() => {}}
+            onNextChunk={() => {}}
+            disabled={isSubmitting}
+          />
+        )}
       </div>
 
       {/* Progress */}
@@ -161,6 +178,17 @@ export function ReviewTab() {
                 previewIntervals={previewIntervals}
               />
             </div>
+
+            {/* Hover Rating Controls - appears on hover at bottom */}
+            <HoverRatingControls
+              context="review"
+              itemId={currentCard.id}
+              documentId={currentCard.document_id}
+              onRatingSubmitted={submitRating}
+              disabled={isSubmitting}
+              forceVisible={isAnswerShown}
+              previewIntervals={previewIntervals}
+            />
           </>
         ) : (
           <>

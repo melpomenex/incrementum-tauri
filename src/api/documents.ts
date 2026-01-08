@@ -46,6 +46,14 @@ export async function importDocuments(filePaths: string[]): Promise<Document[]> 
 }
 
 /**
+ * Read document file contents as base64
+ * Used for loading PDFs, EPUBs, etc. in the viewer
+ */
+export async function readDocumentFile(filePath: string): Promise<string> {
+  return await invoke<string>("read_document_file", { filePath });
+}
+
+/**
  * Open file picker dialog for selecting documents to import
  */
 export async function openFilePicker(options?: {

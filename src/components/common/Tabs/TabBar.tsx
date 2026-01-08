@@ -105,6 +105,14 @@ export function TabBar({
                 onDragEnd={handleDragEnd}
                 onContextMenu={(e) => handleContextMenu(e, tab.id)}
                 onClick={() => onTabClick(tab.id)}
+                onAuxClick={(e) => {
+                  // Middle-click (button 1) to close tab
+                  if (e.button === 1 && tab.closable) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onTabClose(tab.id);
+                  }
+                }}
                 className={`
                   relative flex items-center gap-2 px-4 py-2 cursor-pointer
                   border-r border-border border-t-2
