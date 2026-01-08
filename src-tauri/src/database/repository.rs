@@ -109,8 +109,8 @@ impl Repository {
 
         match row {
             Some(row) => {
-                let file_type: String = row.try_get("file_type")?;
-                let tags_json: String = row.try_get("tags")?;
+                let file_type: String = row.get("file_type");
+                let tags_json: String = row.get("tags");
                 let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
                 // Parse metadata if present
@@ -119,24 +119,24 @@ impl Repository {
                     .and_then(|json| serde_json::from_str(&json).ok());
 
                 Ok(Some(Document {
-                    id: row.try_get("id")?,
-                    title: row.try_get("title")?,
-                    file_path: row.try_get("file_path")?,
+                    id: row.get("id"),
+                    title: row.get("title"),
+                    file_path: row.get("file_path"),
                     file_type: Self::parse_file_type(&file_type),
-                    content: row.try_get("content")?,
-                    content_hash: row.try_get("content_hash")?,
-                    total_pages: row.try_get("total_pages")?,
-                    current_page: row.try_get("current_page")?,
-                    category: row.try_get("category")?,
+                    content: row.get("content"),
+                    content_hash: row.get("content_hash"),
+                    total_pages: row.get("total_pages"),
+                    current_page: row.get("current_page"),
+                    category: row.get("category"),
                     tags,
-                    date_added: row.try_get("date_added")?,
-                    date_modified: row.try_get("date_modified")?,
-                    date_last_reviewed: row.try_get("date_last_reviewed")?,
-                    extract_count: row.try_get("extract_count")?,
-                    learning_item_count: row.try_get("learning_item_count")?,
-                    priority_score: row.try_get("priority_score")?,
-                    is_archived: row.try_get("is_archived")?,
-                    is_favorite: row.try_get("is_favorite")?,
+                    date_added: row.get("date_added"),
+                    date_modified: row.get("date_modified"),
+                    date_last_reviewed: row.get("date_last_reviewed"),
+                    extract_count: row.get("extract_count"),
+                    learning_item_count: row.get("learning_item_count"),
+                    priority_score: row.get("priority_score"),
+                    is_archived: row.get("is_archived"),
+                    is_favorite: row.get("is_favorite"),
                     metadata,
                 }))
             }
@@ -151,8 +151,8 @@ impl Repository {
 
         let mut docs = Vec::new();
         for row in rows {
-            let file_type: String = row.try_get("file_type")?;
-            let tags_json: String = row.try_get("tags")?;
+            let file_type: String = row.get("file_type");
+            let tags_json: String = row.get("tags");
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
             // Parse metadata if present
@@ -161,24 +161,24 @@ impl Repository {
                 .and_then(|json| serde_json::from_str(&json).ok());
 
             docs.push(Document {
-                id: row.try_get("id")?,
-                title: row.try_get("title")?,
-                file_path: row.try_get("file_path")?,
+                id: row.get("id"),
+                title: row.get("title"),
+                file_path: row.get("file_path"),
                 file_type: Self::parse_file_type(&file_type),
-                content: row.try_get("content")?,
-                content_hash: row.try_get("content_hash")?,
-                total_pages: row.try_get("total_pages")?,
-                current_page: row.try_get("current_page")?,
-                category: row.try_get("category")?,
+                content: row.get("content"),
+                content_hash: row.get("content_hash"),
+                total_pages: row.get("total_pages"),
+                current_page: row.get("current_page"),
+                category: row.get("category"),
                 tags,
-                date_added: row.try_get("date_added")?,
-                date_modified: row.try_get("date_modified")?,
-                date_last_reviewed: row.try_get("date_last_reviewed")?,
-                extract_count: row.try_get("extract_count")?,
-                learning_item_count: row.try_get("learning_item_count")?,
-                priority_score: row.try_get("priority_score")?,
-                is_archived: row.try_get("is_archived")?,
-                is_favorite: row.try_get("is_favorite")?,
+                date_added: row.get("date_added"),
+                date_modified: row.get("date_modified"),
+                date_last_reviewed: row.get("date_last_reviewed"),
+                extract_count: row.get("extract_count"),
+                learning_item_count: row.get("learning_item_count"),
+                priority_score: row.get("priority_score"),
+                is_archived: row.get("is_archived"),
+                is_favorite: row.get("is_favorite"),
                 metadata,
             });
         }
