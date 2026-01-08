@@ -52,7 +52,10 @@
         "depends": []
       },
       "appimage": {
-        "bundleMediaFramework": false
+        "bundleMediaFramework": false,
+        "files": {
+          "src-tauri/AppRun": "AppRun"
+        }
       }
     },
     "macOS": {

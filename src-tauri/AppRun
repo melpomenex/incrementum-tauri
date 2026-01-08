@@ -1,0 +1,15 @@
+#!/bin/bash
+# AppRun script for Incrementum AppImage
+# This wrapper sets environment variables to fix common webkit2gtk issues
+
+# Disable DMA-BUF renderer to fix EGL display issues
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+# Disable sandbox if needed for compatibility
+export WEBKIT_FORCE_SANDBOX=0
+
+# Get the directory where this script is located
+APPDIR="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
+
+# Run the actual application
+exec "$APPDIR/usr/bin/incrementum" "$@"
