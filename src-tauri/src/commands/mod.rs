@@ -14,6 +14,8 @@ pub mod review;
 pub mod rss;
 pub mod segmentation;
 pub mod notifications;
+pub mod mcp;
+pub mod llm;
 
 // Re-export error types for use in commands
 pub use crate::error::Result;
@@ -32,3 +34,5 @@ pub use review::*;
 pub use rss::*;
 pub use segmentation::*;
 pub use notifications::*;
+pub use mcp::*;
+pub use llm::*;

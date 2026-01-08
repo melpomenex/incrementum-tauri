@@ -116,7 +116,20 @@ export function DocumentViewer({ documentId }: DocumentViewerProps) {
 
     setIsLoading(true);
 
-    if (doc.fileType === "pdf" || doc.fileType === "epub") {
+    // Infer fileType from filePath if missing (handles empty string or undefined)
+    const ext = doc.filePath?.split('.').pop()?.toLowerCase();
+    const inferredType = doc.fileType || ext || "";
+    const needsFileData = inferredType === "pdf" || inferredType === "epub";
+
+    console.log("[DocumentViewer] loadDocumentData:", {
+      fileType: doc.fileType,
+      filePath: doc.filePath,
+      ext,
+      inferredType,
+      needsFileData,
+    });
+
+    if (needsFileData) {
       try {
         // Read file through Tauri backend instead of fetch
         const base64Data = await documentsApi.readDocumentFile(doc.filePath);
@@ -129,9 +142,10 @@ export function DocumentViewer({ documentId }: DocumentViewerProps) {
         }
         const arrayBuffer = bytes.buffer;
 
+        console.log("[DocumentViewer] File data loaded successfully, size:", arrayBuffer.byteLength);
         setFileData(arrayBuffer);
       } catch (error) {
-        console.error(`Failed to load ${doc.fileType}:`, error);
+        console.error(`Failed to load ${inferredType}:`, error);
       } finally {
         setIsLoading(false);
       }
@@ -222,8 +236,30 @@ export function DocumentViewer({ documentId }: DocumentViewerProps) {
     );
   }
 
-  const docType = currentDocument.fileType as DocumentType;
+  // Infer fileType from filePath if it's missing (legacy data or import issue)
+  const inferFileType = (): DocumentType => {
+    if (currentDocument.fileType) {
+      return currentDocument.fileType as DocumentType;
+    }
+    // Fallback: infer from file extension
+    const ext = currentDocument.filePath?.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf') return 'pdf';
+    if (ext === 'epub') return 'epub';
+    if (ext === 'md' || ext === 'markdown') return 'markdown';
+    if (ext === 'html' || ext === 'htm') return 'html';
+    return 'other';
+  };
+
+  const docType = inferFileType();
   const hasPageNavigation = docType === "pdf" || docType === "epub";
+
+  console.log("[DocumentViewer] Render:", {
+    docType,
+    fileType: currentDocument.fileType,
+    filePath: currentDocument.filePath,
+    hasFileData: !!fileData,
+    fileDataLength: fileData?.byteLength,
+  });
 
   return (
     <div className="flex flex-col h-full">
@@ -498,8 +534,14 @@ export function DocumentViewer({ documentId }: DocumentViewerProps) {
                 Preview not available
               </h3>
               <p className="text-muted-foreground">
-                Document type '{currentDocument.fileType}' preview is coming soon
+                Document type '{docType}' preview is coming soon
+                {docType !== "epub" && currentDocument.filePath?.endsWith(".epub") && " (fileType was empty, inferred from extension)"}
               </p>
+              {docType === "epub" && !fileData && (
+                <p className="text-sm text-orange-500 mt-2">
+                  EPUB detected but fileData not loaded. Check console for errors.
+                </p>
+              )}
             </div>
           </div>
         )}

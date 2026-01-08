@@ -32,6 +32,27 @@ export function TabBar({
     return () => window.removeEventListener("click", handleClick);
   }, []);
 
+  // Handle wheel scroll for tabs
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Convert vertical scroll to horizontal scroll
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        container.scrollLeft += e.deltaY;
+      }
+    };
+
+    // Add event listener with passive: false to allow preventDefault
+    container.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
   const handleContextMenu = (
     e: React.MouseEvent,
     tabId: string

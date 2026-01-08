@@ -14,6 +14,7 @@ mod integrations;
 mod ocr;
 mod segmentation;
 mod notifications;
+mod mcp;
 
 use database::Database;
 use std::sync::{Arc, Mutex};
@@ -226,6 +227,21 @@ pub fn run() {
             commands::get_notification_settings,
             commands::update_notification_settings,
             commands::create_custom_notification,
+            // MCP commands
+            commands::mcp::mcp_list_servers,
+            commands::mcp::mcp_add_server,
+            commands::mcp::mcp_remove_server,
+            commands::mcp::mcp_update_server,
+            commands::mcp::mcp_list_tools,
+            commands::mcp::mcp_call_tool,
+            commands::mcp::mcp_get_incrementum_tools,
+            commands::mcp::mcp_call_incrementum_tool,
+            // LLM commands
+            commands::llm::llm_chat,
+            commands::llm::llm_chat_with_context,
+            commands::llm::llm_stream_chat,
+            commands::llm::llm_get_models,
+            commands::llm::llm_test_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

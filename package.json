@@ -30,6 +30,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.4.2",
     "@tauri-apps/plugin-opener": "^2",
+    "@types/three": "^0.182.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "epubjs": "^0.3.93",
@@ -40,6 +41,7 @@
     "react-router-dom": "^7.11.0",
     "recharts": "^3.6.0",
     "tailwind-merge": "^3.4.0",
+    "three": "^0.182.0",
     "typings": "^2.1.1",
     "zustand": "^5.0.9"
   },

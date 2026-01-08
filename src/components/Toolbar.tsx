@@ -6,6 +6,8 @@ import {
   DashboardTab,
   SettingsTab,
   KnowledgeNetworkTab,
+  KnowledgeSphereTab,
+  WebBrowserTab,
 } from "./tabs/TabRegistry";
 
 import {
@@ -165,10 +167,46 @@ export function Toolbar() {
     });
   };
 
+  // Knowledge Sphere button (3D)
+  const handleKnowledgeSphere = () => {
+    addTab({
+      title: "Knowledge Sphere",
+      icon: "🌐",
+      type: "knowledge-sphere",
+      content: KnowledgeSphereTab,
+      closable: true,
+    });
+  };
+
+  const handleKnowledgeSphereBackground = () => {
+    addTabInBackground({
+      title: "Knowledge Sphere",
+      icon: "🌐",
+      type: "knowledge-sphere",
+      content: KnowledgeSphereTab,
+      closable: true,
+    });
+  };
+
   // Web Browser button
   const handleWebBrowser = () => {
-    console.log("Web Browser");
-    // TODO: Implement web browser tab
+    addTab({
+      title: "Web Browser",
+      icon: "🌐",
+      type: "web-browser",
+      content: WebBrowserTab,
+      closable: true,
+    });
+  };
+
+  const handleWebBrowserBackground = () => {
+    addTabInBackground({
+      title: "Web Browser",
+      icon: "🌐",
+      type: "web-browser",
+      content: WebBrowserTab,
+      closable: true,
+    });
   };
 
   // Doc Q&A button
@@ -280,11 +318,21 @@ export function Toolbar() {
       group: 3,
     },
     {
+      id: "knowledge-sphere",
+      icon: Globe,
+      label: "Knowledge Sphere",
+      shortcut: "Ctrl+5",
+      action: handleKnowledgeSphere,
+      backgroundAction: handleKnowledgeSphereBackground,
+      group: 3,
+    },
+    {
       id: "web-browser",
       icon: Globe,
       label: "Web Browser",
-      shortcut: "",
+      shortcut: "Ctrl+6",
       action: handleWebBrowser,
+      backgroundAction: handleWebBrowserBackground,
       group: 3,
     },
     {
