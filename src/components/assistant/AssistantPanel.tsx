@@ -54,7 +54,7 @@ export function AssistantPanel({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<"openai" | "anthropic" | "ollama">("openai");
+  const [selectedProvider, setSelectedProvider] = useState<"openai" | "anthropic" | "ollama" | "openrouter">("openai");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -63,6 +63,7 @@ export function AssistantPanel({
     { id: "openai", name: "OpenAI", icon: Sparkles, color: "text-green-500" },
     { id: "anthropic", name: "Anthropic", icon: MessageSquare, color: "text-orange-500" },
     { id: "ollama", name: "Ollama", icon: Code, color: "text-blue-500" },
+    { id: "openrouter", name: "OpenRouter", icon: Settings, color: "text-purple-500" },
   ];
 
   const scrollToBottom = () => {
@@ -362,6 +363,7 @@ export function AssistantPanel({
                     {selectedProvider === "openai" && <Sparkles className="w-3 h-3 text-green-500" />}
                     {selectedProvider === "anthropic" && <MessageSquare className="w-3 h-3 text-orange-500" />}
                     {selectedProvider === "ollama" && <Code className="w-3 h-3 text-blue-500" />}
+                    {selectedProvider === "openrouter" && <Settings className="w-3 h-3 text-purple-500" />}
                   </>
                 )}
                 <span className="text-xs text-muted-foreground">

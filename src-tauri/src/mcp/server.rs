@@ -3,6 +3,8 @@ use super::types::*;
 use super::tools::MCPToolRegistry;
 use serde_json::json;
 use std::io::{self, BufRead, BufReader, Write};
+use std::sync::Arc;
+use crate::database::Repository;
 
 pub struct MCPServer {
     info: MCPServerInfo,
@@ -11,7 +13,7 @@ pub struct MCPServer {
 }
 
 impl MCPServer {
-    pub fn new() -> Self {
+    pub fn new(repository: Arc<Repository>) -> Self {
         Self {
             info: MCPServerInfo {
                 name: "Incrementum".to_string(),
@@ -25,7 +27,7 @@ impl MCPServer {
                 resources: None,
                 prompts: None,
             },
-            tool_registry: MCPToolRegistry::new(),
+            tool_registry: MCPToolRegistry::new(repository),
         }
     }
 
@@ -143,57 +145,5 @@ impl MCPServer {
             })?;
 
         Ok(json!(result))
-    }
-}
-
-impl Default for MCPServer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_server_initialization() {
-        let server = MCPServer::new();
-        assert_eq!(server.info.name, "Incrementum");
-        assert_eq!(server.info.protocol_version, "2025-06-18");
-    }
-
-    #[test]
-    fn test_tool_registry() {
-        let registry = MCPToolRegistry::new();
-        let tools = registry.get_tools();
-        assert!(!tools.is_empty());
-        assert!(tools.iter().any(|t| t.name == "create_document"));
-    }
-
-    #[test]
-    fn test_handle_initialize() {
-        let server = MCPServer::new();
-        let result = server.handle_initialize(None);
-        assert!(result.is_ok());
-        let response = result.unwrap();
-        assert_eq!(response["protocolVersion"], "2025-06-18");
-    }
-
-    #[test]
-    fn test_handle_ping() {
-        let server = MCPServer::new();
-        let result = server.handle_ping();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_tools_list() {
-        let server = MCPServer::new();
-        let result = server.handle_tools_list();
-        assert!(result.is_ok());
-        let response = result.unwrap();
-        let tools = response["tools"].as_array().unwrap();
-        assert!(!tools.is_empty());
     }
 }

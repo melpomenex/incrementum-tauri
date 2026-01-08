@@ -43,7 +43,7 @@ tracing-subscriber = "0.3"
 # Async
 futures = "0.3"
 async-trait = "0.1"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 
 # Encryption
 sha2 = "0.10"

@@ -1,11 +1,12 @@
 /**
  * LLM Provider Integration
- * Supports OpenAI, Anthropic, and local Ollama models
+ * Supports OpenAI, Anthropic, and local Ollama models with streaming support
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
-export type LLMProvider = "openai" | "anthropic" | "ollama";
+export type LLMProvider = "openai" | "anthropic" | "ollama" | "openrouter";
 
 export interface LLMMessage {
   role: "system" | "user" | "assistant";
@@ -39,8 +40,14 @@ export interface LLMContext {
   content?: string;
 }
 
+export interface StreamOptions {
+  onChunk: (chunk: string) => void;
+  onDone?: () => void;
+  onError?: (error: string) => void;
+}
+
 /**
- * Chat with LLM
+ * Chat with LLM (non-streaming)
  */
 export async function chatWithLLM(request: LLMRequest): Promise<LLMResponse> {
   return await invoke<LLMResponse>("llm_chat", {
@@ -55,7 +62,7 @@ export async function chatWithLLM(request: LLMRequest): Promise<LLMResponse> {
 }
 
 /**
- * Chat with LLM with context
+ * Chat with LLM with context (non-streaming)
  */
 export async function chatWithContext(
   provider: LLMProvider,
@@ -81,27 +88,68 @@ export async function chatWithContext(
 
 /**
  * Stream chat with LLM
+ * Returns a promise that resolves when streaming is complete
  */
 export async function streamChatWithLLM(
   request: LLMRequest,
-  onChunk: (chunk: string) => void
-): Promise<LLMResponse> {
-  return await invoke<LLMResponse>("llm_stream_chat", {
-    provider: request.provider,
-    model: request.model,
-    messages: request.messages,
-    temperature: request.temperature ?? 0.7,
-    maxTokens: request.maxTokens ?? 2000,
-    apiKey: request.apiKey,
-    baseUrl: request.baseUrl,
-  });
+  options: StreamOptions
+): Promise<void> {
+  const unlisteners: UnlistenFn[] = [];
+
+  try {
+    // Set up event listeners
+    const chunkUnlisten = await listen<{ content: string; done: boolean }>(
+      "llm:stream:chunk",
+      (event) => {
+        options.onChunk(event.payload.content);
+      }
+    );
+    unlisteners.push(chunkUnlisten);
+
+    const doneUnlisten = await listen("llm:stream:done", () => {
+      options.onDone?.();
+    });
+    unlisteners.push(doneUnlisten);
+
+    const errorUnlisten = await listen<{ error: string }>(
+      "llm:stream:error",
+      (event) => {
+        options.onError?.(event.payload.error);
+      }
+    );
+    unlisteners.push(errorUnlisten);
+
+    // Start the streaming
+    await invoke("llm_stream_chat", {
+      provider: request.provider,
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature ?? 0.7,
+      maxTokens: request.maxTokens ?? 2000,
+      apiKey: request.apiKey,
+      baseUrl: request.baseUrl,
+    });
+  } finally {
+    // Clean up listeners after a delay to ensure all events are received
+    setTimeout(() => {
+      unlisteners.forEach((unlisten) => unlisten());
+    }, 1000);
+  }
 }
 
 /**
  * Get available models for a provider
  */
-export async function getAvailableModels(provider: LLMProvider): Promise<string[]> {
-  return await invoke<string[]>("llm_get_models", { provider });
+export async function getAvailableModels(
+  provider: LLMProvider,
+  apiKey?: string,
+  baseUrl?: string
+): Promise<string[]> {
+  return await invoke<string[]>("llm_get_models", {
+    provider,
+    apiKey,
+    baseUrl,
+  });
 }
 
 /**
@@ -142,5 +190,22 @@ export const PROVIDER_CONFIGS = {
     baseUrl: "http://localhost:11434/v1",
     defaultModel: "llama3.2",
     models: ["llama3.2", "mistral", "codellama", "phi3"],
+  },
+  openrouter: {
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "anthropic/claude-3.5-sonnet",
+    models: [
+      "anthropic/claude-3.5-sonnet",
+      "anthropic/claude-3.5-sonnet:beta",
+      "anthropic/claude-3.5-haiku",
+      "anthropic/claude-3-opus",
+      "openai/gpt-4o",
+      "openai/gpt-4o-mini",
+      "openai/gpt-4-turbo",
+      "google/gemini-pro-1.5",
+      "meta-llama/llama-3.1-405b-instruct",
+      "deepseek/deepseek-chat",
+    ],
   },
 };

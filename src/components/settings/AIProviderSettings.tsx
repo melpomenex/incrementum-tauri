@@ -5,7 +5,9 @@
 
 import { SettingsSection } from "./SettingsPage";
 import { LLMProviderSettings } from "./LLMProviderSettings";
+import { MCPServersSettings } from "./MCPServersSettings";
 import { useLLMProvidersStore } from "../../stores/llmProvidersStore";
+import { useMCPServersStore } from "../../stores/mcpServersStore";
 import { invoke } from "@tauri-apps/api/core";
 
 /**
@@ -16,6 +18,11 @@ export function AISettings({ onChange }: { onChange: () => void }) {
   const addProvider = useLLMProvidersStore((state) => state.addProvider);
   const updateProvider = useLLMProvidersStore((state) => state.updateProvider);
   const removeProvider = useLLMProvidersStore((state) => state.removeProvider);
+
+  const mcpServers = useMCPServersStore((state) => state.servers);
+  const addMCPServer = useMCPServersStore((state) => state.addServer);
+  const removeMCPServer = useMCPServersStore((state) => state.removeServer);
+  const updateMCPServer = useMCPServersStore((state) => state.updateServer);
 
   const handleTestConnection = async (config: { id: string; provider: string; apiKey: string; baseUrl?: string; model: string }) => {
     try {
@@ -31,18 +38,39 @@ export function AISettings({ onChange }: { onChange: () => void }) {
     }
   };
 
-  const handleAddProvider = (provider: Omit<{ id: string; provider: "openai" | "anthropic" | "ollama"; name: string; apiKey: string; baseUrl?: string; model: string; enabled: boolean }, "id">) => {
+  const handleTestMCPServer = async (server: { id: string; name: string; endpoint: string; transport: "stdio" | "sse" }) => {
+    // TODO: Implement actual MCP server connection test
+    // For now, just return true
+    return true;
+  };
+
+  const handleAddProvider = (provider: Omit<{ id: string; provider: "openai" | "anthropic" | "ollama" | "openrouter"; name: string; apiKey: string; baseUrl?: string; model: string; enabled: boolean }, "id">) => {
     addProvider(provider);
     onChange();
   };
 
-  const handleUpdateProvider = (id: string, updates: Partial<{ id: string; provider: "openai" | "anthropic" | "ollama"; name: string; apiKey: string; baseUrl?: string; model: string; enabled: boolean }>) => {
+  const handleUpdateProvider = (id: string, updates: Partial<{ id: string; provider: "openai" | "anthropic" | "ollama" | "openrouter"; name: string; apiKey: string; baseUrl?: string; model: string; enabled: boolean }>) => {
     updateProvider(id, updates);
     onChange();
   };
 
   const handleRemoveProvider = (id: string) => {
     removeProvider(id);
+    onChange();
+  };
+
+  const handleAddMCPServer = (server: Omit<{ id: string; name: string; endpoint: string; transport: "stdio" | "sse"; enabled?: boolean }, "id">) => {
+    addMCPServer(server);
+    onChange();
+  };
+
+  const handleRemoveMCPServer = (id: string) => {
+    removeMCPServer(id);
+    onChange();
+  };
+
+  const handleUpdateMCPServer = (id: string, updates: Partial<{ id: string; name: string; endpoint: string; transport: "stdio" | "sse"; enabled?: boolean }>) => {
+    updateMCPServer(id, updates);
     onChange();
   };
 
@@ -56,16 +84,15 @@ export function AISettings({ onChange }: { onChange: () => void }) {
         onTestConnection={handleTestConnection}
       />
 
-      {/* MCP Servers Configuration - TODO: Add MCPServerSettings component */}
-      <SettingsSection
-        title="MCP Servers"
-        description="Configure external MCP servers (up to 3)"
-      >
-        <div className="text-center py-12 text-muted-foreground">
-          <p>MCP servers configuration coming soon</p>
-          <p className="text-sm mt-2">You'll be able to add up to 3 external MCP servers here</p>
-        </div>
-      </SettingsSection>
+      {/* MCP Servers Configuration */}
+      <MCPServersSettings
+        servers={mcpServers}
+        onAddServer={handleAddMCPServer}
+        onRemoveServer={handleRemoveMCPServer}
+        onUpdateServer={handleUpdateMCPServer}
+        onTestServer={handleTestMCPServer}
+        maxServers={3}
+      />
     </>
   );
 }

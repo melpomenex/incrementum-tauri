@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export interface LLMProviderConfig {
   id: string;
-  provider: 'openai' | 'anthropic' | 'ollama';
+  provider: 'openai' | 'anthropic' | 'ollama' | 'openrouter';
   name: string;
   apiKey: string;
   baseUrl?: string;

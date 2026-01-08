@@ -3,11 +3,12 @@
  * Configure API keys and model preferences
  */
 import { useState } from "react";
-import { Key, Eye, EyeOff, Trash2, Plus, Check, Loader2 } from "lucide-react";
+import { Key, Eye, EyeOff, Trash2, Plus, Check, Loader2, RefreshCw } from "lucide-react";
+import { getAvailableModels } from "../../api/llm";
 
 export interface LLMProviderConfig {
   id: string;
-  provider: "openai" | "anthropic" | "ollama";
+  provider: "openai" | "anthropic" | "ollama" | "openrouter";
   name: string;
   apiKey: string;
   baseUrl?: string;
@@ -52,6 +53,25 @@ const PROVIDER_INFO = {
     icon: "💻",
     models: ["llama3.2", "mistral", "codellama", "phi3", "deepseek-coder"],
   },
+  openrouter: {
+    name: "OpenRouter",
+    description: "Unified API for 100+ LLM providers",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "anthropic/claude-3.5-sonnet",
+    icon: "🔀",
+    models: [
+      "anthropic/claude-3.5-sonnet",
+      "anthropic/claude-3.5-sonnet:beta",
+      "anthropic/claude-3.5-haiku",
+      "anthropic/claude-3-opus",
+      "openai/gpt-4o",
+      "openai/gpt-4o-mini",
+      "openai/gpt-4-turbo",
+      "google/gemini-pro-1.5",
+      "meta-llama/llama-3.1-405b-instruct",
+      "deepseek/deepseek-chat",
+    ],
+  },
 };
 
 export function LLMProviderSettings({
@@ -62,7 +82,7 @@ export function LLMProviderSettings({
   onTestConnection,
 }: LLMProviderSettingsProps) {
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newProviderType, setNewProviderType] = useState<"openai" | "anthropic" | "ollama">("openai");
+  const [newProviderType, setNewProviderType] = useState<"openai" | "anthropic" | "ollama" | "openrouter">("openai");
   const [newProviderName, setNewProviderName] = useState("");
   const [newProviderApiKey, setNewProviderApiKey] = useState("");
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState("");
@@ -70,6 +90,8 @@ export function LLMProviderSettings({
   const [testingConnection, setTestingConnection] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, boolean>>({});
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+  const [dynamicModels, setDynamicModels] = useState<Record<string, string[]>>({});
+  const [refreshingModels, setRefreshingModels] = useState(false);
 
   const handleAddProvider = () => {
     if (!newProviderName.trim() || !newProviderApiKey.trim()) {
@@ -114,6 +136,33 @@ export function LLMProviderSettings({
     setVisibleKeys({ ...visibleKeys, [providerId]: !visibleKeys[providerId] });
   };
 
+  const handleRefreshModels = async () => {
+    if (newProviderType !== "openrouter") return;
+    if (!newProviderApiKey.trim()) {
+      alert("Please enter an API key first to fetch models from OpenRouter");
+      return;
+    }
+
+    setRefreshingModels(true);
+    try {
+      const models = await getAvailableModels(
+        newProviderType,
+        newProviderApiKey,
+        newProviderBaseUrl || PROVIDER_INFO[newProviderType].baseUrl
+      );
+      setDynamicModels({ ...dynamicModels, [newProviderType]: models });
+      // Set the first model as default if current model is not in the list
+      if (models.length > 0 && !models.includes(newProviderModel)) {
+        setNewProviderModel(models[0]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch models from OpenRouter:", error);
+      alert(`Failed to fetch models from OpenRouter: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setRefreshingModels(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Provider List */}
@@ -134,7 +183,7 @@ export function LLMProviderSettings({
             <Key className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground">No API keys configured yet</p>
             <p className="text-sm text-muted-foreground mt-2">
-              Add your OpenAI, Anthropic, or Ollama API keys to get started
+              Add your OpenAI, Anthropic, Ollama, or OpenRouter API keys to get started
             </p>
           </div>
         ) : (
@@ -242,8 +291,8 @@ export function LLMProviderSettings({
             <label className="block text-sm font-medium text-foreground mb-2">
               Provider Type
             </label>
-            <div className="grid grid-cols-3 gap-3">
-              {(["openai", "anthropic", "ollama"] as const).map((type) => {
+            <div className="grid grid-cols-2 gap-3">
+              {(["openai", "anthropic", "ollama", "openrouter"] as const).map((type) => {
                 const info = PROVIDER_INFO[type];
                 return (
                   <button
@@ -253,6 +302,8 @@ export function LLMProviderSettings({
                       setNewProviderName(info.name);
                       setNewProviderBaseUrl(info.baseUrl);
                       setNewProviderModel(info.defaultModel);
+                      // Clear API key when switching provider types for security
+                      setNewProviderApiKey("");
                     }}
                     className={`p-4 border-2 rounded-lg transition-all text-left ${
                       newProviderType === type
@@ -299,7 +350,7 @@ export function LLMProviderSettings({
             </div>
           </div>
 
-          {/* Base URL (optional) */}
+          {/* Base URL (optional) - show for all providers except OpenAI */}
           {newProviderType !== "openai" && (
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
@@ -320,20 +371,39 @@ export function LLMProviderSettings({
 
           {/* Model Selection */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Model
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-foreground">
+                Model
+              </label>
+              {newProviderType === "openrouter" && (
+                <button
+                  onClick={handleRefreshModels}
+                  disabled={refreshingModels || !newProviderApiKey.trim()}
+                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Fetch latest models from OpenRouter"
+                >
+                  <RefreshCw className={`w-3 h-3 ${refreshingModels ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
+              )}
+            </div>
             <select
               value={newProviderModel}
               onChange={(e) => setNewProviderModel(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              disabled={refreshingModels}
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground disabled:opacity-50"
             >
-              {PROVIDER_INFO[newProviderType].models.map((model) => (
+              {(dynamicModels[newProviderType] || PROVIDER_INFO[newProviderType].models).map((model) => (
                 <option key={model} value={model}>
                   {model}
                 </option>
               ))}
             </select>
+            {newProviderType === "openrouter" && dynamicModels[newProviderType] && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {dynamicModels[newProviderType]!.length} models available from OpenRouter
+              </p>
+            )}
           </div>
 
           {/* Actions */}
