@@ -2,6 +2,7 @@
 
 use tauri::State;
 use crate::database::Repository;
+use crate::algorithms::calculate_document_priority_score;
 use crate::error::Result;
 use crate::models::QueueItem;
 use chrono::Utc;
@@ -75,11 +76,53 @@ pub async fn get_queue(
             extract_id: item.extract_id.clone(),
             learning_item_id: Some(item.id.clone()),
             item_type: "learning-item".to_string(),
+            priority_rating: None,
+            priority_slider: None,
             priority,
             due_date: Some(item.due_date.to_rfc3339()),
             estimated_time,
             tags: item.tags.clone(),
             category: None, // Could be derived from the extract's category
+            progress,
+        });
+    }
+
+    let documents = repo.list_documents().await?;
+    for document in documents {
+        if document.is_archived {
+            continue;
+        }
+
+        let progress = match (document.current_page, document.total_pages) {
+            (Some(current), Some(total)) if total > 0 => {
+                ((current as f64 / total as f64) * 100.0).round() as i32
+            }
+            _ => 0,
+        };
+
+        let priority_score = calculate_document_priority_score(
+            if document.priority_rating > 0 {
+                Some(document.priority_rating)
+            } else {
+                None
+            },
+            document.priority_slider,
+        );
+
+        queue_items.push(QueueItem {
+            id: document.id.clone(),
+            document_id: document.id.clone(),
+            document_title: document.title.clone(),
+            extract_id: None,
+            learning_item_id: None,
+            item_type: "document".to_string(),
+            priority_rating: Some(document.priority_rating),
+            priority_slider: Some(document.priority_slider),
+            priority: priority_score,
+            due_date: None,
+            estimated_time: 5,
+            tags: document.tags.clone(),
+            category: document.category.clone(),
             progress,
         });
     }

@@ -15,6 +15,8 @@ export interface Document {
   dateLastReviewed?: string;
   extractCount: number;
   learningItemCount: number;
+  priorityRating: number;
+  prioritySlider: number;
   priorityScore: number;
   isArchived: boolean;
   isFavorite: boolean;

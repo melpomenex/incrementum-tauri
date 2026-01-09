@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::algorithms::{calculate_priority_score, DocumentScheduler, SM2Params};
+    use crate::algorithms::{calculate_document_priority_score, calculate_priority_score, DocumentScheduler, SM2Params};
     use crate::models::ReviewRating;
     use chrono::{Utc, Duration as ChronoDuration};
 
@@ -116,6 +116,18 @@ mod tests {
         // EF' = EF + (0.1 - (5 - 5) * (0.08 + (5 - 5) * 0.02))
         // EF' = 2.5 + 0.1 = 2.6
         assert_eq!(next.ease_factor, 2.6);
+    }
+
+    #[test]
+    fn test_document_priority_score_average() {
+        let score = calculate_document_priority_score(Some(4), 80);
+        assert!((score - 90.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_document_priority_score_no_rating() {
+        let score = calculate_document_priority_score(None, 40);
+        assert!((score - 20.0).abs() < f64::EPSILON);
     }
 
     #[test]

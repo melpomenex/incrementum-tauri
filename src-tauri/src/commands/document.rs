@@ -2,6 +2,7 @@
 
 use tauri::State;
 use crate::database::Repository;
+use crate::algorithms::calculate_document_priority_score;
 use crate::error::Result;
 use crate::models::{Document, FileType, DocumentMetadata};
 use crate::processor;
@@ -162,6 +163,26 @@ pub async fn update_document(
     repo: State<'_, Repository>,
 ) -> Result<Document> {
     let updated = repo.update_document(&id, &updates).await?;
+    Ok(updated)
+}
+
+#[tauri::command]
+pub async fn update_document_priority(
+    id: String,
+    rating: i32,
+    slider: i32,
+    repo: State<'_, Repository>,
+) -> Result<Document> {
+    let rating_value = if (1..=4).contains(&rating) { rating } else { 0 };
+    let slider_value = slider.clamp(0, 100);
+    let score = calculate_document_priority_score(
+        if rating_value > 0 { Some(rating_value) } else { None },
+        slider_value,
+    );
+
+    let updated = repo
+        .update_document_priority(&id, rating_value, slider_value, score)
+        .await?;
     Ok(updated)
 }
 

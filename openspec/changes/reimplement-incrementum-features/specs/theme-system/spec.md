@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Theme Provider Infrastructure
-The application must provide a comprehensive theming system that supports multiple themes with live preview capabilities.
+The application MUST provide a comprehensive theming system that supports multiple themes with live preview capabilities.
 
 #### Scenario: Initialize theme system on application startup
 **Given** the application is launched
@@ -27,7 +27,7 @@ The application must provide a comprehensive theming system that supports multip
 **And** the user can select and apply the custom theme
 
 ### Requirement: Theme Migration from QSS
-The system must support migrating all 17 themes from the Qt-based Incrementum-CPP application.
+The system MUST support migrating all 17 themes from the Qt-based Incrementum-CPP application.
 
 #### Scenario: Parse QSS theme file
 **Given** a QSS theme file from Incrementum-CPP
@@ -44,7 +44,7 @@ The system must support migrating all 17 themes from the Qt-based Incrementum-CP
 **And** provide warnings for any unsupported QSS features
 
 ### Requirement: Theme Picker UI
-The application must provide a user-friendly interface for browsing and selecting themes.
+The application MUST provide a user-friendly interface for browsing and selecting themes.
 
 #### Scenario: Browse available themes
 **Given** the user opens the theme picker
@@ -68,7 +68,7 @@ The application must provide a user-friendly interface for browsing and selectin
 **And** save the customized variant
 
 ### Requirement: Theme Persistence
-Themes and user preferences must be reliably stored and restored.
+Themes and user preferences MUST be reliably stored and restored.
 
 #### Scenario: Save theme preference
 **Given** the user selects or customizes a theme
@@ -92,7 +92,7 @@ Themes and user preferences must be reliably stored and restored.
 **And** be selectable like built-in themes
 
 ### Requirement: Dark Mode Detection
-The application should detect and respect system-level dark mode preferences.
+The application MUST detect and respect system-level dark mode preferences.
 
 #### Scenario: Auto-detect system theme
 **Given** the user has not manually selected a theme
@@ -109,7 +109,7 @@ The application should detect and respect system-level dark mode preferences.
 **And** persist the new selection
 
 ### Requirement: Theme Variants
-Built-in themes should support both light and dark variants where applicable.
+Built-in themes MUST support both light and dark variants where applicable.
 
 #### Scenario: Light theme variant
 **Given** a theme that has both light and dark variants
@@ -119,7 +119,7 @@ Built-in themes should support both light and dark variants where applicable.
 **And** the preference should be remembered per theme
 
 ### Requirement: Component-Level Theming
-The theme system must support component-specific styling overrides.
+The theme system MUST support component-specific styling overrides.
 
 #### Scenario: Define component-specific colors
 **Given** a theme definition
@@ -131,8 +131,13 @@ The theme system must support component-specific styling overrides.
 ## MODIFIED Requirements
 
 ### Requirement: Application styling
-**Before**: Basic styling with limited theme support
-**After**: Comprehensive theming system with 17+ themes, customization, and live preview
+The application MUST provide a comprehensive theming system with 17+ themes, customization, and live preview.
+
+#### Scenario: Switch themes with live preview
+**Given** the user opens the theme picker
+**When** they select a theme from the list
+**Then** the application styling should update immediately
+**And** the selection should persist across sessions
 
 ## Implementation Notes
 

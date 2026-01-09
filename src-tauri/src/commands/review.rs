@@ -132,8 +132,17 @@ pub async fn submit_review(
     time_taken: i32,
     repo: State<'_, Repository>,
 ) -> Result<LearningItem> {
+    apply_fsrs_review(&*repo, &item_id, rating, time_taken).await
+}
+
+pub async fn apply_fsrs_review(
+    repo: &Repository,
+    item_id: &str,
+    rating: i32,
+    _time_taken: i32,
+) -> Result<LearningItem> {
     // Get the current item
-    let mut item = repo.get_learning_item(&item_id).await?
+    let mut item = repo.get_learning_item(item_id).await?
         .ok_or_else(|| crate::error::IncrementumError::NotFound(format!("Learning item {}", item_id)))?;
 
     // Convert rating to ReviewRating

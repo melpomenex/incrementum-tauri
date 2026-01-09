@@ -89,9 +89,11 @@ From the SettingsDialog, implement all settings categories:
 ##### Learning & Review
 - Algorithms: FSRS, SM2, SuperMemo with configurable parameters
 - Queue management: Smart queues, reading queues, interleaved modes
+- Document View queue: priority scoring based on rating (1-4) and priority slider (0-100)
 - Review interface: Flip cards, cloze cards, rating system
 - Statistics: Dashboard, charts, flashcard stats, upcoming views
 - Scheduling: Custom intervals, priority ratings, due date management
+- Ensure learning items are scheduled using FSRS 5.2 when FSRS is active
 
 ##### Knowledge Graph
 - 2D graph visualization with force-directed layout
@@ -104,6 +106,7 @@ From the SettingsDialog, implement all settings categories:
 - RSS feed management with auto-polling
 - YouTube integration with SponsorBlock
 - Web browser with sync capabilities
+- Native webview rendering inside the Web Browser tab (no iframe)
 - Article processing and queue management
 - Auto-import and cleanup
 

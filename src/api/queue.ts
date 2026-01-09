@@ -39,6 +39,8 @@ interface RustQueueItem {
   extract_id?: string;
   learning_item_id?: string;
   item_type: string;
+  priority_rating?: number;
+  priority_slider?: number;
   priority: number;
   due_date?: string;
   estimated_time: number;
@@ -56,6 +58,8 @@ function convertQueueItem(item: RustQueueItem): QueueItem {
     extractId: item.extract_id,
     learningItemId: item.learning_item_id,
     itemType: item.item_type as "document" | "extract" | "learning-item",
+    priorityRating: item.priority_rating,
+    prioritySlider: item.priority_slider,
     priority: item.priority,
     dueDate: item.due_date,
     estimatedTime: item.estimated_time,

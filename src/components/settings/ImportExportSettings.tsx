@@ -94,6 +94,32 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
         return;
       }
 
+      if (fileName.endsWith(".zip") || fileName.endsWith(".7z")) {
+        const filePath = (importFile as File & { path?: string }).path;
+        if (!filePath) {
+          throw new Error("Import requires access to the archive file path.");
+        }
+
+        const summary = await invoke<{
+          documents: number;
+          extracts: number;
+          learningItems: number;
+          reviewSessions: number;
+          reviewResults: number;
+        }>("import_legacy_archive", { archivePath: filePath });
+
+        alert(
+          `Legacy import complete:\n` +
+            `Documents: ${summary.documents}\n` +
+            `Extracts: ${summary.extracts}\n` +
+            `Learning Items: ${summary.learningItems}\n` +
+            `Review Sessions: ${summary.reviewSessions}\n` +
+            `Review Results: ${summary.reviewResults}`
+        );
+        onChange();
+        return;
+      }
+
       const text = await importFile.text();
       const data = JSON.parse(text);
 
@@ -254,7 +280,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
             <div className="flex items-center gap-3">
               <input
                 type="file"
-                accept=".json,.csv,.incrementum,.apkg"
+                accept=".json,.csv,.incrementum,.apkg,.zip,.7z"
                 onChange={(e) => setImportFile(e.target.files?.[0] || null)}
                 className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-muted file:text-muted-foreground hover:file:bg-muted/80"
               />

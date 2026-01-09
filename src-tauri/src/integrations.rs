@@ -305,6 +305,8 @@ pub async fn import_from_obsidian_internal(
         date_last_reviewed: None,
         extract_count: 0,
         learning_item_count: 0,
+        priority_rating: 0,
+        priority_slider: 0,
         priority_score: 0.0,
         is_archived: false,
         is_favorite: false,

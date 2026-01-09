@@ -4,6 +4,7 @@ use super::types::{ToolDefinition, ToolCallResult, ToolContent};
 use std::collections::HashMap;
 use std::sync::Arc;
 use crate::database::Repository;
+use crate::commands::review::apply_fsrs_review;
 use crate::models::{Document, Extract, LearningItem, FileType, ItemType};
 use uuid::Uuid;
 use chrono::Utc;
@@ -740,33 +741,7 @@ impl MCPToolRegistry {
         let item_id = args["item_id"].as_str().ok_or("item_id is required")?;
         let rating = args["rating"].as_u64().ok_or("rating is required")?;
 
-        // Get the learning item first
-        let item = match self.repository.get_all_learning_items().await {
-            Ok(items) => {
-                items.into_iter()
-                    .find(|i| i.id == item_id)
-                    .ok_or("Item not found")?
-            }
-            Err(e) => {
-                return Ok(ToolCallResult {
-                    content: vec![ToolContent {
-                        r#type: "text".to_string(),
-                        text: json!({
-                            "success": false,
-                            "error": e.to_string()
-                        }).to_string(),
-                    }],
-                    is_error: Some(true),
-                });
-            }
-        };
-
-        // Update with rating (simplified - in real implementation would use FSRS algorithm)
-        let mut updated_item = item;
-        updated_item.last_review_date = Some(Utc::now());
-        updated_item.review_count += 1;
-
-        match self.repository.update_learning_item(&updated_item).await {
+        match apply_fsrs_review(self.repository.as_ref(), item_id, rating as i32, 0).await {
             Ok(_) => Ok(ToolCallResult {
                 content: vec![ToolContent {
                     r#type: "text".to_string(),

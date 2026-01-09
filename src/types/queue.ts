@@ -6,6 +6,8 @@ export interface QueueItem {
   extractId?: string;
   learningItemId?: string;
   itemType: "document" | "extract" | "learning-item";
+  priorityRating?: number;
+  prioritySlider?: number;
   priority: number;
   dueDate?: string;
   estimatedTime: number; // in minutes

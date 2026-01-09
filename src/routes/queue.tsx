@@ -8,6 +8,7 @@ import { QueueContextMenu } from "../components/queue/QueueContextMenu";
 import { ExportQueueDialog } from "../components/queue/ExportQueueDialog";
 import { DynamicVirtualList } from "../components/common/VirtualList";
 import type { QueueItem } from "../types/queue";
+import { updateDocumentPriority } from "../api/documents";
 
 export function Queue() {
   const navigate = useNavigate();
@@ -38,6 +39,8 @@ export function Queue() {
   const [showFilters, setShowFilters] = useState(false);
   const [allSelected, setAllSelected] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [priorityDrafts, setPriorityDrafts] = useState<Record<string, { rating?: number; slider?: number }>>({});
+  const [priorityUpdatingIds, setPriorityUpdatingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadQueue();
@@ -46,8 +49,11 @@ export function Queue() {
 
   useEffect(() => {
     // Update allSelected state based on selection
+    const selectableCount = filteredItems.filter(
+      (item) => item.itemType === "learning-item"
+    ).length;
     setAllSelected(
-      filteredItems.length > 0 && selectedIds.size === filteredItems.length
+      selectableCount > 0 && selectedIds.size === selectableCount
     );
   }, [selectedIds, filteredItems]);
 
@@ -92,9 +98,49 @@ export function Queue() {
   };
 
   const getPriorityColor = (priority: number) => {
+    if (priority > 10) {
+      if (priority >= 80) return "text-red-500";
+      if (priority >= 50) return "text-yellow-500";
+      return "text-green-500";
+    }
     if (priority >= 8) return "text-red-500";
     if (priority >= 5) return "text-yellow-500";
     return "text-green-500";
+  };
+
+  const getDraftPriority = (item: QueueItem) => {
+    const draft = priorityDrafts[item.id];
+    return {
+      rating: draft?.rating ?? item.priorityRating ?? 0,
+      slider: draft?.slider ?? item.prioritySlider ?? 0,
+    };
+  };
+
+  const updateDocumentQueuePriority = async (
+    item: QueueItem,
+    rating: number,
+    slider: number
+  ) => {
+    if (item.itemType !== "document") return;
+
+    setPriorityUpdatingIds((prev) => new Set(prev).add(item.id));
+    try {
+      await updateDocumentPriority(item.documentId, rating, slider);
+      await loadQueue();
+      setPriorityDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    } catch (error) {
+      console.error("Failed to update document priority:", error);
+    } finally {
+      setPriorityUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+    }
   };
 
   const formatDate = (dateString?: string) => {
@@ -279,8 +325,18 @@ export function Queue() {
                 <div className="flex items-start gap-4">
                   {/* Checkbox */}
                   <button
-                    onClick={() => setSelected(item.id, !selectedIds.has(item.id))}
-                    className="pt-1"
+                    onClick={() => {
+                      if (item.itemType === "learning-item") {
+                        setSelected(item.id, !selectedIds.has(item.id));
+                      }
+                    }}
+                    disabled={item.itemType !== "learning-item"}
+                    className={`pt-1 ${item.itemType !== "learning-item" ? "opacity-50 cursor-not-allowed" : ""}`}
+                    title={
+                      item.itemType !== "learning-item"
+                        ? "Selection is available for learning items only"
+                        : "Select item"
+                    }
                   >
                     {selectedIds.has(item.id) ? (
                       <CheckSquare className="w-5 h-5 text-primary" />
@@ -340,12 +396,91 @@ export function Queue() {
                         <div className={`text-lg font-bold ${getPriorityColor(item.priority)}`}>
                           {item.priority.toFixed(1)}
                         </div>
-                        <div className="text-xs text-muted-foreground">Priority</div>
+                      <div className="text-xs text-muted-foreground">Priority</div>
+                    </div>
+                  </div>
+
+                  {item.itemType === "document" && (
+                    <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div>
+                          <div className="text-xs font-medium text-muted-foreground mb-2">
+                            Rating
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {[1, 2, 3, 4].map((rating) => {
+                              const isActive = getDraftPriority(item).rating === rating;
+                              const isUpdating = priorityUpdatingIds.has(item.id);
+                              return (
+                                <button
+                                  key={rating}
+                                  onClick={() => {
+                                    setPriorityDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: {
+                                        ...prev[item.id],
+                                        rating,
+                                      },
+                                    }));
+                                    const slider = getDraftPriority(item).slider;
+                                    void updateDocumentQueuePriority(item, rating, slider);
+                                  }}
+                                  disabled={isUpdating}
+                                  className={`w-8 h-8 rounded-full text-sm font-semibold transition-colors ${
+                                    isActive
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-background text-foreground border border-border"
+                                  } ${isUpdating ? "opacity-50 cursor-not-allowed" : "hover:bg-primary/10"}`}
+                                  title={`Rate ${rating}`}
+                                >
+                                  {rating}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="flex-1 min-w-[200px]">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                            <span>Priority slider</span>
+                            <span>{getDraftPriority(item).slider}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={getDraftPriority(item).slider}
+                            onChange={(event) => {
+                              const slider = Number(event.target.value);
+                              setPriorityDrafts((prev) => ({
+                                ...prev,
+                                [item.id]: {
+                                  ...prev[item.id],
+                                  slider,
+                                },
+                              }));
+                            }}
+                            onMouseUp={(event) => {
+                              const slider = Number((event.target as HTMLInputElement).value);
+                              const rating = getDraftPriority(item).rating;
+                              void updateDocumentQueuePriority(item, rating, slider);
+                            }}
+                            onTouchEnd={(event) => {
+                              const slider = Number((event.target as HTMLInputElement).value);
+                              const rating = getDraftPriority(item).rating;
+                              void updateDocumentQueuePriority(item, rating, slider);
+                            }}
+                            disabled={priorityUpdatingIds.has(item.id)}
+                            className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+                          />
+                        </div>
                       </div>
                     </div>
+                  )}
 
-                    {/* Footer */}
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                  {/* Footer */}
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
                       <div className="text-sm text-muted-foreground">
                         {item.estimatedTime > 0 && (
                           <span>⏱️ {item.estimatedTime} min</span>

@@ -1,14 +1,14 @@
 # Learning System Specification
 
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Spaced Repetition Algorithms
-The application must implement three spaced repetition algorithms (FSRS, SM2, SuperMemo) with full parameter configuration.
+The application MUST implement three spaced repetition algorithms (FSRS 5.2, SM2, SuperMemo) with full parameter configuration.
 
 #### Scenario: Select FSRS algorithm
 **Given** the user is in Algorithm settings
 **When** they select FSRS as the active algorithm
-**Then** all new learning items should use FSRS for scheduling
+**Then** all new learning items should use FSRS 5.2 for scheduling
 **And** FSRS-specific parameters should be displayed
 **And** existing items should continue with their current algorithm
 
@@ -17,6 +17,11 @@ The application must implement three spaced repetition algorithms (FSRS, SM2, Su
 **When** the user adjusts desired retention or weight parameters
 **Then** new reviews should calculate intervals using the new parameters
 **And** the parameters should persist across sessions
+
+#### Scenario: Use FSRS for learning items
+**Given** FSRS is the active algorithm
+**When** a learning item (flashcard or cloze) is scheduled
+**Then** the next review interval should be computed using FSRS 5.2 parameters
 
 #### Scenario: Select SM2 algorithm
 **Given** the user is in Algorithm settings
@@ -30,8 +35,10 @@ The application must implement three spaced repetition algorithms (FSRS, SM2, Su
 **Then** items should be scheduled based on the configured forgetting index
 **And** category-specific forgetting indexes should be supported
 
+## ADDED Requirements
+
 ### Requirement: Learning Queue Management
-The application must provide comprehensive queue management with filtering, sorting, and prioritization.
+The application MUST provide comprehensive queue management with filtering, sorting, and prioritization.
 
 #### Scenario: View learning queue
 **Given** the user opens the Learning tab
@@ -58,8 +65,31 @@ The application must provide comprehensive queue management with filtering, sort
 **Then** items matching the term should be shown
 **And** search should check question, answer, and tags
 
+### Requirement: Document Queue Priority Scoring
+The application MUST compute a document queue priority score for the Document View queue as the average of the priority slider value (0-100) and a normalized rating value, where rating 1-4 maps linearly to 0-100.
+
+#### Scenario: Rate document affects priority score
+**Given** a document is in the queue with a priority slider value
+**When** the user rates the document from 1 to 4
+**Then** the queue priority score should update using the rating and slider values
+**And** higher ratings should increase the priority score
+
+#### Scenario: Adjust priority slider affects priority score
+**Given** a document is in the queue with a rating value
+**When** the user sets the priority slider to a higher value
+**Then** the queue priority score should increase
+**And** the queue ordering should update to reflect the new score
+
+### Requirement: Document Queue Ordering
+The application MUST order the Document View queue by the combined priority score.
+
+#### Scenario: Order queue by combined score
+**Given** multiple documents have priority scores
+**When** the queue is displayed
+**Then** items with higher combined scores should appear before lower scores
+
 ### Requirement: Review Session
-The application must provide an interactive review interface with rating buttons and session statistics.
+The application MUST provide an interactive review interface with rating buttons and session statistics.
 
 #### Scenario: Start review session
 **Given** there are due items in the queue
@@ -96,7 +126,7 @@ The application must provide an interactive review interface with rating buttons
 **And** allow rating as with flashcards
 
 ### Requirement: SMART Priority Scoring
-The application should implement ML-based priority scoring for queue optimization.
+The application MUST implement ML-based priority scoring for queue optimization.
 
 #### Scenario: Enable SMART scoring
 **Given** the user enables SMART priority scoring in settings
@@ -118,7 +148,7 @@ The application should implement ML-based priority scoring for queue optimizatio
 **And** optimize for user's learning patterns
 
 ### Requirement: Interleaved Queue Mode
-The application should support interleaved new and review cards.
+The application MUST support interleaved new and review cards.
 
 #### Scenario: Enable interleaved mode
 **Given** the user enables interleaved queue mode
@@ -133,7 +163,7 @@ The application should support interleaved new and review cards.
 **And** persist the new ratio
 
 ### Requirement: Statistics and Analytics
-The application must provide comprehensive learning statistics and visualizations.
+The application MUST provide comprehensive learning statistics and visualizations.
 
 #### Scenario: View dashboard statistics
 **Given** the user opens the dashboard
@@ -164,7 +194,7 @@ The application must provide comprehensive learning statistics and visualization
 **And** allow sorting and filtering
 
 ### Requirement: Custom Intervals and Scheduling
-The application should support custom scheduling options.
+The application MUST support custom scheduling options.
 
 #### Scenario: Set custom interval
 **Given** a learning item exists
@@ -182,7 +212,7 @@ The application should support custom scheduling options.
 **And** the current item should be marked complete
 
 ### Requirement: Queue Operations
-The application must support batch operations on queue items.
+The application MUST support batch operations on queue items.
 
 #### Scenario: Batch mark complete
 **Given** multiple items are selected

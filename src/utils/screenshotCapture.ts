@@ -74,6 +74,8 @@ export async function saveScreenshotAsDocument(
       tags: ["screenshot", "image-capture"],
       dateAdded: timestamp,
       dateModified: timestamp,
+      priorityRating: 0,
+      prioritySlider: 0,
       priorityScore: 3,
       isArchived: false,
       isFavorite: false,

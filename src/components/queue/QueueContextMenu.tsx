@@ -62,30 +62,34 @@ export function QueueContextMenu({ item, onPostpone, onDelete, onStartReview }: 
                 Start Review
               </button>
 
-              <button
-                onClick={() => {
-                  setShowPostponeDialog(true);
-                  setIsOpen(false);
-                }}
-                className="w-full px-4 py-2 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2"
-              >
-                <Calendar className="w-4 h-4" />
-                Postpone...
-              </button>
+              {item.itemType === "learning-item" && (
+                <>
+                  <button
+                    onClick={() => {
+                      setShowPostponeDialog(true);
+                      setIsOpen(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Postpone...
+                  </button>
 
-              <button
-                onClick={handleDelete}
-                className="w-full px-4 py-2 text-left text-sm text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
+                  <button
+                    onClick={handleDelete}
+                    className="w-full px-4 py-2 text-left text-sm text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}
       </div>
 
-      {showPostponeDialog && (
+      {showPostponeDialog && item.itemType === "learning-item" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-sm">
             <div className="p-4">

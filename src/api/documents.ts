@@ -33,6 +33,14 @@ export async function updateDocument(
   return await invoke<Document>("update_document", { id, updates });
 }
 
+export async function updateDocumentPriority(
+  id: string,
+  rating: number,
+  slider: number
+): Promise<Document> {
+  return await invoke<Document>("update_document_priority", { id, rating, slider });
+}
+
 export async function deleteDocument(id: string): Promise<void> {
   await invoke("delete_document", { id });
 }

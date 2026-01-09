@@ -376,6 +376,14 @@ pub const MIGRATIONS: &[Migration] = &[
         );
         "#,
     ),
+    // Migration 009: Add document priority inputs
+    Migration::new(
+        "009_add_document_priority_inputs",
+        r#"
+        ALTER TABLE documents ADD COLUMN priority_rating INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE documents ADD COLUMN priority_slider INTEGER NOT NULL DEFAULT 0;
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

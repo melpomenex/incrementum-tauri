@@ -90,6 +90,8 @@ async fn import_single_file(
         date_last_reviewed: None,
         extract_count: 0,
         learning_item_count: 0,
+        priority_rating: 0,
+        priority_slider: 0,
         priority_score: 5.0,
         is_archived: false,
         is_favorite: false,

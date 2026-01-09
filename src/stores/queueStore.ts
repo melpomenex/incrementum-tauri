@@ -104,7 +104,11 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   selectAll: () =>
     set((state) => {
       const newSelected = new Set<string>();
-      state.filteredItems.forEach((item) => newSelected.add(item.id));
+      state.filteredItems.forEach((item) => {
+        if (item.itemType === "learning-item") {
+          newSelected.add(item.id);
+        }
+      });
       return { selectedIds: newSelected };
     }),
 

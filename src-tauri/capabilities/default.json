@@ -3,8 +3,12 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
+  "webviews": ["web-browser", "*"],
   "permissions": [
     "core:default",
+    "core:webview:allow-create-webview",
+    "core:webview:allow-webview-position",
+    "core:webview:allow-webview-size",
     "opener:default",
     "dialog:default"
   ]

@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Multi-Format Document Import
-The application must support importing documents from multiple formats including PDF, EPUB, URLs, Arxiv, Anki packages, and SuperMemo collections.
+The application MUST support importing documents from multiple formats including PDF, EPUB, URLs, Arxiv, Anki packages, and SuperMemo collections.
 
 #### Scenario: Import PDF file
 **Given** the user clicks "Import Document"
@@ -48,7 +48,7 @@ The application must support importing documents from multiple formats including
 **And** preserve learning history if available
 
 ### Requirement: Document Viewing
-The application must provide rich document viewing capabilities with navigation, annotations, and reading controls.
+The application MUST provide rich document viewing capabilities with navigation, annotations, and reading controls.
 
 #### Scenario: View PDF document
 **Given** a PDF document has been imported
@@ -78,7 +78,7 @@ The application must provide rich document viewing capabilities with navigation,
 **And** the preference should persist for that document type
 
 ### Requirement: Document Processing
-The application must provide automatic document processing including segmentation, OCR, and content extraction.
+The application MUST provide automatic document processing including segmentation, OCR, and content extraction.
 
 #### Scenario: Auto-segment document on import
 **Given** the user imports a long document
@@ -122,7 +122,7 @@ The application must provide automatic document processing including segmentatio
 **And** made available for Q&A context
 
 ### Requirement: Annotations and Extracts
-The application must support creating highlights, extracts, and cloze deletions from document content.
+The application MUST support creating highlights, extracts, and cloze deletions from document content.
 
 #### Scenario: Highlight text with color selection
 **Given** a document is open
@@ -160,7 +160,7 @@ The application must support creating highlights, extracts, and cloze deletions 
 **And** update related learning items
 
 ### Requirement: Document Organization
-The application must provide tools for organizing documents including categories, tags, and search.
+The application MUST provide tools for organizing documents including categories, tags, and search.
 
 #### Scenario: Categorize document
 **Given** a document exists in the library
@@ -183,7 +183,7 @@ The application must provide tools for organizing documents including categories
 **And** support advanced filters (date, type, category)
 
 ### Requirement: Offline Support
-The application must support saving and managing offline copies of documents.
+The application MUST support saving and managing offline copies of documents.
 
 #### Scenario: Save offline copy of web article
 **Given** the user imports a document from URL
@@ -200,7 +200,7 @@ The application must support saving and managing offline copies of documents.
 **And** see which documents have offline copies
 
 ### Requirement: Document Queue Integration
-The application must support adding documents to the learning queue with various scheduling options.
+The application MUST support adding documents to the learning queue with various scheduling options.
 
 #### Scenario: Add document to queue
 **Given** a document exists in the library
@@ -222,7 +222,7 @@ The application must support adding documents to the learning queue with various
 **And** extract-related segments should be scheduled together
 
 ### Requirement: Document Statistics
-The application must track and display statistics for document reading and learning progress.
+The application MUST track and display statistics for document reading and learning progress.
 
 #### Scenario: View document statistics
 **Given** a document is open

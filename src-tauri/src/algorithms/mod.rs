@@ -176,6 +176,22 @@ pub fn calculate_priority_score(
     priority.max(0.0).min(10.0)
 }
 
+/// Calculate combined priority score for documents using rating (1-4) and slider (0-100).
+pub fn calculate_document_priority_score(
+    priority_rating: Option<i32>,
+    priority_slider: i32,
+) -> f64 {
+    let slider = priority_slider.clamp(0, 100) as f64;
+    let rating_value = priority_rating.unwrap_or(0);
+    let rating_normalized = if (1..=4).contains(&rating_value) {
+        (rating_value - 1) as f64 / 3.0 * 100.0
+    } else {
+        0.0
+    };
+
+    ((slider + rating_normalized) / 2.0).max(0.0).min(100.0)
+}
+
 /// Document scheduler - schedules documents for incremental reading
 pub struct DocumentScheduler {
     /// Maximum documents to schedule per day

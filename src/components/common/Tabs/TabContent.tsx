@@ -1,4 +1,6 @@
-import { Suspense, lazy, ComponentType } from "react";
+import { Suspense, lazy, ComponentType, useEffect } from "react";
+import { Webview } from "@tauri-apps/api/webview";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { useTabsStore, type Tab } from "../../../stores";
 
 interface TabContentProps {
@@ -39,6 +41,29 @@ function EmptyState() {
 export function TabContent({ tabs, activeTabId }: TabContentProps) {
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
+  useEffect(() => {
+    if (activeTab?.type !== "web-browser") {
+      void Webview.getAll()
+        .then((webviews) =>
+          Promise.all(
+            webviews
+              .filter((webview) => webview.label === "web-browser")
+              .map(async (webview) => {
+                try {
+                  await webview.hide();
+                  await webview.setPosition(new LogicalPosition(-10000, -10000));
+                  await webview.setSize(new LogicalSize(1, 1));
+                } catch {
+                  // Ignore hide/move errors; we still attempt close below.
+                }
+                await webview.close().catch(() => undefined);
+              })
+          )
+        )
+        .catch(() => undefined);
+    }
+  }, [activeTab]);
+
   if (!activeTab) {
     return <EmptyState />;
   }
@@ -46,7 +71,7 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
   const ContentComponent = activeTab.content;
 
   return (
-    <div className="h-full overflow-hidden bg-background">
+    <div className="h-full w-full overflow-hidden bg-background">
       <Suspense fallback={<TabLoader />}>
         {/* Pass any tab-specific data as props */}
         <ContentComponent {...(activeTab.data || {})} />

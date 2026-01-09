@@ -1,6 +1,7 @@
 //! Repository pattern for database operations
 
 use sqlx::{Pool, Sqlite, Row};
+use chrono::Utc;
 use crate::error::Result;
 use crate::models::{Document, Extract, LearningItem, Category, FileType, ItemType, ItemState};
 
@@ -71,9 +72,9 @@ impl Repository {
                 id, title, file_path, file_type, content, content_hash,
                 total_pages, current_page, category, tags,
                 date_added, date_modified, date_last_reviewed,
-                extract_count, learning_item_count, priority_score,
+                extract_count, learning_item_count, priority_rating, priority_slider, priority_score,
                 is_archived, is_favorite, metadata
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
             "#,
         )
         .bind(&document.id)
@@ -91,6 +92,8 @@ impl Repository {
         .bind(&document.date_last_reviewed)
         .bind(document.extract_count)
         .bind(document.learning_item_count)
+        .bind(document.priority_rating)
+        .bind(document.priority_slider)
         .bind(document.priority_score)
         .bind(document.is_archived)
         .bind(document.is_favorite)
@@ -134,6 +137,8 @@ impl Repository {
                     date_last_reviewed: row.get("date_last_reviewed"),
                     extract_count: row.get("extract_count"),
                     learning_item_count: row.get("learning_item_count"),
+                    priority_rating: row.get("priority_rating"),
+                    priority_slider: row.get("priority_slider"),
                     priority_score: row.get("priority_score"),
                     is_archived: row.get("is_archived"),
                     is_favorite: row.get("is_favorite"),
@@ -176,6 +181,8 @@ impl Repository {
                 date_last_reviewed: row.get("date_last_reviewed"),
                 extract_count: row.get("extract_count"),
                 learning_item_count: row.get("learning_item_count"),
+                priority_rating: row.get("priority_rating"),
+                priority_slider: row.get("priority_slider"),
                 priority_score: row.get("priority_score"),
                 is_archived: row.get("is_archived"),
                 is_favorite: row.get("is_favorite"),
@@ -193,9 +200,10 @@ impl Repository {
             r#"
             UPDATE documents SET
                 title = ?1, file_path = ?2, current_page = ?3, category = ?4,
-                tags = ?5, date_modified = ?6, priority_score = ?7,
-                is_archived = ?8, is_favorite = ?9
-            WHERE id = ?10
+                tags = ?5, date_modified = ?6, priority_rating = ?7,
+                priority_slider = ?8, priority_score = ?9,
+                is_archived = ?10, is_favorite = ?11
+            WHERE id = ?12
             "#,
         )
         .bind(&updates.title)
@@ -204,9 +212,43 @@ impl Repository {
         .bind(&updates.category)
         .bind(&tags_json)
         .bind(&updates.date_modified)
+        .bind(updates.priority_rating)
+        .bind(updates.priority_slider)
         .bind(updates.priority_score)
         .bind(updates.is_archived)
         .bind(updates.is_favorite)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        self.get_document(id).await?.ok_or_else(|| {
+            crate::error::IncrementumError::NotFound(format!("Document {}", id))
+        })
+    }
+
+    pub async fn update_document_priority(
+        &self,
+        id: &str,
+        priority_rating: i32,
+        priority_slider: i32,
+        priority_score: f64,
+    ) -> Result<Document> {
+        let now = Utc::now();
+
+        sqlx::query(
+            r#"
+            UPDATE documents SET
+                priority_rating = ?1,
+                priority_slider = ?2,
+                priority_score = ?3,
+                date_modified = ?4
+            WHERE id = ?5
+            "#,
+        )
+        .bind(priority_rating)
+        .bind(priority_slider)
+        .bind(priority_score)
+        .bind(now)
         .bind(id)
         .execute(&self.pool)
         .await?;

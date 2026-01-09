@@ -1,6 +1,8 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Webview } from "@tauri-apps/api/webview";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,9 +15,11 @@ import {
   Plus,
   Tag,
   FolderOpen,
+  MessageSquare,
 } from "lucide-react";
 import { createExtract, type CreateExtractInput } from "../../api/extracts";
 import { createLearningItem, type CreateLearningItemInput } from "../../api/learning-items";
+import { AssistantPanel, type AssistantContext } from "../assistant/AssistantPanel";
 
 interface WebExtract {
   content: string;
@@ -211,14 +215,24 @@ export function WebBrowserTab() {
   const [currentUrl, setCurrentUrl] = useState("");
   const [pageTitle, setPageTitle] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [webviewError, setWebviewError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [extractDialog, setExtractDialog] = useState<WebExtract | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [savedExtracts, setSavedExtracts] = useState<WebExtract[]>([]);
+  const [showAssistant, setShowAssistant] = useState(true);
 
-  const webviewRef = useRef<HTMLWebViewElement>(null);
+  const assistantContext = useMemo<AssistantContext>(() => {
+    return currentUrl ? { type: "web", url: currentUrl } : { type: "web" };
+  }, [currentUrl]);
+
+  const webviewRef = useRef<Webview | null>(null);
+  const webviewHostRef = useRef<HTMLDivElement | null>(null);
+  const webviewContainerRef = useRef<HTMLDivElement | null>(null);
+  const isMountedRef = useRef(true);
 
   const handleNavigate = useCallback(async (inputUrl: string) => {
     if (!inputUrl.trim()) return;
@@ -235,6 +249,7 @@ export function WebBrowserTab() {
     }
 
     setIsLoading(true);
+    setWebviewError(null);
     setCurrentUrl(formattedUrl);
     setUrl(formattedUrl);
 
@@ -247,7 +262,6 @@ export function WebBrowserTab() {
     // Try to get page title (will be updated by webview)
     setPageTitle(new URL(formattedUrl).hostname);
 
-    setIsLoading(false);
   }, [history, historyIndex]);
 
   const handleBack = () => {
@@ -271,8 +285,8 @@ export function WebBrowserTab() {
   };
 
   const handleRefresh = () => {
-    if (webviewRef.current) {
-      webviewRef.current.reload();
+    if (currentUrl) {
+      setRefreshToken((token) => token + 1);
     }
   };
 
@@ -340,6 +354,169 @@ export function WebBrowserTab() {
     }
   };
 
+  const updateWebviewBounds = useCallback(async () => {
+    if (!webviewRef.current || !webviewContainerRef.current) return;
+
+    const rect = webviewContainerRef.current.getBoundingClientRect();
+    const width = Math.max(0, Math.floor(rect.width));
+    const height = Math.max(0, Math.floor(rect.height));
+    const x = Math.floor(rect.left);
+    const y = Math.floor(rect.top);
+
+    await webviewRef.current.setPosition(new LogicalPosition(x, y));
+    await webviewRef.current.setSize(new LogicalSize(width, height));
+
+    console.log("Webview bounds update:", { 
+      x, y, width, height, 
+      windowHeight: window.innerHeight,
+      rectTop: rect.top,
+      rectHeight: rect.height
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentUrl) {
+      if (webviewRef.current) {
+        void webviewRef.current.close();
+        webviewRef.current = null;
+      }
+      return;
+    }
+
+    let isCancelled = false;
+
+    const createWebview = async () => {
+      if (!isMountedRef.current || isCancelled) {
+        return;
+      }
+
+      setIsLoading(true);
+      setWebviewError(null);
+
+      if (webviewRef.current) {
+        await webviewRef.current.close().catch(() => undefined);
+        webviewRef.current = null;
+      }
+
+      const existing = await Webview.getByLabel("web-browser");
+      if (existing) {
+        await existing.close().catch(() => undefined);
+      }
+
+      if (!webviewContainerRef.current || !isMountedRef.current || isCancelled) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const appWindow = getCurrentWindow();
+
+        // Wait for window to be ready before creating webview
+        await new Promise<void>((resolve) => {
+          if (appWindow.label) {
+            resolve();
+          } else {
+            appWindow.once("tauri://created", () => resolve());
+          }
+        });
+
+        if (!webviewContainerRef.current || !isMountedRef.current || isCancelled) {
+          return;
+        }
+
+        const rect = webviewContainerRef.current.getBoundingClientRect();
+        const width = Math.max(0, Math.floor(rect.width));
+        const height = Math.max(0, Math.floor(rect.height));
+        const x = Math.floor(rect.left);
+        const y = Math.floor(rect.top);
+
+        console.log("Creating webview with bounds:", {
+          url: currentUrl,
+          x,
+          y,
+          width,
+          height,
+        });
+
+        const webview = new Webview(appWindow, "web-browser", {
+          url: currentUrl,
+          x,
+          y,
+          width,
+          height,
+        });
+
+        if (!isMountedRef.current || isCancelled) {
+          await webview.close().catch(() => undefined);
+          return;
+        }
+
+        webviewRef.current = webview;
+        void webview.once("tauri://created", async () => {
+          if (!isCancelled) {
+            void updateWebviewBounds();
+            setIsLoading(false);
+          }
+        });
+
+        void webview.once("tauri://error", (event: any) => {
+          if (!isCancelled) {
+            console.error("Webview creation failed:", event);
+            setIsLoading(false);
+            const errorMessage = event.payload?.message || event?.error?.message || String(event);
+            setWebviewError(`Failed to load the page in the native webview: ${errorMessage}`);
+          }
+        });
+      } catch (error) {
+        console.error("Exception creating webview:", error);
+        if (!isCancelled) {
+          setIsLoading(false);
+          setWebviewError(`Exception: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    };
+
+    // Small delay to ensure container is ready
+    const timeoutId = setTimeout(() => {
+      void createWebview();
+    }, 100);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [currentUrl, refreshToken, updateWebviewBounds]);
+
+  useEffect(() => {
+    if (!webviewContainerRef.current) return;
+
+    const observer = new ResizeObserver(() => {
+      void updateWebviewBounds();
+    });
+
+    observer.observe(webviewContainerRef.current);
+    return () => observer.disconnect();
+  }, [updateWebviewBounds]);
+
+  useEffect(() => {
+    return () => {
+      if (webviewRef.current) {
+        void webviewRef.current.close();
+        webviewRef.current = null;
+      }
+
+      void Webview.getByLabel("web-browser")
+        .then((existing) => existing?.close())
+        .catch(() => undefined);
+    };
+  }, []);
+
   // Load bookmarks from localStorage on mount
   useState(() => {
     const saved = localStorage.getItem("web-browser-bookmarks");
@@ -359,9 +536,9 @@ export function WebBrowserTab() {
   }, [bookmarks]);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full w-full flex flex-col min-h-0">
       {/* Browser Toolbar */}
-      <div className="p-2 border-b border-border space-y-2">
+      <div className="p-2 border-b border-border space-y-2 flex-shrink-0">
         {/* Navigation Row */}
         <div className="flex items-center gap-2">
           <button
@@ -424,6 +601,13 @@ export function WebBrowserTab() {
             <FolderOpen className="w-4 h-4" />
           </button>
           <button
+            onClick={() => setShowAssistant((prev) => !prev)}
+            className="p-2 rounded hover:bg-muted transition-colors"
+            title="Toggle assistant"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+          <button
             onClick={handleOpenInBrowser}
             disabled={!currentUrl}
             className="p-2 rounded hover:bg-muted disabled:opacity-50 transition-colors"
@@ -452,7 +636,7 @@ export function WebBrowserTab() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar - Bookmarks & Extracts */}
         {showSidebar && (
           <div className="w-80 border-r border-border bg-card overflow-y-auto">
@@ -512,16 +696,7 @@ export function WebBrowserTab() {
         )}
 
         {/* Browser Content */}
-        <div className="flex-1 relative">
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              </div>
-            </div>
-          )}
-
+        <div className="flex-1 relative overflow-hidden">
           {!currentUrl ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center max-w-md">
@@ -545,14 +720,37 @@ export function WebBrowserTab() {
               </div>
             </div>
           ) : (
-            <iframe
-              src={currentUrl}
-              className="w-full h-full border-0"
-              title="Web Browser"
-              sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
-            />
+            <>
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-50">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                  </div>
+                </div>
+              )}
+              {webviewError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-50">
+                  <div className="text-center max-w-md px-4">
+                    <p className="text-sm text-destructive mb-2">{webviewError}</p>
+                    <p className="text-xs text-muted-foreground">
+                      On Linux, this can happen if WebKit dependencies are missing.
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div ref={webviewContainerRef} className="absolute inset-0" />
+            </>
           )}
         </div>
+
+        {/* Assistant Panel */}
+        {showAssistant && (
+          <AssistantPanel
+            context={assistantContext}
+            className="flex-shrink-0"
+          />
+        )}
       </div>
 
       {/* Extract Dialog */}

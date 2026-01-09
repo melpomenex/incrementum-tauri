@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Comprehensive Settings Framework
-The application must provide a robust settings management system supporting 20+ categories with validation, persistence, and import/export capabilities.
+The application MUST provide a robust settings management system supporting 20+ categories with validation, persistence, and import/export capabilities.
 
 #### Scenario: Navigate settings categories
 **Given** the user opens the settings dialog
@@ -28,7 +28,7 @@ The application must provide a robust settings management system supporting 20+ 
 **And** dependent systems should be notified
 
 ### Requirement: General Settings
-The application must provide general application settings.
+The application MUST provide general application settings.
 
 #### Scenario: Configure auto-save interval
 **Given** the user is on the General settings tab
@@ -57,7 +57,7 @@ The application must provide general application settings.
 **And** restore the scroll position and content of each tab
 
 ### Requirement: Interface Settings
-The application must provide interface customization settings.
+The application MUST provide interface customization settings.
 
 #### Scenario: Select theme
 **Given** the user is on the Interface settings tab
@@ -80,7 +80,7 @@ The application must provide interface customization settings.
 **And** the toolbar should adjust its layout accordingly
 
 ### Requirement: Document Settings
-The application must provide document processing and viewing settings.
+The application MUST provide document processing and viewing settings.
 
 #### Scenario: Configure auto-segmentation
 **Given** the user is on the Documents settings tab
@@ -103,7 +103,7 @@ The application must provide document processing and viewing settings.
 **And** local models should be used if configured
 
 ### Requirement: Learning Settings
-The application must provide learning algorithm and queue settings.
+The application MUST provide learning algorithm and queue settings.
 
 #### Scenario: Configure retention parameters
 **Given** the user is on the Learning settings tab
@@ -126,7 +126,7 @@ The application must provide learning algorithm and queue settings.
 **And** use ML predictions if enabled
 
 ### Requirement: Algorithm Settings
-The application must provide algorithm selection and parameter tuning.
+The application MUST provide algorithm selection and parameter tuning.
 
 #### Scenario: Select algorithm
 **Given** the user is on the Algorithm settings tab
@@ -148,7 +148,7 @@ The application must provide algorithm selection and parameter tuning.
 **And** allow category-specific overrides
 
 ### Requirement: Automation Settings
-The application must provide automation and notification settings.
+The application MUST provide automation and notification settings.
 
 #### Scenario: Enable auto-sync
 **Given** the user is on the Automation settings tab
@@ -165,7 +165,7 @@ The application must provide automation and notification settings.
 **And** respect the system's notification settings
 
 ### Requirement: API Settings
-The application must provide API configuration for external services.
+The application MUST provide API configuration for external services.
 
 #### Scenario: Configure QA provider
 **Given** the user is on the API settings tab
@@ -189,7 +189,7 @@ The application must provide API configuration for external services.
 **And** store credentials securely
 
 ### Requirement: QA Settings
-The application must provide question-answering feature settings.
+The application MUST provide question-answering feature settings.
 
 #### Scenario: Enable auto QA generation
 **Given** the user is on the QA settings tab
@@ -218,7 +218,7 @@ The application must provide question-answering feature settings.
 **And** improve answer relevance
 
 ### Requirement: Integration Settings
-The application must provide settings for third-party integrations.
+The application MUST provide settings for third-party integrations.
 
 #### Scenario: Configure Anki integration
 **Given** the user is on the Integrations settings tab
@@ -236,7 +236,7 @@ The application must provide settings for third-party integrations.
 **And** support daily notes if enabled
 
 ### Requirement: MCP Servers Settings
-The application must support configuration of up to 3 MCP servers.
+The application MUST support configuration of up to 3 MCP servers.
 
 #### Scenario: Configure MCP server
 **Given** the user is on the MCP Servers settings tab
@@ -252,7 +252,7 @@ The application must support configuration of up to 3 MCP servers.
 **And** show connection status
 
 ### Requirement: Keybindings Settings
-The application must provide comprehensive keyboard shortcut customization.
+The application MUST provide comprehensive keyboard shortcut customization.
 
 #### Scenario: View all keybindings
 **Given** the user is on the Keybindings settings tab
@@ -275,7 +275,7 @@ The application must provide comprehensive keyboard shortcut customization.
 **And** persist the change
 
 ### Requirement: RSS Settings
-The application must provide RSS feed management settings.
+The application MUST provide RSS feed management settings.
 
 #### Scenario: Configure RSS polling
 **Given** the user is on the RSS settings tab
@@ -291,7 +291,7 @@ The application must provide RSS feed management settings.
 **And** maintain only the most recent N entries
 
 ### Requirement: SponsorBlock Settings
-The application must provide SponsorBlock integration settings.
+The application MUST provide SponsorBlock integration settings.
 
 #### Scenario: Enable SponsorBlock
 **Given** the user is on the SponsorBlock settings tab
@@ -307,7 +307,7 @@ The application must provide SponsorBlock integration settings.
 **And** only use existing skip data
 
 ### Requirement: Sync Settings
-The application must provide synchronization settings for browser, cloud, and desktop sync.
+The application MUST provide synchronization settings for browser, cloud, and desktop sync.
 
 #### Scenario: Enable browser sync
 **Given** the user is on the Sync settings tab
@@ -331,7 +331,7 @@ The application must provide synchronization settings for browser, cloud, and de
 **And** sync on startup if enabled
 
 ### Requirement: Settings Import/Export
-The application must support importing and exporting settings.
+The application MUST support importing and exporting settings.
 
 #### Scenario: Export settings
 **Given** the user has configured settings

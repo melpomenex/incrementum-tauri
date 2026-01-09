@@ -585,6 +585,27 @@ interface LearningItem {
 - Color-blind friendly palettes
 - Animation respect prefers-reduced-motion
 
+## Web Browser Webview Tab
+
+### Context
+The current Web Browser tab renders pages in an iframe, which fails on many sites due to X-Frame-Options/CSP.
+
+### Decision
+- Use a Tauri-native webview surface for page rendering.
+- Keep the existing React UI for the toolbar, history, bookmarks, and extract actions.
+- Drive navigation through an IPC command layer so the tab controls remain the source of truth.
+
+### Risks / Trade-offs
+- Embedding a native webview surface inside an existing tab may require window-level positioning or plugin support.
+- If an embedded surface proves infeasible, fall back to a dedicated webview window while preserving tab controls.
+
+## Document Queue Priority Scoring
+
+### Decision
+- Store a user rating (1-4) and a priority slider value (0-100) on each document queue item.
+- Compute the combined priority score as the average of the slider value and a normalized rating value (rating 1-4 mapped linearly to 0-100).
+- Sort the Document View queue descending by this combined score.
+
 ## Testing Strategy
 
 ### Unit Tests

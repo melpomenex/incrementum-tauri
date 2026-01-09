@@ -111,6 +111,7 @@ pub fn run() {
             commands::get_document,
             commands::create_document,
             commands::update_document,
+            commands::update_document_priority,
             commands::delete_document,
             commands::import_document,
             commands::import_documents,
@@ -217,6 +218,8 @@ pub fn run() {
             // Segmentation commands
             commands::segment_document,
             commands::auto_segment_and_create_extracts,
+            // Legacy import commands
+            commands::import_legacy_archive,
             commands::preview_segmentation,
             commands::extract_key_points_from_text,
             commands::batch_segment_documents,

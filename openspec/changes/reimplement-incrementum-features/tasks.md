@@ -96,6 +96,11 @@
 - [x] Add forgetting curve visualization
 - [x] Build retention vs difficulty charts
 
+### 3.1.1 FSRS 5.2 Scheduling Alignment
+- [ ] Update FSRS scheduling logic to align with FSRS 5.2 for learning items
+- [ ] Confirm learning items use FSRS 5.2 when FSRS is active
+- [ ] Add validation or tests for FSRS 5.2 scheduling outcomes
+
 ### 3.2 Queue Management ✅ COMPLETE
 - [x] Create learning queue data model
 - [x] Build queue list component with filtering
@@ -104,6 +109,12 @@
 - [x] Create queue search and filter
 - [x] Implement batch queue operations
 - [x] Build queue statistics panel
+
+### 3.5 Document Queue Priority Scheduling
+- [ ] Add rating (1-4) and priority slider (0-100) controls to Document View queue items
+- [ ] Compute combined priority score (rating + slider) and sort the Document View queue by the score
+- [ ] Persist rating and slider updates and refresh queue ordering
+- [ ] Add validation or tests for priority score calculation
 
 ### 3.3 Review Interface ✅ COMPLETE
 - [x] Design review session flow
@@ -143,6 +154,12 @@
 - [x] Create YouTube viewer widget
 - [x] Integrate SponsorBlock service
 - [x] Build web browser component with sync
+
+### 4.3 Web Browser Native Webview
+- [ ] Replace iframe rendering with a Tauri-native webview surface in the Web Browser tab
+- [ ] Wire navigation controls (back/forward/refresh) to the native webview APIs
+- [ ] Surface loading state and title updates from the native webview
+- [ ] Confirm external browser fallback remains available
 
 ### 4.3 Integration Services ✅ COMPLETE
 - [x] Create Anki Connect client in Rust
