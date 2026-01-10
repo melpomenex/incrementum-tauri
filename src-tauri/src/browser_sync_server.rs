@@ -545,3 +545,68 @@ pub async fn get_browser_sync_server_status(port: u16) -> Result<ServerStatus, A
 
     Ok(get_status(config).await)
 }
+
+/// Get the config file path for browser sync settings
+fn get_config_path() -> std::path::PathBuf {
+    let mut path = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    path.push("incrementum");
+    path.push("browser_sync_config.json");
+    path
+}
+
+/// Load browser sync config from file
+fn load_config() -> BrowserSyncConfig {
+    let path = get_config_path();
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        if let Ok(config) = serde_json::from_str::<BrowserSyncConfig>(&content) {
+            return config;
+        }
+    }
+    BrowserSyncConfig::default()
+}
+
+/// Save browser sync config to file
+fn save_config(config: &BrowserSyncConfig) -> Result<(), AppError> {
+    let path = get_config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AppError::Io(e))?;
+    }
+    let json = serde_json::to_string_pretty(config)
+        .map_err(|e| AppError::Serialization(e))?;
+    std::fs::write(&path, json)
+        .map_err(|e| AppError::Io(e))?;
+    Ok(())
+}
+
+/// Get browser sync config
+#[tauri::command]
+pub async fn get_browser_sync_config() -> Result<BrowserSyncConfig, AppError> {
+    Ok(load_config())
+}
+
+/// Set browser sync config
+#[tauri::command]
+pub async fn set_browser_sync_config(config: BrowserSyncConfig) -> Result<(), AppError> {
+    save_config(&config)
+}
+
+/// Initialize browser sync server (called on app startup)
+pub async fn initialize_if_enabled(repo: Arc<Repository>) -> Result<(), AppError> {
+    let config = load_config();
+    if config.auto_start {
+        info!("Auto-starting browser extension server on port {}", config.port);
+        let _ = start_server(config, repo).await;
+    }
+    Ok(())
+}
+
+/// BrowserSyncConfig with auto-start flag
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserSyncConfig {
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub auto_start: bool,
+}

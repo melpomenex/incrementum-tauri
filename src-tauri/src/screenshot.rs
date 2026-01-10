@@ -2,7 +2,6 @@
 
 use crate::error::{IncrementumError, Result};
 use base64::{engine::general_purpose, Engine as _};
-use image::ImageOutputFormat;
 use std::io::Cursor;
 use xcap::{Monitor, Window};
 
@@ -18,7 +17,7 @@ pub async fn capture_screenshot() -> Result<String> {
         .ok_or_else(|| IncrementumError::NotFound("No monitors available".to_string()))?;
 
     let image = monitor
-        .capture()
+        .capture_image()
         .map_err(|err| IncrementumError::Internal(format!("Failed to capture screen: {err}")))?;
     encode_image(image)
 }
@@ -33,7 +32,7 @@ pub async fn capture_screen_by_index(index: usize) -> Result<String> {
     })?;
 
     let image = monitor
-        .capture()
+        .capture_image()
         .map_err(|err| IncrementumError::Internal(format!("Failed to capture screen: {err}")))?;
     encode_image(image)
 }
@@ -65,20 +64,29 @@ pub async fn capture_app_window() -> Result<String> {
         .map_err(|err| IncrementumError::Internal(format!("Failed to enumerate windows: {err}")))?;
     let window = windows
         .iter()
-        .find(|w| w.title().unwrap_or_default() == "Incrementum")
+        .find(|w| w.title() == "Incrementum")
         .or_else(|| windows.first())
         .ok_or_else(|| IncrementumError::NotFound("No windows available".to_string()))?;
 
     let image = window
-        .capture()
+        .capture_image()
         .map_err(|err| IncrementumError::Internal(format!("Failed to capture window: {err}")))?;
     encode_image(image)
 }
 
-fn encode_image(image: image::DynamicImage) -> Result<String> {
+fn encode_image(image: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, Vec<u8>>) -> Result<String> {
     let mut buffer = Vec::new();
-    image
-        .write_to(&mut Cursor::new(&mut buffer), ImageOutputFormat::Png)
+    // Convert xcap's image buffer to the project's image type
+    let width = image.width();
+    let height = image.height();
+    let raw_data = image.into_raw();
+
+    let image_buffer = image::ImageBuffer::from_raw(width, height, raw_data)
+        .ok_or_else(|| IncrementumError::Internal("Failed to create image buffer".to_string()))?;
+    let dynamic_image = image::DynamicImage::ImageRgba8(image_buffer);
+
+    dynamic_image
+        .write_to(&mut Cursor::new(&mut buffer), image::ImageOutputFormat::Png)
         .map_err(|err| IncrementumError::Internal(format!("Failed to encode screenshot: {err}")))?;
     Ok(general_purpose::STANDARD.encode(buffer))
 }
