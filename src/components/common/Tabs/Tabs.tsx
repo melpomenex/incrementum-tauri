@@ -51,14 +51,18 @@ export function Tabs() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background">
-      <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onTabClick={setActiveTab}
-        onTabClose={closeTab}
-        onTabMove={moveTab}
-      />
-      <TabContent tabs={tabs} activeTabId={activeTabId} />
+      <div className="flex-shrink-0">
+        <TabBar
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onTabClick={setActiveTab}
+          onTabClose={closeTab}
+          onTabMove={moveTab}
+        />
+      </div>
+      <div className="flex-1 min-h-0">
+        <TabContent tabs={tabs} activeTabId={activeTabId} />
+      </div>
     </div>
   );
 }

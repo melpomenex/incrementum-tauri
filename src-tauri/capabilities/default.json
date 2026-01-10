@@ -2,13 +2,24 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
-  "webviews": ["web-browser", "*"],
+  "windows": [
+    "main"
+  ],
+  "webviews": [
+    "web-browser",
+    "*"
+  ],
   "permissions": [
     "core:default",
     "core:webview:allow-create-webview",
     "core:webview:allow-webview-position",
+    "core:webview:allow-set-webview-position",
     "core:webview:allow-webview-size",
+    "core:webview:allow-set-webview-size",
+    "core:webview:allow-webview-close",
+    "core:webview:allow-webview-hide",
+    "core:webview:allow-webview-show",
+    "core:webview:allow-get-all-webviews",
     "opener:default",
     "dialog:default"
   ]

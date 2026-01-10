@@ -177,9 +177,8 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
                 <button
                   key={c.name}
                   onClick={() => setColor(c.name)}
-                  className={`w-8 h-8 rounded-full ${c.bg} ${
-                    color === c.name ? "ring-2 ring-primary ring-offset-2" : ""
-                  } transition-all`}
+                  className={`w-8 h-8 rounded-full ${c.bg} ${color === c.name ? "ring-2 ring-primary ring-offset-2" : ""
+                    } transition-all`}
                   title={c.name}
                 />
               ))}
@@ -357,20 +356,41 @@ export function WebBrowserTab() {
   const updateWebviewBounds = useCallback(async () => {
     if (!webviewRef.current || !webviewContainerRef.current) return;
 
-    const rect = webviewContainerRef.current.getBoundingClientRect();
-    const width = Math.max(0, Math.floor(rect.width));
-    const height = Math.max(0, Math.floor(rect.height));
-    const x = Math.floor(rect.left);
-    const y = Math.floor(rect.top);
+    // Use requestAnimationFrame to ensure layout is finalized
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        // Small additional delay to ensure flex layouts are calculated
+        setTimeout(async () => {
+          if (!webviewRef.current || !webviewContainerRef.current) {
+            resolve();
+            return;
+          }
 
-    await webviewRef.current.setPosition(new LogicalPosition(x, y));
-    await webviewRef.current.setSize(new LogicalSize(width, height));
+          const rect = webviewContainerRef.current.getBoundingClientRect();
+          const width = Math.max(0, Math.floor(rect.width));
+          const height = Math.max(0, Math.floor(rect.height));
+          const x = Math.floor(rect.left);
+          const y = Math.floor(rect.top);
 
-    console.log("Webview bounds update:", { 
-      x, y, width, height, 
-      windowHeight: window.innerHeight,
-      rectTop: rect.top,
-      rectHeight: rect.height
+          // Log container and webview info for debugging
+          const containerEl = webviewContainerRef.current;
+          console.log(`Webview bounds UPDATE: x=${x}, y=${y}, width=${width}, height=${height}`);
+          console.log(`  Container offset: left=${containerEl.offsetLeft}, top=${containerEl.offsetTop}, width=${containerEl.offsetWidth}, height=${containerEl.offsetHeight}`);
+          console.log(`  Window inner: width=${window.innerWidth}, height=${window.innerHeight}`);
+          console.log(`  Rect: left=${rect.left}, top=${rect.top}, width=${rect.width}, height=${rect.height}`);
+
+          // Only update if we have valid dimensions
+          if (width > 0 && height > 0) {
+            try {
+              await webviewRef.current?.setPosition(new LogicalPosition(x, y));
+              await webviewRef.current?.setSize(new LogicalSize(width, height));
+            } catch (e) {
+              console.warn("Failed to update webview bounds:", e);
+            }
+          }
+          resolve();
+        }, 50);
+      });
     });
   }, []);
 
@@ -436,13 +456,7 @@ export function WebBrowserTab() {
         const x = Math.floor(rect.left);
         const y = Math.floor(rect.top);
 
-        console.log("Creating webview with bounds:", {
-          url: currentUrl,
-          x,
-          y,
-          width,
-          height,
-        });
+        console.log(`Creating webview with bounds: x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
 
         const webview = new Webview(appWindow, "web-browser", {
           url: currentUrl,
@@ -460,8 +474,12 @@ export function WebBrowserTab() {
         webviewRef.current = webview;
         void webview.once("tauri://created", async () => {
           if (!isCancelled) {
-            void updateWebviewBounds();
+            // Update bounds multiple times to catch layout changes
+            await updateWebviewBounds();
             setIsLoading(false);
+            // Additional bounds updates after layout settles
+            setTimeout(() => void updateWebviewBounds(), 200);
+            setTimeout(() => void updateWebviewBounds(), 500);
           }
         });
 
@@ -518,7 +536,7 @@ export function WebBrowserTab() {
   }, []);
 
   // Load bookmarks from localStorage on mount
-  useState(() => {
+  useEffect(() => {
     const saved = localStorage.getItem("web-browser-bookmarks");
     if (saved) {
       setBookmarks(JSON.parse(saved));
@@ -528,10 +546,10 @@ export function WebBrowserTab() {
     if (savedExtractsData) {
       setSavedExtracts(JSON.parse(savedExtractsData));
     }
-  });
+  }, []);
 
   // Save bookmarks to localStorage when they change
-  useState(() => {
+  useEffect(() => {
     localStorage.setItem("web-browser-bookmarks", JSON.stringify(bookmarks));
   }, [bookmarks]);
 
@@ -696,7 +714,7 @@ export function WebBrowserTab() {
         )}
 
         {/* Browser Content */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className="flex-1 relative overflow-hidden min-h-0">
           {!currentUrl ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center max-w-md">

@@ -42,27 +42,43 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   useEffect(() => {
+    // When NOT on the web-browser tab, forcefully hide and close any webview
     if (activeTab?.type !== "web-browser") {
-      void Webview.getAll()
-        .then((webviews) =>
-          Promise.all(
-            webviews
-              .filter((webview) => webview.label === "web-browser")
-              .map(async (webview) => {
-                try {
-                  await webview.hide();
-                  await webview.setPosition(new LogicalPosition(-10000, -10000));
-                  await webview.setSize(new LogicalSize(1, 1));
-                } catch {
-                  // Ignore hide/move errors; we still attempt close below.
-                }
-                await webview.close().catch(() => undefined);
-              })
-          )
-        )
-        .catch(() => undefined);
+      const hideWebview = async () => {
+        try {
+          const webviews = await Webview.getAll();
+          for (const webview of webviews) {
+            if (webview.label === "web-browser") {
+              console.log("Hiding web-browser webview due to tab switch");
+              // First move off-screen to immediately hide, then close
+              try {
+                await webview.setPosition(new LogicalPosition(-10000, -10000));
+                await webview.setSize(new LogicalSize(1, 1));
+              } catch (e) {
+                console.warn("Failed to reposition webview:", e);
+              }
+              try {
+                await webview.hide();
+              } catch (e) {
+                console.warn("Failed to hide webview:", e);
+              }
+              try {
+                await webview.close();
+                console.log("Closed web-browser webview");
+              } catch (e) {
+                console.warn("Failed to close webview:", e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to get webviews:", e);
+        }
+      };
+
+      // Execute immediately
+      void hideWebview();
     }
-  }, [activeTab]);
+  }, [activeTab?.type]);
 
   if (!activeTab) {
     return <EmptyState />;
@@ -71,7 +87,7 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
   const ContentComponent = activeTab.content;
 
   return (
-    <div className="h-full w-full overflow-hidden bg-background">
+    <div className="h-full w-full overflow-hidden bg-background min-h-0">
       <Suspense fallback={<TabLoader />}>
         {/* Pass any tab-specific data as props */}
         <ContentComponent {...(activeTab.data || {})} />
