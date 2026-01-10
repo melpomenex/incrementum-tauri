@@ -31,6 +31,7 @@ export const useLLMProvidersStore = create<LLMProvidersState>()(
           ...provider,
           id: crypto.randomUUID(),
         };
+        console.log("Adding provider:", { ...newProvider, apiKey: newProvider.apiKey ? "***" : "EMPTY" });
         set((state) => ({
           providers: [...state.providers, newProvider],
         }));
@@ -55,7 +56,15 @@ export const useLLMProvidersStore = create<LLMProvidersState>()(
       },
 
       getEnabledProviders: () => {
-        return get().providers.filter((p) => p.enabled);
+        const enabled = get().providers.filter((p) => p.enabled);
+        console.log("getEnabledProviders called:", enabled.map((p) => ({
+          id: p.id,
+          provider: p.provider,
+          name: p.name,
+          hasApiKey: !!p.apiKey && p.apiKey.trim().length > 0,
+          enabled: p.enabled,
+        })));
+        return enabled;
       },
 
       getProvidersByType: (type) => {
@@ -64,14 +73,25 @@ export const useLLMProvidersStore = create<LLMProvidersState>()(
     }),
     {
       name: 'llm-providers-storage',
-      // Don't persist API keys in plain text - they should be encrypted
-      // For now, we'll skip persisting apiKey
+      // Persist API keys in localStorage for now
+      // TODO: Implement proper encryption or use system keychain
       partialize: (state) => ({
-        providers: state.providers.map((p) => ({
-          ...p,
-          apiKey: '', // Don't persist API keys
-        })),
+        providers: state.providers,
       }),
+      // Clean up providers with empty API keys on hydration
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          const before = state.providers.length;
+          // Remove providers with empty API keys (except ollama which doesn't require one)
+          state.providers = state.providers.filter((p) =>
+            p.provider === 'ollama' || (p.apiKey && p.apiKey.trim().length > 0)
+          );
+          const after = state.providers.length;
+          if (before !== after) {
+            console.log(`Cleaned up ${before - after} provider(s) with empty API keys`);
+          }
+        }
+      },
     }
   )
 );

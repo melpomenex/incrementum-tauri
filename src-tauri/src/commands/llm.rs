@@ -977,28 +977,23 @@ async fn test_openrouter_connection(
     base_url: &str,
     api_key: &str,
 ) -> Result<bool, String> {
-    let request = OpenAIRequest {
-        model: "meta-llama/llama-3.1-8b-instruct:free".to_string(),
-        messages: vec![OpenAIMessage {
-            role: "user".to_string(),
-            content: "Test".to_string(),
-        }],
-        temperature: 0.5,
-        max_tokens: 5,
-        stream: None,
-    };
-
-    let response = client
-        .post(&format!("{}/chat/completions", base_url))
+    // Verify the API key by checking models endpoint (lighter weight and reliable)
+    let models_response = client
+        .get(&format!("{}/models", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("HTTP-Referer", "https://incrementum.app")
         .header("X-Title", "Incrementum")
-        .json(&request)
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
 
-    Ok(response.status().is_success())
+    if !models_response.status().is_success() {
+        let status = models_response.status();
+        let error_text = models_response.text().await.unwrap_or_default();
+        return Err(format!("OpenRouter API key validation failed ({}): {}", status, error_text));
+    }
+
+    Ok(true)
 }
 
 async fn fetch_openrouter_models(

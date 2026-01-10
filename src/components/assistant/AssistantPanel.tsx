@@ -160,16 +160,23 @@ export function AssistantPanel({
     try {
       // Get the enabled provider for the selected provider type
       const providers = useLLMProvidersStore.getState().getEnabledProviders();
+      console.log("Available providers:", providers.map((p) => ({
+        id: p.id,
+        provider: p.provider,
+        name: p.name,
+        hasApiKey: !!p.apiKey && p.apiKey.trim().length > 0,
+      })));
       const provider = providers.find((p) => p.provider === selectedProvider);
 
       if (!provider) {
+        const availableTypes = providers.map((p) => p.provider).join(", ");
         return {
-          content: `No ${selectedProvider} provider configured. Please add an API key in Settings.`,
+          content: `No ${selectedProvider} provider configured. Available providers: ${availableTypes || "None"}. Please add an API key in Settings.`,
         };
       }
       if (!provider.apiKey || !provider.apiKey.trim()) {
         return {
-          content: `No ${selectedProvider} API key configured. Please add it in Settings.`,
+          content: `${selectedProvider} provider found but API key is empty. Please remove and re-add the provider in Settings.`,
         };
       }
 

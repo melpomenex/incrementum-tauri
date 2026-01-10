@@ -689,7 +689,17 @@ pub async fn import_youtube_video(
     url: String,
     repo: State<'_, Repository>,
 ) -> Result<Document, String> {
-    let info = extract_video_info(&url)?;
+    // First, verify yt-dlp is available
+    let ytdlp_available = check_ytdlp_installed()
+        .map_err(|e| format!("Failed to check yt-dlp: {}", e))?;
+
+    if !ytdlp_available {
+        return Err("yt-dlp is not installed. Please install it to import YouTube videos.".to_string());
+    }
+
+    // Extract video info
+    let info = extract_video_info(&url)
+        .map_err(|e| format!("Failed to fetch video info: {}", e))?;
 
     // Extract video ID for the file path
     let video_id = &info.id;
@@ -704,13 +714,14 @@ pub async fn import_youtube_video(
     doc.priority_score = 7.0; // YouTube videos get higher priority
 
     // Set metadata with YouTube info
+    // Use current time if publish_date is not available or invalid
+    let created_at = chrono::Utc::now();
+
     doc.metadata = Some(DocumentMetadata {
         author: Some(info.channel),
         subject: None,
         keywords: if info.tags.is_empty() { None } else { Some(info.tags) },
-        created_at: Some(chrono::DateTime::parse_from_rfc3339(&info.upload_date)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now())),
+        created_at: Some(created_at),
         modified_at: None,
         file_size: None,
         language: Some("en".to_string()),
@@ -720,7 +731,7 @@ pub async fn import_youtube_video(
 
     // Save to database
     let created = repo.create_document(&doc).await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to save document to database: {}", e))?;
 
     Ok(created)
 }

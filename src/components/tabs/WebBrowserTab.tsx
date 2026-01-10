@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Webview } from "@tauri-apps/api/webview";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { invoke } from "@tauri-apps/api/core";
 import {
   ChevronLeft,
   ChevronRight,
@@ -209,6 +210,11 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
   );
 }
 
+// Helper to detect if we're on Linux (WebKitGTK has different coordinate system)
+function isLinux(): boolean {
+  return navigator.platform.includes("Linux") || navigator.userAgent.includes("Linux");
+}
+
 export function WebBrowserTab() {
   const [url, setUrl] = useState("");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -369,19 +375,17 @@ export function WebBrowserTab() {
           const containerEl = webviewContainerRef.current;
           const rect = containerEl.getBoundingClientRect();
 
-          // On Linux with WebKitGTK, the coordinate system origin (0,0) is at the 
-          // TOP of the main webview content area.
-          // x: use rect.left for horizontal positioning (sidebar offset)
-          // y: use 0 since that's the content area top
-          // height: calculate as visible height = window.innerHeight - rect.top
+          // Platform-specific coordinate calculation:
+          // - Linux (WebKitGTK): y=0 is at the top of the main webview content area
+          // - macOS/Windows: standard coordinates, use rect.top for y position
           const x = Math.floor(rect.left);
-          const y = 0;
+          const y = isLinux() ? 0 : Math.floor(rect.top + window.scrollY);
           const width = Math.floor(rect.width);
-          // Height should be the distance from container top to window bottom
-          const height = Math.floor(window.innerHeight - rect.top);
+          const height = isLinux()
+            ? Math.floor(window.innerHeight - rect.top)
+            : Math.floor(rect.height);
 
-          console.log(`Webview bounds: x=${x}, y=${y}, width=${width}, height=${height}`);
-          console.log(`  Calculation: innerHeight=${window.innerHeight} - rect.top=${Math.floor(rect.top)} = ${height}`);
+          console.log(`Webview bounds (platform=${isLinux() ? "linux" : "macos/windows"}): x=${x}, y=${y}, width=${width}, height=${height}`);
 
           // Only update if we have valid dimensions
           if (width > 0 && height > 0) {
@@ -457,14 +461,15 @@ export function WebBrowserTab() {
         const containerEl = webviewContainerRef.current;
         const rect = containerEl.getBoundingClientRect();
 
-        // On Linux with WebKitGTK, y=0 is the top of the main content area
+        // Platform-specific coordinate calculation (same as updateWebviewBounds)
         const x = Math.floor(rect.left);
-        const y = 0;
+        const y = isLinux() ? 0 : Math.floor(rect.top + window.scrollY);
         const width = Math.floor(rect.width);
-        // Height = distance from container top to window bottom
-        const height = Math.floor(window.innerHeight - rect.top);
+        const height = isLinux()
+          ? Math.floor(window.innerHeight - rect.top)
+          : Math.floor(rect.height);
 
-        console.log(`Creating webview: x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
+        console.log(`Creating webview (platform=${isLinux() ? "linux" : "macos/windows"}): x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
 
         const webview = new Webview(appWindow, "web-browser", {
           url: currentUrl,
