@@ -308,6 +308,40 @@ impl Repository {
         })
     }
 
+    pub async fn update_document_scheduling(
+        &self,
+        id: &str,
+        next_reading_date: Option<chrono::DateTime<Utc>>,
+        stability: Option<f64>,
+        difficulty: Option<f64>,
+        reps: Option<i32>,
+        total_time_spent: Option<i32>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE documents SET
+                next_reading_date = ?1,
+                stability = ?2,
+                difficulty = ?3,
+                reps = ?4,
+                total_time_spent = ?5,
+                date_modified = ?6
+            WHERE id = ?7
+            "#,
+        )
+        .bind(next_reading_date)
+        .bind(stability)
+        .bind(difficulty)
+        .bind(reps)
+        .bind(total_time_spent)
+        .bind(Utc::now())
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn delete_document(&self, id: &str) -> Result<()> {
         sqlx::query("DELETE FROM documents WHERE id = ?")
             .bind(id)

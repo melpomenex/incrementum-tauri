@@ -14,6 +14,7 @@ import { HoverRatingControls } from "../review/HoverRatingControls";
 import { useQueueNavigation } from "../../hooks/useQueueNavigation";
 import { cn } from "../../utils";
 import * as documentsApi from "../../api/documents";
+import { rateDocument } from "../../api/algorithm";
 import type { ReviewRating } from "../../api/review";
 import { autoExtractWithCache, isAutoExtractEnabled } from "../../utils/documentAutoExtract";
 
@@ -77,11 +78,17 @@ export function DocumentViewer({
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
   const lastSelectionRef = useRef("");
 
+  // Timer for tracking reading time
+  const startTimeRef = useRef(Date.now());
+
   // Queue navigation
   const queueNav = useQueueNavigation();
 
   useEffect(() => {
     if (documentId) {
+      // Reset timer when document changes
+      startTimeRef.current = Date.now();
+      
       const doc = documents.find((d) => d.id === documentId);
       if (doc) {
         setCurrentDocument(doc);
@@ -309,11 +316,26 @@ export function DocumentViewer({
 
   // Handle rating from keyboard shortcuts
   const handleRating = async (rating: ReviewRating) => {
-    // For now, just log the rating. In a full implementation, this would:
-    // 1. Either create a learning item from the document
-    // 2. Or submit a review for an existing learning item
-    console.log(`DocumentViewer: Rated document ${documentId} as ${rating}`);
-    // TODO: Integrate with actual learning item creation/review
+    try {
+      const timeTaken = Math.round((Date.now() - startTimeRef.current) / 1000);
+      
+      console.log(`DocumentViewer: Rating document ${documentId} as ${rating} (time: ${timeTaken}s)`);
+      
+      await rateDocument(documentId, rating, timeTaken);
+      
+      // Reset timer
+      startTimeRef.current = Date.now();
+      
+      // Navigate to next document
+      if (queueNav.canGoToNextDocument) {
+        queueNav.goToNextDocument();
+      } else {
+        // Optional: show toast "Queue finished"
+        console.log("No next document in queue.");
+      }
+    } catch (error) {
+      console.error("Failed to rate document:", error);
+    }
   };
 
   // Handle back button - close the current tab

@@ -11,6 +11,26 @@ export interface SM2Calculation {
 }
 
 /**
+ * Document rating request
+ */
+export interface DocumentRatingRequest {
+  document_id: string;
+  rating: number; // 1-4 (ReviewRating)
+  time_taken?: number; // seconds
+}
+
+/**
+ * Document rating response
+ */
+export interface DocumentRatingResponse {
+  next_review_date: string;
+  stability: number;
+  difficulty: number;
+  interval_days: number;
+  scheduling_reason: string;
+}
+
+/**
  * Document scheduling request
  */
 export interface DocumentScheduleRequest {
@@ -104,6 +124,22 @@ export async function calculateSM2Next(
     itemId,
     rating,
   });
+}
+
+/**
+ * Rate a document and schedule its next reading
+ */
+export async function rateDocument(
+  documentId: string,
+  rating: number,
+  timeTaken?: number
+): Promise<DocumentRatingResponse> {
+  const request: DocumentRatingRequest = {
+    document_id: documentId,
+    rating,
+    time_taken: timeTaken,
+  };
+  return await invoke<DocumentRatingResponse>("rate_document", { request });
 }
 
 /**

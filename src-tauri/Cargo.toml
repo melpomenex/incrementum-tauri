@@ -70,6 +70,9 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # Spaced Repetition
 fsrs = "5"
 
+# Environment variables
+dotenvy = "0.15"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

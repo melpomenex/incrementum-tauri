@@ -28,8 +28,12 @@ impl Default for OneDriveConfig {
     fn default() -> Self {
         Self {
             // Microsoft Graph API default scopes for Incrementum
-            client_id: "YOUR_CLIENT_ID".to_string(), // Replace with actual client ID
-            client_secret: "YOUR_CLIENT_SECRET".to_string(), // Replace with actual client secret
+            // Credentials can be set via environment variables:
+            // INCREMENTUM_ONEDRIVE_CLIENT_ID and INCREMENTUM_ONEDRIVE_CLIENT_SECRET
+            client_id: std::env::var("INCREMENTUM_ONEDRIVE_CLIENT_ID")
+                .unwrap_or_else(|_| "YOUR_CLIENT_ID".to_string()),
+            client_secret: std::env::var("INCREMENTUM_ONEDRIVE_CLIENT_SECRET")
+                .unwrap_or_else(|_| "YOUR_CLIENT_SECRET".to_string()),
             redirect_uri: "http://localhost:15173/auth/callback".to_string(),
             scopes: vec![
                 "User.Read".to_string(),
@@ -69,6 +73,34 @@ impl OneDriveProvider {
 
     /// Get the OAuth authorization URL
     fn get_auth_url(&mut self) -> Result<String, AppError> {
+        // Validate credentials before attempting OAuth
+        if self.config.client_id == "YOUR_CLIENT_ID" || self.config.client_id.is_empty() {
+            return Err(AppError::Internal(
+                "OneDrive OAuth is not configured. Please set the INCREMENTUM_ONEDRIVE_CLIENT_ID \
+                 environment variable with your Microsoft Azure application client ID.\n\n\
+                 To configure OneDrive:\n\
+                 1. Go to https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade\n\
+                 2. Register a new application\n\
+                 3. Copy the Application (client) ID\n\
+                 4. Add a redirect URI: http://localhost:15173/auth/callback\n\
+                 5. Set the INCREMENTUM_ONEDRIVE_CLIENT_ID environment variable".to_string()
+            ));
+        }
+
+        if self.config.client_secret == "YOUR_CLIENT_SECRET" || self.config.client_secret.is_empty() {
+            return Err(AppError::Internal(
+                "OneDrive OAuth is not configured. Please set the INCREMENTUM_ONEDRIVE_CLIENT_SECRET \
+                 environment variable with your Microsoft Azure application client secret.\n\n\
+                 To configure OneDrive:\n\
+                 1. Go to https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade\n\
+                 2. Select your registered application\n\
+                 3. Go to 'Certificates & secrets'\n\
+                 4. Create a new client secret\n\
+                 5. Copy the secret value\n\
+                 6. Set the INCREMENTUM_ONEDRIVE_CLIENT_SECRET environment variable".to_string()
+            ));
+        }
+
         let state = self.generate_state();
         self.pending_state = Some(state.clone());
 

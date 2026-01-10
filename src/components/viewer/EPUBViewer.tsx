@@ -419,33 +419,80 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
   };
 
   const handleTocClick = async (href: string) => {
-    if (!rendition || !book) return;
+    if (!rendition || !book) {
+      console.warn("EPUBViewer: Cannot navigate - rendition or book not ready");
+      return;
+    }
 
     try {
       console.log("EPUBViewer: TOC clicked, href:", href);
 
-      // The href from TOC might be a relative path or a full URL
-      // Try to display directly first
-      try {
-        await rendition.display(href);
-        console.log("EPUBViewer: Successfully navigated to:", href);
-        return;
-      } catch (e) {
-        console.log("EPUBViewer: Direct display failed, trying to resolve spine item:", e);
+      // Get the spine to find the correct section
+      const spine = await book.loaded.spine;
+
+      // Try to find the spine item by href
+      let spineItem = spine.get(href);
+
+      // If not found directly, try to find by searching the spine
+      if (!spineItem) {
+        // Search through spine items for a match
+        for (const item of spine.items) {
+          if (item.href === href || item.href?.endsWith?.(href) || item.url === href) {
+            spineItem = item;
+            break;
+          }
+        }
       }
 
-      // If direct display fails, try to find the spine item
-      const spine = await book.loaded.spine;
-      const spineItem = spine.get(href);
-
+      // If we found the spine item, navigate to it
       if (spineItem) {
-        console.log("EPUBViewer: Found spine item, displaying:", spineItem.href);
-        await rendition.display(spineItem.href);
+        console.log("EPUBViewer: Found spine item, navigating to:", spineItem.href, "index:", spineItem.index);
+
+        // Try multiple navigation methods for better Linux compatibility
+        // Method 1: Use spine.goto with index (most reliable on Linux/WebKitGTK)
+        try {
+          if (typeof spineItem.index === 'number') {
+            await spine.goto(spineItem.index);
+            console.log("EPUBViewer: Successfully navigated using spine.goto with index");
+            return;
+          }
+        } catch (e) {
+          console.log("EPUBViewer: spine.goto with index failed:", e);
+        }
+
+        // Method 2: Use rendition.display with the spine href
+        try {
+          await rendition.display(spineItem.href);
+          console.log("EPUBViewer: Successfully navigated using rendition.display");
+          return;
+        } catch (e) {
+          console.log("EPUBViewer: rendition.display failed:", e);
+        }
+
+        // Method 3: Try navigating to the URL directly
+        try {
+          await rendition.display(spineItem.url || spineItem.href);
+          console.log("EPUBViewer: Successfully navigated using URL");
+          return;
+        } catch (e) {
+          console.log("EPUBViewer: URL navigation failed:", e);
+        }
+
+        console.warn("EPUBViewer: All navigation methods failed for href:", href);
         return;
+      }
+
+      // Fallback: Try to navigate to the href directly
+      try {
+        await rendition.display(href);
+        console.log("EPUBViewer: Successfully navigated using href directly");
+        return;
+      } catch (e) {
+        console.log("EPUBViewer: Direct href navigation failed:", e);
       }
 
       // Try searching through TOC to find a matching item
-      const searchToc = (items: any[]) => {
+      const searchToc = (items: any[]): any => {
         for (const item of items) {
           if (item.href === href || item.href?.endsWith?.(href)) {
             return item;
@@ -460,7 +507,7 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
 
       const tocItem = searchToc(toc);
       if (tocItem) {
-        console.log("EPUBViewer: Found TOC item, displaying:", tocItem.href);
+        console.log("EPUBViewer: Found TOC item, attempting navigation:", tocItem.href);
         await rendition.display(tocItem.href);
         return;
       }

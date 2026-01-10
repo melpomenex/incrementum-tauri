@@ -26,8 +26,12 @@ pub struct DropboxConfig {
 impl Default for DropboxConfig {
     fn default() -> Self {
         Self {
-            app_key: "YOUR_APP_KEY".to_string(), // Replace with actual app key
-            app_secret: "YOUR_APP_SECRET".to_string(), // Replace with actual app secret
+            // Credentials can be set via environment variables:
+            // INCREMENTUM_DROPBOX_APP_KEY and INCREMENTUM_DROPBOX_APP_SECRET
+            app_key: std::env::var("INCREMENTUM_DROPBOX_APP_KEY")
+                .unwrap_or_else(|_| "YOUR_APP_KEY".to_string()),
+            app_secret: std::env::var("INCREMENTUM_DROPBOX_APP_SECRET")
+                .unwrap_or_else(|_| "YOUR_APP_SECRET".to_string()),
             redirect_uri: "http://localhost:15173/auth/callback".to_string(),
         }
     }
@@ -69,6 +73,32 @@ impl DropboxProvider {
 
     /// Get the OAuth authorization URL with PKCE
     fn get_auth_url(&mut self) -> Result<String, AppError> {
+        // Validate credentials before attempting OAuth
+        if self.config.app_key == "YOUR_APP_KEY" || self.config.app_key.is_empty() {
+            return Err(AppError::Internal(
+                "Dropbox OAuth is not configured. Please set the INCREMENTUM_DROPBOX_APP_KEY \
+                 environment variable with your Dropbox app key.\n\n\
+                 To configure Dropbox:\n\
+                 1. Go to https://www.dropbox.com/developers/apps\n\
+                 2. Create a new app (scoped access)\n\
+                 3. Add http://localhost:15173/auth/callback as a redirect URI\n\
+                 4. Copy the app key\n\
+                 5. Set the INCREMENTUM_DROPBOX_APP_KEY environment variable".to_string()
+            ));
+        }
+
+        if self.config.app_secret == "YOUR_APP_SECRET" || self.config.app_secret.is_empty() {
+            return Err(AppError::Internal(
+                "Dropbox OAuth is not configured. Please set the INCREMENTUM_DROPBOX_APP_SECRET \
+                 environment variable with your Dropbox app secret.\n\n\
+                 To configure Dropbox:\n\
+                 1. Go to https://www.dropbox.com/developers/apps\n\
+                 2. Select your app\n\
+                 3. Copy the app secret\n\
+                 4. Set the INCREMENTUM_DROPBOX_APP_SECRET environment variable".to_string()
+            ));
+        }
+
         let (state, code_verifier, code_challenge) = self.generate_pkce();
         self.pending_state = Some(state.clone());
         self.pkce_verifier = Some(code_verifier);

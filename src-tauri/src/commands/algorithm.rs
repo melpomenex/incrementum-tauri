@@ -12,6 +12,7 @@ use crate::database::Repository;
 use crate::models::{ReviewRating, LearningItem};
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use chrono::Utc;
 
 /// SM-2 calculation parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +27,8 @@ pub struct SM2Calculation {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DocumentRatingRequest {
     pub document_id: String,
-    pub rating: i32, // 1-5 scale
+    pub rating: i32, // 1-4 scale (ReviewRating)
+    pub time_taken: Option<i32>, // seconds
 }
 
 /// Document scheduling response
@@ -78,8 +80,7 @@ pub async fn calculate_sm2_next(
 
 /// Rate a document and schedule its next reading
 ///
-/// This implements the incremental reading scheduling from Incrementum-CPP,
-/// where documents are rated after reading and scheduled for future review.
+/// This implements FSRS-based scheduling for incremental reading.
 #[tauri::command]
 pub async fn rate_document(
     request: DocumentRatingRequest,
@@ -92,18 +93,41 @@ pub async fn rate_document(
 
     // Create document scheduler
     let scheduler = DocScheduler::default_params();
+    let now = Utc::now();
 
-    // Schedule the document
-    let result = scheduler.schedule_document(
-        request.rating,
-        document.reading_count,
-        document.stability,
-        document.difficulty,
-        document.priority_slider.max(document.priority_rating),
+    // Calculate elapsed days since last review
+    // If never reviewed, use days since creation (or 0 for immediate first review)
+    let elapsed_days = document.date_last_reviewed
+        .map(|lr| (now - lr).num_seconds() as f64 / 86400.0)
+        .unwrap_or_else(|| {
+            // For new documents, elapsed is usually small, but FSRS can handle it
+            (now - document.date_added).num_seconds() as f64 / 86400.0
+        })
+        .max(0.0);
+
+    let review_rating = ReviewRating::from(request.rating);
+
+    // Schedule the document using FSRS
+    // Use current stability/difficulty or defaults (Stability=0, Difficulty=5 for new)
+    let result = scheduler.schedule_document_fsrs(
+        review_rating,
+        document.stability.unwrap_or(0.0),
+        document.difficulty.unwrap_or(5.0),
+        elapsed_days
     );
 
     // Update the document with new scheduling data
-    // Note: This would require an update_document method in Repository
+    let new_reps = document.reps.unwrap_or(0) + 1;
+    let new_time_spent = document.total_time_spent.unwrap_or(0) + request.time_taken.unwrap_or(0);
+
+    repo.update_document_scheduling(
+        &document.id,
+        Some(result.next_review),
+        Some(result.stability),
+        Some(result.difficulty),
+        Some(new_reps),
+        Some(new_time_spent),
+    ).await?;
 
     Ok(DocumentRatingResponse {
         next_review_date: result.next_review.to_rfc3339(),

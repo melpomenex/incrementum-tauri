@@ -49,6 +49,15 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load .env file for environment variables (OAuth client IDs, etc.)
+    // This must happen before any code that reads environment variables
+    if let Err(e) = dotenvy::dotenv() {
+        // Only log if .env exists but failed to load, not if it just doesn't exist
+        if std::path::Path::new(".env").exists() {
+            eprintln!("Warning: Failed to load .env file: {}", e);
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
