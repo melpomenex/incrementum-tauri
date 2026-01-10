@@ -1,7 +1,7 @@
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { emit } from "@tauri-apps/api/event";
-import { appWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type CaptureMode = "region" | "screen" | "app";
 
@@ -32,7 +32,7 @@ export default function ScreenshotOverlay() {
 
   const cancel = useCallback(async () => {
     await emit("screenshot-cancel");
-    await appWindow.close();
+    await getCurrentWindow().close();
   }, []);
 
   const finalizeSelection = useCallback(
@@ -42,7 +42,7 @@ export default function ScreenshotOverlay() {
         screenIndex,
         rect,
       });
-      await appWindow.close();
+      await getCurrentWindow().close();
     },
     [screenIndex]
   );
