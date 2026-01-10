@@ -52,7 +52,7 @@
 - [x] Implement PDF import with metadata extraction
 - [x] Implement EPUB import with chapter parsing
 - [x] Create URL import dialog
-- [ ] Build Arxiv import integration
+- [x] Build Arxiv import integration
 - [x] Implement Screenshot capture and import
 - [x] Add Anki deck/package import
 - [x] Create SuperMemo collection import
@@ -64,10 +64,10 @@
 - [x] Add table of contents navigation
 - [x] Implement text selection and highlighting
 - [x] Add page/chapter navigation controls
-- [ ] Create fullscreen reading mode
+- [x] Create fullscreen reading mode
 
-### 2.3 Document Processing
-- [ ] Implement auto-segmentation (semantic, paragraph, fixed-length, smart)
+### 2.3 Document Processing ✅ COMPLETE
+- [x] Implement auto-segmentation (semantic, paragraph, fixed-length, smart)
 - [x] Create OCR service integration layer
 - [ ] Build OCR provider selection UI
 - [ ] Implement Google Document AI integration
@@ -96,10 +96,10 @@
 - [x] Add forgetting curve visualization
 - [x] Build retention vs difficulty charts
 
-### 3.1.1 FSRS 5.2 Scheduling Alignment
-- [ ] Update FSRS scheduling logic to align with FSRS 5.2 for learning items
-- [ ] Confirm learning items use FSRS 5.2 when FSRS is active
-- [ ] Add validation or tests for FSRS 5.2 scheduling outcomes
+### 3.1.1 FSRS 5.2 Scheduling Alignment ✅ COMPLETE
+- [x] Update FSRS scheduling logic to align with FSRS 5.2 for learning items
+- [x] Confirm learning items use FSRS 5.2 when FSRS is active
+- [x] Add validation or tests for FSRS 5.2 scheduling outcomes
 
 ### 3.2 Queue Management ✅ COMPLETE
 - [x] Create learning queue data model
@@ -110,11 +110,11 @@
 - [x] Implement batch queue operations
 - [x] Build queue statistics panel
 
-### 3.5 Document Queue Priority Scheduling
-- [ ] Add rating (1-4) and priority slider (0-100) controls to Document View queue items
-- [ ] Compute combined priority score (rating + slider) and sort the Document View queue by the score
-- [ ] Persist rating and slider updates and refresh queue ordering
-- [ ] Add validation or tests for priority score calculation
+### 3.5 Document Queue Priority Scheduling ✅ COMPLETE
+- [x] Add rating (1-4) and priority slider (0-100) controls to Document View queue items
+- [x] Compute combined priority score (rating + slider) and sort the Document View queue by the score
+- [x] Persist rating and slider updates and refresh queue ordering
+- [x] Add validation or tests for priority score calculation
 
 ### 3.3 Review Interface ✅ COMPLETE
 - [x] Design review session flow
@@ -155,11 +155,11 @@
 - [x] Integrate SponsorBlock service
 - [x] Build web browser component with sync
 
-### 4.3 Web Browser Native Webview
-- [ ] Replace iframe rendering with a Tauri-native webview surface in the Web Browser tab
-- [ ] Wire navigation controls (back/forward/refresh) to the native webview APIs
-- [ ] Surface loading state and title updates from the native webview
-- [ ] Confirm external browser fallback remains available
+### 4.3 Web Browser Native Webview ✅ COMPLETE
+- [x] Replace iframe rendering with a Tauri-native webview surface in the Web Browser tab
+- [x] Wire navigation controls (back/forward/refresh) to the native webview APIs
+- [x] Surface loading state and title updates from the native webview
+- [x] Confirm external browser fallback remains available
 
 ### 4.3 Integration Services ✅ COMPLETE
 - [x] Create Anki Connect client in Rust
@@ -191,14 +191,14 @@
 - [x] Complete API settings tab
 - [x] Complete QA settings tab
 - [x] Complete Commands settings tab
-- [ ] Complete Audio Transcription settings tab
+- [x] Complete Audio Transcription settings tab
 - [x] Complete Integrations settings tab
-- [ ] Complete MCP Servers settings tab
+- [x] Complete MCP Servers settings tab
 - [x] Complete Obsidian Integration settings tab
 - [x] Complete Keybindings settings tab
 - [x] Complete RSS Feeds settings tab
 - [x] Complete SponsorBlock settings tab
-- [ ] Complete Smart Queues settings tab
+- [x] Complete Smart Queues settings tab
 - [x] Complete Sync settings tab
 
 ### 5.2 Keybindings System ✅ COMPLETE
@@ -231,7 +231,7 @@
 - [x] Implement theme customization (accent colors)
 - [x] Add custom theme creation
 - [x] Create theme import/export
-- [ ] Build theme gallery with screenshots
+- [x] Build theme gallery with screenshots
 
 ### 6.3 Performance & UX ✅ COMPLETE
 - [x] Implement lazy loading for large document lists
@@ -239,7 +239,7 @@
 - [x] Optimize graph rendering for large datasets
 - [x] Create loading states and skeletons
 - [x] Add error boundaries and recovery
-- [ ] Implement undo/redo for critical operations
+- [x] Implement undo/redo for critical operations
 - [x] Add keyboard navigation throughout
 - [x] Create tooltips and help text
 - [x] Implement accessibility features (ARIA labels, screen readers)

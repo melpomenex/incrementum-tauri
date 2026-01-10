@@ -1,13 +1,16 @@
 //! Review commands using FSRS algorithm
 
 use tauri::State;
-use chrono::{Utc, Duration, Datelike};
+use chrono::{Utc, Duration, Datelike, Timelike};
 use crate::database::Repository;
 use crate::error::Result;
 use crate::models::{LearningItem, ReviewRating, MemoryState, ItemState};
 
 /// Desired retention rate (0.9 = 90% retention)
 const DESIRED_RETENTION: f32 = 0.9;
+
+/// Graduation interval in days - items with intervals >= this are considered "graduated" to Review state
+const GRADUATION_INTERVAL_DAYS: f64 = 1.0;
 
 #[derive(Clone, serde::Serialize)]
 pub struct ReviewStreak {
@@ -151,11 +154,15 @@ pub async fn apply_fsrs_review(
     // Create FSRS instance with default parameters
     let fsrs = fsrs::FSRS::new(None)?;
 
-    // Calculate elapsed time since last review
+    // Calculate elapsed time since last review (in days, can be fractional)
     let now = Utc::now();
     let elapsed_days = item.last_review_date
-        .map(|lr| (now - lr).num_days().max(0) as u32)
-        .unwrap_or(0);
+        .map(|lr| {
+            let duration = now - lr;
+            duration.num_seconds() as f64 / 86400.0 // Convert seconds to fractional days
+        })
+        .unwrap_or(0.0)
+        .max(0.0) as u32;
 
     // Get current memory state or use default for new items
     let current_memory_state = item.memory_state.clone().map(|ms| fsrs::MemoryState {
@@ -163,7 +170,7 @@ pub async fn apply_fsrs_review(
         difficulty: ms.difficulty as f32,
     });
 
-    // Calculate next states using FSRS
+    // Calculate next states using FSRS 5.2
     let next_states = fsrs.next_states(current_memory_state, DESIRED_RETENTION, elapsed_days)?;
 
     // Select the next state based on rating
@@ -174,13 +181,17 @@ pub async fn apply_fsrs_review(
         ReviewRating::Easy => &next_states.easy,
     };
 
-    // Calculate the new interval (in days)
-    let new_interval = next_state.interval.round().max(1.0) as i32;
+    // Use the exact interval from FSRS 5.2 (fractional days supported)
+    let new_interval = next_state.interval as f64;
+
+    // Calculate due date with sub-day precision
+    // Convert fractional days to seconds for precision
+    let interval_seconds = (new_interval * 86400.0).round() as i64;
+    item.due_date = now + Duration::seconds(interval_seconds);
 
     // Update the item
     item.review_count += 1;
     item.interval = new_interval;
-    item.due_date = now + Duration::days(new_interval as i64);
     item.last_review_date = Some(now);
     item.date_modified = now;
 
@@ -190,16 +201,28 @@ pub async fn apply_fsrs_review(
         difficulty: next_state.memory.difficulty as f64,
     });
 
-    // Update state based on review
-    match review_rating {
+    // Update state based on review rating and interval (FSRS 5.2 alignment)
+    // Items stay in Learning/Relearning until they "graduate" with longer intervals
+    item.state = match review_rating {
         ReviewRating::Again => {
             item.lapses += 1;
-            item.state = ItemState::Relearning;
+            // "Again" always sends to Relearning (or stays there)
+            ItemState::Relearning
         }
         ReviewRating::Hard | ReviewRating::Good | ReviewRating::Easy => {
-            item.state = ItemState::Review;
+            // Graduate to Review state only when interval is long enough
+            if new_interval >= GRADUATION_INTERVAL_DAYS {
+                ItemState::Review
+            } else {
+                // Stay in learning phase for short intervals
+                match item.state {
+                    ItemState::New => ItemState::Learning,
+                    ItemState::Relearning => ItemState::Relearning,
+                    _ => ItemState::Learning,
+                }
+            }
         }
-    }
+    };
 
     // Save the updated item
     repo.update_learning_item(&item).await?;
@@ -260,9 +283,15 @@ pub async fn preview_review_intervals(
 
     let fsrs = fsrs::FSRS::new(None)?;
     let now = Utc::now();
+
+    // Calculate elapsed days with fractional precision
     let elapsed_days = item.last_review_date
-        .map(|lr| (now - lr).num_days().max(0) as u32)
-        .unwrap_or(0);
+        .map(|lr| {
+            let duration = now - lr;
+            duration.num_seconds() as f64 / 86400.0
+        })
+        .unwrap_or(0.0)
+        .max(0.0) as u32;
 
     let current_memory_state = item.memory_state.clone().map(|ms| fsrs::MemoryState {
         stability: ms.stability as f32,
@@ -272,17 +301,18 @@ pub async fn preview_review_intervals(
     let next_states = fsrs.next_states(current_memory_state, DESIRED_RETENTION, elapsed_days)?;
 
     Ok(PreviewIntervals {
-        again: next_states.again.interval.round().max(1.0) as i32,
-        hard: next_states.hard.interval.round().max(1.0) as i32,
-        good: next_states.good.interval.round().max(1.0) as i32,
-        easy: next_states.easy.interval.round().max(1.0) as i32,
+        again: next_states.again.interval as f64,
+        hard: next_states.hard.interval as f64,
+        good: next_states.good.interval as f64,
+        easy: next_states.easy.interval as f64,
     })
 }
 
 #[derive(serde::Serialize)]
 pub struct PreviewIntervals {
-    pub again: i32,
-    pub hard: i32,
-    pub good: i32,
-    pub easy: i32,
+    /// Intervals in days (can be fractional for learning items)
+    pub again: f64,
+    pub hard: f64,
+    pub good: f64,
+    pub easy: f64,
 }

@@ -54,10 +54,10 @@ pub async fn get_queue(
         // Calculate progress (inverse of interval/reviews to show "learning progress")
         let progress = if item.review_count == 0 {
             0
-        } else if item.interval >= 21 {
+        } else if item.interval >= 21.0 {
             100
         } else {
-            ((item.interval as f64) / 21.0 * 100.0) as i32
+            ((item.interval) / 21.0 * 100.0) as i32
         };
 
         // Get document title

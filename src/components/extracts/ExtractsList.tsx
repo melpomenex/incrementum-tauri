@@ -3,6 +3,7 @@ import { Trash2, Edit, Tag, Calendar, FileText, Sparkles, Loader2, CheckSquare, 
 import { getExtracts, type Extract } from "../../api/extracts";
 import { generateLearningItemsFromExtract } from "../../api/learning-items";
 import { bulkDeleteExtracts, bulkGenerateCards } from "../../api/extract-bulk";
+import { useUndoableOperations } from "../../api/undoable";
 import { cn } from "../../utils";
 import { EditExtractDialog } from "./EditExtractDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
@@ -17,6 +18,9 @@ export function ExtractsList({ documentId }: ExtractsListProps) {
   const [error, setError] = useState<string | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [generatedCounts, setGeneratedCounts] = useState<Record<string, number>>({});
+
+  // Undoable operations hook
+  const { bulkDeleteExtracts: bulkDeleteExtractsWithUndo } = useUndoableOperations();
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -138,24 +142,33 @@ export function ExtractsList({ documentId }: ExtractsListProps) {
     setBulkOperationResult(null);
 
     try {
-      const result = await bulkDeleteExtracts(Array.from(selectedIds));
-      setBulkOperationResult(result);
+      const idsToDelete = Array.from(selectedIds);
 
-      // Remove successfully deleted extracts
-      if (result.succeeded.length > 0) {
-        setExtracts(extracts.filter(e => !result.succeeded.includes(e.id)));
+      // Use undoable delete operation - this will show a toast with undo button
+      await bulkDeleteExtractsWithUndo(idsToDelete, () => {
+        // onSuccess callback: update local state
+        setExtracts(extracts.filter(e => !idsToDelete.includes(e.id)));
         // Also remove from generated counts
         setGeneratedCounts(prev => {
           const next = { ...prev };
-          result.succeeded.forEach(id => delete next[id]);
+          idsToDelete.forEach(id => delete next[id]);
           return next;
         });
-      }
-
-      // Clear selection after operation
-      setSelectedIds(new Set());
+        // Clear selection after operation
+        setSelectedIds(new Set());
+        setBulkOperationResult({
+          succeeded: idsToDelete,
+          failed: [],
+          errors: [],
+        });
+      });
     } catch (error) {
       console.error("Failed to delete extracts:", error);
+      setBulkOperationResult({
+        succeeded: [],
+        failed: Array.from(selectedIds),
+        errors: [error instanceof Error ? error.message : "Unknown error"],
+      });
     } finally {
       setBulkOperationLoading(false);
     }

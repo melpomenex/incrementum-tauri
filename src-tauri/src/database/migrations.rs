@@ -384,6 +384,27 @@ pub const MIGRATIONS: &[Migration] = &[
         ALTER TABLE documents ADD COLUMN priority_slider INTEGER NOT NULL DEFAULT 0;
         "#,
     ),
+
+    // Migration 010: Convert interval to REAL for FSRS 5.2 fractional day support
+    Migration::new(
+        "010_convert_interval_to_real",
+        r#"
+        -- Create a backup of existing intervals
+        ALTER TABLE learning_items ADD COLUMN interval_backup REAL;
+
+        -- Copy integer intervals to the new REAL column
+        UPDATE learning_items SET interval_backup = CAST(interval AS REAL);
+
+        -- Drop the old interval column
+        ALTER TABLE learning_items DROP COLUMN interval;
+
+        -- Rename the new column to interval
+        ALTER TABLE learning_items RENAME COLUMN interval_backup TO interval;
+
+        -- Set default value for new items
+        UPDATE learning_items SET interval = 0.0 WHERE interval IS NULL;
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

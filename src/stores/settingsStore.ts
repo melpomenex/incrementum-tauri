@@ -163,6 +163,27 @@ interface PrivacySettings {
 }
 
 /**
+ * Audio Transcription Settings
+ */
+interface AudioTranscriptionSettings {
+  autoTranscription: boolean;
+  language: string;
+  timestampGeneration: boolean;
+  speakerDiarization: boolean;
+  confidenceScores: boolean;
+  confidenceThreshold: number;
+}
+
+/**
+ * Smart Queue Settings
+ */
+interface SmartQueueSettings {
+  autoRefresh: boolean;
+  refreshInterval: number;
+  mode: 'normal' | 'filtered' | 'intelligent';
+}
+
+/**
  * Main Settings Interface
  */
 export interface Settings {
@@ -176,6 +197,8 @@ export interface Settings {
   importExport: ImportExportSettings;
   notifications: NotificationSettings;
   privacy: PrivacySettings;
+  audioTranscription: AudioTranscriptionSettings;
+  smartQueue: SmartQueueSettings;
 }
 
 /**
@@ -270,6 +293,19 @@ export const defaultSettings: Settings = {
     telemetryEnabled: false,
     crashReportsEnabled: false,
     analyticsEnabled: false,
+  },
+  audioTranscription: {
+    autoTranscription: false,
+    language: "en",
+    timestampGeneration: true,
+    speakerDiarization: false,
+    confidenceScores: false,
+    confidenceThreshold: 0.7,
+  },
+  smartQueue: {
+    autoRefresh: false,
+    refreshInterval: 60,
+    mode: 'normal',
   },
 };
 

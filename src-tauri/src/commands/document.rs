@@ -208,3 +208,102 @@ pub async fn read_document_file(
     let base64_string = general_purpose::STANDARD.encode(&bytes);
     Ok(base64_string)
 }
+
+/// Result from fetching URL content
+#[derive(serde::Serialize)]
+pub struct FetchedUrlContent {
+    pub file_path: String,
+    pub file_name: String,
+    pub content_type: String,
+}
+
+/// Fetch content from a URL and save it to a temporary location
+/// Used for Arxiv PDF downloads and URL-based imports
+#[tauri::command]
+pub async fn fetch_url_content(url: String) -> Result<FetchedUrlContent> {
+    use reqwest;
+    use std::time::Duration;
+
+    // Parse URL to determine file name
+    let url_parsed = url.parse::<reqwest::Url>()
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Invalid URL: {}", e)))?;
+
+    // Extract filename from URL or generate one
+    let file_name = url_parsed
+        .path_segments()
+        .and_then(|segments| segments.last())
+        .unwrap_or("download")
+        .to_string();
+
+    // Determine content type from URL extension
+    let content_type = if file_name.ends_with(".pdf") {
+        "pdf"
+    } else if file_name.ends_with(".epub") {
+        "epub"
+    } else if file_name.ends_with(".md") || file_name.ends_with(".markdown") {
+        "markdown"
+    } else if file_name.ends_with(".html") || file_name.ends_with(".htm") {
+        "html"
+    } else {
+        // Try to determine from content type header
+        "unknown"
+    };
+
+    // Create a temporary directory for downloads
+    let temp_dir = std::env::temp_dir();
+    let download_dir = temp_dir.join("incrementum-downloads");
+
+    std::fs::create_dir_all(&download_dir)
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to create download directory: {}", e)))?;
+
+    // Generate a unique filename
+    let timestamp = chrono::Utc::now().timestamp();
+    let unique_filename = format!("{}-{}", timestamp, file_name);
+    let file_path = download_dir.join(&unique_filename);
+
+    // Download the file
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .user_agent("Incrementum/1.0 (https://incrementum.app)")
+        .build()
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to create HTTP client: {}", e)))?;
+
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to fetch URL: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(crate::error::IncrementumError::Internal(format!(
+            "HTTP error: {}",
+            response.status()
+        )).into());
+    }
+
+    // Get content type from response if unknown
+    let final_content_type = if content_type == "unknown" {
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|ct| ct.to_str().ok())
+            .unwrap_or("")
+            .to_string()
+    } else {
+        content_type.to_string()
+    };
+
+    // Save the downloaded content
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to download content: {}", e)))?;
+
+    std::fs::write(&file_path, &bytes)
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to save downloaded file: {}", e)))?;
+
+    Ok(FetchedUrlContent {
+        file_path: file_path.to_string_lossy().to_string(),
+        file_name,
+        content_type: final_content_type,
+    })
+}

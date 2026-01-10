@@ -142,7 +142,7 @@ impl FsrsScheduler {
 /// Calculate priority score for queue items
 pub fn calculate_priority_score(
     due_date: chrono::DateTime<Utc>,
-    interval: i32,
+    interval: f64,
     review_count: i32,
     difficulty: f64,
 ) -> f64 {
@@ -154,7 +154,7 @@ pub fn calculate_priority_score(
     let mut priority = if is_due {
         // Items that are due get highest priority
         // New items (interval 0) or low intervals get higher priority
-        10.0 - (interval as f64 / 10.0)
+        10.0 - (interval / 10.0)
     } else if days_until_due <= 1 {
         8.0
     } else if days_until_due <= 3 {

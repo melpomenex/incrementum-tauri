@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useDocumentStore, useTabsStore } from "../../stores";
 import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
@@ -35,6 +36,7 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
   const [viewMode, setViewMode] = useState<ViewMode>("document");
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
@@ -83,6 +85,12 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
         return;
       }
 
+      // F11 for fullscreen toggle
+      if (e.key === "F11") {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+
       // Ctrl/Cmd + F for search
       if ((e.ctrlKey || e.metaKey) && e.key === "f") {
         e.preventDefault();
@@ -98,19 +106,22 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
         }
       }
 
-      // Escape to close dialogs
+      // Escape to close dialogs or exit fullscreen
       if (e.key === "Escape") {
         if (showSearch) setShowSearch(false);
         if (isExtractDialogOpen) {
           setIsExtractDialogOpen(false);
           setSelectedText("");
         }
+        if (isFullscreen) {
+          toggleFullscreen();
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [viewMode, showSearch, isExtractDialogOpen]);
+  }, [viewMode, showSearch, isExtractDialogOpen, isFullscreen]);
 
   const loadDocumentData = async (doc: typeof currentDocument) => {
     if (!doc) return;
@@ -210,6 +221,21 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
   const handleSearch = () => {
     // TODO: Implement actual document search
     console.log("Searching for:", searchQuery);
+  };
+
+  const toggleFullscreen = async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      if (isFullscreen) {
+        await appWindow.setFullscreen(false);
+        setIsFullscreen(false);
+      } else {
+        await appWindow.setFullscreen(true);
+        setIsFullscreen(true);
+      }
+    } catch (error) {
+      console.error("Failed to toggle fullscreen:", error);
+    }
   };
 
   // Handle rating from keyboard shortcuts
@@ -475,6 +501,22 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
               >
                 <RotateCw className="w-4 h-4" />
               </button>
+
+              <div className="h-6 w-px bg-border mx-2" />
+
+              {/* Fullscreen Toggle */}
+              <button
+                onClick={toggleFullscreen}
+                className={cn(
+                  "p-2 rounded-md transition-colors",
+                  isFullscreen
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted text-muted-foreground"
+                )}
+                title={isFullscreen ? "Exit Fullscreen (F11 or Esc)" : "Enter Fullscreen (F11)"}
+              >
+                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+              </button>
             </>
           )}
         </div>
@@ -582,6 +624,27 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
           documentId={documentId}
           onRatingSubmitted={handleRating}
         />
+      )}
+
+      {/* Floating Fullscreen Control Bar (visible on hover in fullscreen mode) */}
+      {isFullscreen && (
+        <div className="fixed top-0 left-0 right-0 z-50 group">
+          {/* Semi-transparent trigger area */}
+          <div className="h-8 bg-transparent hover:bg-black/20 transition-colors">
+            {/* Control bar that appears on hover */}
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center py-2">
+              <button
+                onClick={toggleFullscreen}
+                className="flex items-center gap-2 px-4 py-2 bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg hover:bg-background transition-colors"
+                title="Exit Fullscreen (F11 or Esc)"
+              >
+                <Minimize className="w-4 h-4 text-foreground" />
+                <span className="text-sm font-medium text-foreground">Exit Fullscreen</span>
+                <span className="text-xs text-muted-foreground ml-2">(Press F11 or Esc)</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

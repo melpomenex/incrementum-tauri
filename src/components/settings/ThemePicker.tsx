@@ -8,6 +8,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Theme, ThemeId } from '../../types/theme';
 import { Check, Palette, Download, Upload, Trash2, Eye } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { ThemeGallery } from './ThemeGallery';
 
 interface ThemeCardProps {
   theme: Theme;
@@ -104,6 +105,7 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
   const [showCustomize, setShowCustomize] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null);
 
   const handleSelectTheme = (themeId: ThemeId) => {
@@ -238,6 +240,14 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowGallery(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-muted transition-colors"
+            title="View all themes in gallery"
+          >
+            <Eye className="w-4 h-4" />
+            Gallery
+          </button>
+          <button
             onClick={handleImportTheme}
             className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-muted transition-colors"
             title="Import theme"
@@ -330,6 +340,17 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
           <span className="font-semibold">Create Custom Theme</span>
         </button>
       </div>
+
+      {/* Theme Gallery Modal */}
+      {showGallery && (
+        <ThemeGallery
+          onClose={() => setShowGallery(false)}
+          onThemeSelect={(themeId) => {
+            setTheme(themeId);
+            setShowGallery(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -115,3 +115,20 @@ export async function openFolderPicker(options?: {
 
   return selected;
 }
+
+/**
+ * Result from fetching URL content
+ */
+export interface FetchedUrlContent {
+  file_path: string;
+  file_name: string;
+  content_type: string;
+}
+
+/**
+ * Fetch content from a URL and save it to a temporary location
+ * Used for Arxiv PDF downloads and URL-based imports
+ */
+export async function fetchUrlContent(url: string): Promise<FetchedUrlContent> {
+  return await invoke<FetchedUrlContent>("fetch_url_content", { url });
+}

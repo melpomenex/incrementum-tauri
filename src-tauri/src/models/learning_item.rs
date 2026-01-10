@@ -43,7 +43,8 @@ pub struct LearningItem {
     pub cloze_text: Option<String>,
     pub cloze_ranges: Option<Vec<(usize, usize)>>,
     pub difficulty: i32,
-    pub interval: i32,
+    /// Interval in days (can be fractional for learning items, e.g., 0.1 = 2.4 hours)
+    pub interval: f64,
     pub ease_factor: f64,
     pub due_date: DateTime<Utc>,
     pub date_created: DateTime<Utc>,
@@ -87,7 +88,7 @@ impl LearningItem {
             cloze_text: None,
             cloze_ranges: None,
             difficulty: 3,
-            interval: 0,
+            interval: 0.0,
             ease_factor: 2.5,
             due_date: now,
             date_created: now,

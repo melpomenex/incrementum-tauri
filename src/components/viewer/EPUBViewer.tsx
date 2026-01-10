@@ -158,8 +158,9 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
             width: "100%",
             height: "100%",
             spread: "none",
-            flow: "scrolled",
+            flow: "scrolled-doc",  // Use "scrolled-doc" for better Linux scroll support
             allowScriptedContent: true,
+            manager: "default",      // Use default manager for better scroll handling
           });
 
           renditionInstance = rendition;
@@ -197,13 +198,20 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
             });
             console.log(`EPUBViewer: Removed ${styleTags.length} EPUB style tags`);
 
-            // Force inline style cleanup
+            // Force inline style cleanup - but preserve overflow settings
             const allElements = contents.document.querySelectorAll('*');
             allElements.forEach((el: any) => {
               if (el.style && el.style.cssText) {
                 // Keep only certain inline styles, remove others
                 el.setAttribute('data-original-style', el.style.cssText);
+                // Preserve overflow properties for scrolling
+                const overflow = el.style.overflow;
+                const overflowX = el.style.overflowX;
+                const overflowY = el.style.overflowY;
                 el.style.cssText = '';
+                if (overflow) el.style.overflow = overflow;
+                if (overflowX) el.style.overflowX = overflowX;
+                if (overflowY) el.style.overflowY = overflowY;
               }
             });
 
@@ -224,6 +232,8 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
                 color: inherit !important;
                 background: transparent !important;
                 max-width: 100% !important;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
               }
               body {
                 font-size: ${fontSize}% !important;
@@ -409,8 +419,55 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
   };
 
   const handleTocClick = async (href: string) => {
-    if (rendition) {
-      await rendition.display(href);
+    if (!rendition || !book) return;
+
+    try {
+      console.log("EPUBViewer: TOC clicked, href:", href);
+
+      // The href from TOC might be a relative path or a full URL
+      // Try to display directly first
+      try {
+        await rendition.display(href);
+        console.log("EPUBViewer: Successfully navigated to:", href);
+        return;
+      } catch (e) {
+        console.log("EPUBViewer: Direct display failed, trying to resolve spine item:", e);
+      }
+
+      // If direct display fails, try to find the spine item
+      const spine = await book.loaded.spine;
+      const spineItem = spine.get(href);
+
+      if (spineItem) {
+        console.log("EPUBViewer: Found spine item, displaying:", spineItem.href);
+        await rendition.display(spineItem.href);
+        return;
+      }
+
+      // Try searching through TOC to find a matching item
+      const searchToc = (items: any[]) => {
+        for (const item of items) {
+          if (item.href === href || item.href?.endsWith?.(href)) {
+            return item;
+          }
+          if (item.subitems) {
+            const found = searchToc(item.subitems);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const tocItem = searchToc(toc);
+      if (tocItem) {
+        console.log("EPUBViewer: Found TOC item, displaying:", tocItem.href);
+        await rendition.display(tocItem.href);
+        return;
+      }
+
+      console.warn("EPUBViewer: Could not resolve TOC href:", href);
+    } catch (error) {
+      console.error("EPUBViewer: Error navigating to TOC item:", error);
     }
   };
 
@@ -528,54 +585,35 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
         </svg>
       </button>
 
-      {/* Always render this div so the ref is available */}
-      <div
-        ref={viewerRef}
-        className="flex flex-1 overflow-hidden"
-        style={{ opacity: isLoading ? 0 : 1 }}
-      >
-        <div className="flex flex-1 h-full">
-          {/* Sidebar - Table of Contents */}
-          {toc.length > 0 && (
-            <div className="w-64 border-r border-border bg-card overflow-y-auto z-10">
-              <div className="p-4 border-b border-border">
-                <h3 className="font-semibold text-foreground">Table of Contents</h3>
-              </div>
-              <nav className="p-2">
-                {toc.map((chapter, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleTocClick(chapter.href)}
-                    className="block w-full text-left px-3 py-2 text-sm text-foreground hover:bg-muted rounded-md transition-colors"
-                  >
-                    {chapter.label}
-                  </button>
-                ))}
-              </nav>
+      {/* Main content area with sidebar and viewer */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar - Table of Contents (sibling to viewer) */}
+        {toc.length > 0 && (
+          <div className="w-64 border-r border-border bg-card overflow-y-auto z-10 flex-shrink-0">
+            <div className="p-4 border-b border-border">
+              <h3 className="font-semibold text-foreground">Table of Contents</h3>
             </div>
-          )}
-
-          {/* Main Viewer */}
-          <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <div
-              id="epub-viewer-area"
-              className={cn(
-                "flex-1 overflow-auto",
-                "bg-background"
-              )}
-              style={{
-                minHeight: "600px",
-                height: "100%",
-                // Add proper padding for readability
-                padding: "2rem 3rem",
-                // Add extra padding at bottom to account for help tooltip
-                paddingBottom: "80px",
-                // Ensure consistent text rendering
-                color: "inherit",
-                lineHeight: "1.6",
-              }}
-            />
+            <nav className="p-2">
+              {toc.map((chapter, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleTocClick(chapter.href)}
+                  className="block w-full text-left px-3 py-2 text-sm text-foreground hover:bg-muted rounded-md transition-colors"
+                >
+                  {chapter.label}
+                </button>
+              ))}
+            </nav>
           </div>
+        )}
+
+        {/* EPUB viewer container - epubjs renders directly into this */}
+        <div className="flex-1 overflow-hidden relative">
+          <div
+            ref={viewerRef}
+            className="absolute inset-0"
+            style={{ opacity: isLoading ? 0 : 1 }}
+          />
         </div>
       </div>
 

@@ -355,7 +355,7 @@ fn build_learning_item(
     }
     item.answer = answer;
     item.cloze_text = cloze_text;
-    item.interval = card.interval;
+    item.interval = card.interval as f64;
     item.ease_factor = card.ease;
     if card.interval > 0 {
         item.due_date = Utc::now() + Duration::days(card.interval as i64);

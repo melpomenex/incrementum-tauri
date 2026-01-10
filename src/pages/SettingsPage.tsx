@@ -3,8 +3,10 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { AISettings } from "../components/settings/AISettings";
 import { SyncSettings } from "../components/settings/SyncSettings";
 import { IntegrationSettings } from "../components/settings/IntegrationSettings";
+import { AudioTranscriptionSettings } from "../components/settings/AudioTranscriptionSettings";
+import { SmartQueuesSettings } from "../components/settings/SmartQueuesSettings";
 
-type SettingsTab = "general" | "ai" | "sync" | "integrations" | "about";
+type SettingsTab = "general" | "ai" | "sync" | "integrations" | "audio-transcription" | "smart-queues" | "about";
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -22,6 +24,8 @@ export function SettingsPage() {
             { id: "ai" as const, label: "AI", icon: "🤖" },
             { id: "sync" as const, label: "Sync", icon: "☁️" },
             { id: "integrations" as const, label: "Integrations", icon: "🔗" },
+            { id: "audio-transcription" as const, label: "Audio Transcription", icon: "🎤" },
+            { id: "smart-queues" as const, label: "Smart Queues", icon: "🧠" },
             { id: "about" as const, label: "About", icon: "ℹ️" },
           ].map((tab) => (
             <button
@@ -46,6 +50,8 @@ export function SettingsPage() {
         {activeTab === "ai" && <AISettings />}
         {activeTab === "sync" && <SyncSettings />}
         {activeTab === "integrations" && <IntegrationSettings />}
+        {activeTab === "audio-transcription" && <AudioTranscriptionTab />}
+        {activeTab === "smart-queues" && <SmartQueuesTab />}
         {activeTab === "about" && <AboutSettings />}
       </div>
     </div>
@@ -244,5 +250,35 @@ function AboutSettings() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AudioTranscriptionTab() {
+  const { settings, updateSettings } = useSettingsStore();
+
+  const handleUpdateSettings = (updates: Partial<typeof settings.audioTranscription>) => {
+    updateSettings({ audioTranscription: { ...settings.audioTranscription, ...updates } });
+  };
+
+  return (
+    <AudioTranscriptionSettings
+      settings={settings.audioTranscription}
+      onUpdateSettings={handleUpdateSettings}
+    />
+  );
+}
+
+function SmartQueuesTab() {
+  const { settings, updateSettings } = useSettingsStore();
+
+  const handleUpdateSettings = (updates: Partial<typeof settings.smartQueue>) => {
+    updateSettings({ smartQueue: { ...settings.smartQueue, ...updates } });
+  };
+
+  return (
+    <SmartQueuesSettings
+      settings={settings.smartQueue}
+      onUpdateSettings={handleUpdateSettings}
+    />
   );
 }

@@ -36,7 +36,7 @@ pub struct QueueExportItem {
     pub answer: Option<String>,
     pub due_date: String,
     pub state: String,
-    pub interval: i32,
+    pub interval: f64,
     pub tags: Vec<String>,
     pub category: Option<String>,
 }

@@ -561,7 +561,7 @@ fn parse_learning_item_row(row: &sqlx::sqlite::SqliteRow) -> Result<LearningItem
         cloze_text: row.try_get::<Option<String>, _>("cloze_text").unwrap_or(None),
         cloze_ranges: None,
         difficulty: row.try_get::<i64, _>("difficulty").unwrap_or(3) as i32,
-        interval: row.try_get::<i64, _>("interval").unwrap_or(0) as i32,
+        interval: row.try_get::<f64, _>("interval").unwrap_or(0.0),
         ease_factor: row.try_get("ease_factor").unwrap_or(2.5),
         due_date: row.try_get("due_date")?,
         date_created: row.try_get("date_created")?,

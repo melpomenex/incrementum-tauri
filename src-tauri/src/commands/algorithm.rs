@@ -152,7 +152,7 @@ pub struct PriorityScoreItem {
     pub item_id: String,
     pub priority_score: f64,
     pub due_date: String,
-    pub interval: i32,
+    pub interval: f64,
     pub review_count: i32,
     pub difficulty: f64,
 }
@@ -200,7 +200,7 @@ pub struct AlgorithmParams {
     pub stability: Option<f32>,
     pub difficulty: Option<f32>,
     pub ease_factor: Option<f64>,
-    pub interval: i32,
+    pub interval: f64,
     pub review_count: i32,
 }
 

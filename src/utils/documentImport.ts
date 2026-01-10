@@ -5,6 +5,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { Document } from '../types/document';
+import { fetchUrlContent } from '../api/documents';
 
 /**
  * Fetch content from a URL and create a document
@@ -15,16 +16,20 @@ export async function importFromUrl(url: string): Promise<Omit<Document, 'id'>> 
     const validUrl = new URL(url);
 
     // Fetch content through Tauri backend to avoid CORS
-    const content = await invoke<string>('fetch_url_content', { url: validUrl.toString() });
+    const fetched = await fetchUrlContent(validUrl.toString());
 
     // Extract metadata from URL
     const urlParts = validUrl.pathname.split('/');
     const fileName = urlParts[urlParts.length - 1] || validUrl.hostname;
     const title = fileName.replace(/\.(html?|md|txt)$/i, '') || `Web Content - ${validUrl.hostname}`;
 
-    // Determine file type
+    // Determine file type from fetched content type
     let fileType: Document['fileType'] = 'html';
-    if (url.match(/\.(md|markdown)$/i)) {
+    if (fetched.content_type.includes('pdf')) {
+      fileType = 'pdf';
+    } else if (fetched.content_type.includes('markdown') || fetched.content_type.includes('text/markdown')) {
+      fileType = 'markdown';
+    } else if (url.match(/\.(md|markdown)$/i)) {
       fileType = 'markdown';
     } else if (url.match(/\.(txt)$/i)) {
       fileType = 'other';
@@ -33,10 +38,10 @@ export async function importFromUrl(url: string): Promise<Omit<Document, 'id'>> 
     // Create document object
     const document: Omit<Document, 'id'> = {
       title: title,
-      filePath: url, // Store original URL
+      filePath: fetched.file_path,
       fileType: fileType,
-      content: content,
-      contentHash: await generateHash(content),
+      content: `Imported from ${url}`,
+      contentHash: await generateHash(fetched.file_path),
       category: 'Web Import',
       tags: ['web-import', new URL(url).hostname],
       dateAdded: new Date().toISOString(),
@@ -75,17 +80,17 @@ export async function importFromArxiv(input: string): Promise<Omit<Document, 'id
     // Fetch paper metadata from Arxiv API
     const metadata = await fetchArxivMetadata(arxivId);
 
-    // Download PDF
+    // Download PDF using the backend fetch function
     const pdfUrl = `https://arxiv.org/pdf/${arxivId}.pdf`;
-    const pdfContent = await invoke<string>('fetch_url_content', { url: pdfUrl });
+    const fetched = await fetchUrlContent(pdfUrl);
 
     // Create document object
     const document: Omit<Document, 'id'> = {
       title: metadata.title,
-      filePath: pdfUrl,
+      filePath: fetched.file_path,
       fileType: 'pdf',
       content: metadata.abstract,
-      contentHash: await generateHash(pdfContent),
+      contentHash: await generateHash(fetched.file_path),
       category: 'Research Papers',
       tags: [
         'arxiv',
@@ -111,6 +116,7 @@ export async function importFromArxiv(input: string): Promise<Omit<Document, 'id
         arxivId: arxivId,
         arxivUrl: `https://arxiv.org/abs/${arxivId}`,
         pdfUrl: pdfUrl,
+        originalFileName: fetched.file_name,
       },
     };
 
