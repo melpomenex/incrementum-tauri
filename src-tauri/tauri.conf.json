@@ -5,7 +5,7 @@
   "identifier": "com.incrementum.app",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:15173",
+    "devUrl": "http://127.0.0.1:15173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },

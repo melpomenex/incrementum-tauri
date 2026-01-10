@@ -3,7 +3,6 @@
  */
 
 import { useState } from "react";
-import { useTheme, useAvailableThemes } from "../common/ThemeSystem";
 import {
   Settings as SettingsIcon,
   Sliders,
@@ -25,6 +24,7 @@ import { SyncSettings as SyncSettingsOriginal } from "./SyncSettings";
 import { LearningSettings } from "./LearningSettings";
 import { DocumentsSettings } from "./DocumentsSettings";
 import { CloudStorageSettings } from "./CloudStorageSettings";
+import { ThemePicker } from "./ThemePicker";
 
 /**
  * Settings tab
@@ -346,57 +346,10 @@ function GeneralSettings({ onChange }: { onChange: () => void }) {
  * Appearance Settings Component
  */
 function AppearanceSettings({ onChange }: { onChange: () => void }) {
-  const { theme, setTheme } = useTheme();
-  const availableThemes = useAvailableThemes();
-
   return (
     <>
-      <SettingsSection
-        title="Theme"
-        description="Customize the look and feel"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Base Theme</label>
-            <div className="grid grid-cols-5 gap-2">
-              {availableThemes.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setTheme(t);
-                    onChange();
-                  }}
-                  className={`p-4 rounded-lg border-2 transition-all ${
-                    theme.id === t.id
-                      ? "border-primary shadow-lg"
-                      : "border-border hover:border-muted-foreground"
-                  }`}
-                  style={{ backgroundColor: t.colors.background }}
-                >
-                  <div className="space-y-2">
-                    <div
-                      className="w-full h-4 rounded"
-                      style={{ backgroundColor: t.colors.primary }}
-                    />
-                    <div className="flex gap-1">
-                      <div
-                        className="w-1/2 h-2 rounded"
-                        style={{ backgroundColor: t.colors.accent }}
-                      />
-                      <div
-                        className="w-1/2 h-2 rounded"
-                        style={{ backgroundColor: t.colors.success }}
-                      />
-                    </div>
-                  </div>
-                  <p className="text-xs mt-2 text-center" style={{ color: t.colors.foreground }}>
-                    {t.name}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+      <SettingsSection title="Theme" description="Customize the look and feel">
+        <ThemePicker />
       </SettingsSection>
 
       <SettingsSection

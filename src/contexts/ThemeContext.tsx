@@ -25,6 +25,25 @@ function applyThemeToDOM(theme: Theme): void {
     root.style.setProperty(`--color-${key}`, value);
   });
 
+  // Map theme colors to shared UI tokens used by Tailwind classes.
+  root.style.setProperty('--color-foreground', theme.colors.onBackground || theme.colors.text);
+  root.style.setProperty('--color-muted', theme.colors.surfaceVariant || theme.colors.surface);
+  root.style.setProperty(
+    '--color-muted-foreground',
+    theme.colors.textSecondary || theme.colors.onSurface || theme.colors.onBackground
+  );
+  root.style.setProperty('--color-card', theme.colors.card || theme.colors.surface);
+  root.style.setProperty('--color-card-foreground', theme.colors.onSurface || theme.colors.text);
+  root.style.setProperty('--color-border', theme.colors.border || theme.colors.outline);
+  root.style.setProperty(
+    '--color-input',
+    theme.colors.input || theme.colors.surfaceVariant || theme.colors.surface
+  );
+  root.style.setProperty('--color-destructive', theme.colors.error);
+  root.style.setProperty('--color-destructive-foreground', theme.colors.onError || theme.colors.onBackground);
+  root.style.setProperty('--color-primary-foreground', theme.colors.onPrimary);
+  root.style.setProperty('--color-secondary-foreground', theme.colors.onSecondary || theme.colors.onPrimary);
+
   // Apply typography
   root.style.setProperty('--font-family', theme.typography.fontFamily);
   Object.entries(theme.typography.fontSize).forEach(([key, value]) => {

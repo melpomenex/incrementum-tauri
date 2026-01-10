@@ -1,7 +1,7 @@
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { emit } from "@tauri-apps/api/event";
-import { appWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type CaptureMode = "region" | "screen" | "app";
 
@@ -27,6 +27,7 @@ function getOverlayParams() {
 
 export default function ScreenshotOverlay() {
   const { screenIndex, scaleFactor } = useMemo(() => getOverlayParams(), []);
+  const appWindow = useMemo(() => getCurrentWindow(), []);
   const [mode, setMode] = useState<CaptureMode>("region");
   const [dragState, setDragState] = useState<DragState>(null);
 

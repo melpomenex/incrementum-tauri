@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useTheme } from "../common/ThemeSystem";
+import { useTheme } from "../../contexts/ThemeContext";
 
 /**
  * Graph node types
@@ -103,7 +103,10 @@ export function KnowledgeGraph({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
-  const theme = useTheme();
+  const { theme } = useTheme();
+  const accentColor = theme.colors.secondary;
+  const infoColor = theme.colors.link;
+  const textColor = theme.colors.onBackground || theme.colors.text;
 
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
   const [isDragging, setIsDragging] = useState(false);
@@ -251,7 +254,7 @@ export function KnowledgeGraph({
       ctx.lineTo(target.x, target.y);
 
       // Edge style based on type
-      const colors = theme.theme.colors;
+      const colors = theme.colors;
       let strokeColor = colors.border;
       let strokeWidth = 1;
 
@@ -265,7 +268,7 @@ export function KnowledgeGraph({
           strokeWidth = 1;
           break;
         case "related":
-          strokeColor = colors.accent;
+          strokeColor = accentColor;
           strokeWidth = 1;
           break;
         case "derived":
@@ -273,7 +276,7 @@ export function KnowledgeGraph({
           strokeWidth = 2;
           break;
         case "tagged":
-          strokeColor = colors.muted;
+          strokeColor = colors.outlineVariant;
           strokeWidth = 1;
           break;
       }
@@ -290,7 +293,7 @@ export function KnowledgeGraph({
         const midY = (source.y + target.y) / 2;
 
         ctx.font = `${10 / transform.k}px sans-serif`;
-        ctx.fillStyle = colors.mutedForeground;
+        ctx.fillStyle = colors.textSecondary;
         ctx.textAlign = "center";
         ctx.fillText(edge.label, midX, midY);
       }
@@ -308,13 +311,13 @@ export function KnowledgeGraph({
       // Node color based on type
       let nodeColor = node.color;
       if (!nodeColor) {
-        const colors = theme.theme.colors;
+        const colors = theme.colors;
         switch (node.type) {
           case GraphNodeType.Document:
             nodeColor = colors.primary;
             break;
           case GraphNodeType.Extract:
-            nodeColor = colors.accent;
+            nodeColor = accentColor;
             break;
           case GraphNodeType.Flashcard:
             nodeColor = colors.success;
@@ -323,7 +326,7 @@ export function KnowledgeGraph({
             nodeColor = colors.warning;
             break;
           case GraphNodeType.Tag:
-            nodeColor = colors.info;
+            nodeColor = infoColor;
             break;
         }
       }
@@ -344,7 +347,7 @@ export function KnowledgeGraph({
 
       // Draw border
       if (isSelected || isHighlighted) {
-        ctx.strokeStyle = theme.theme.colors.foreground;
+        ctx.strokeStyle = textColor;
         ctx.lineWidth = 2 / transform.k;
         ctx.stroke();
       }
@@ -352,7 +355,7 @@ export function KnowledgeGraph({
       // Draw label
       if (showLabels || isHovered || isSelected) {
         ctx.font = `${isHovered || isSelected ? 14 : 12 / transform.k}px sans-serif`;
-        ctx.fillStyle = theme.theme.colors.foreground;
+        ctx.fillStyle = textColor;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillText(node.label, pos.x, pos.y + (node.radius || 20) + 5);
@@ -366,6 +369,9 @@ export function KnowledgeGraph({
     laidOutNodes,
     transform,
     theme,
+    accentColor,
+    infoColor,
+    textColor,
     selectedNode,
     highlightedNodes,
     hoveredNode,
@@ -540,23 +546,23 @@ export function KnowledgeGraph({
         <h3 className="text-sm font-semibold mb-2">Legend</h3>
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full" style={{ background: theme.theme.colors.primary }} />
+            <div className="w-3 h-3 rounded-full" style={{ background: theme.colors.primary }} />
             <span>Documents</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full" style={{ background: theme.theme.colors.accent }} />
+            <div className="w-3 h-3 rounded-full" style={{ background: accentColor }} />
             <span>Extracts</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full" style={{ background: theme.theme.colors.success }} />
+            <div className="w-3 h-3 rounded-full" style={{ background: theme.colors.success }} />
             <span>Flashcards</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full" style={{ background: theme.theme.colors.warning }} />
+            <div className="w-3 h-3 rounded-full" style={{ background: theme.colors.warning }} />
             <span>Categories</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full" style={{ background: theme.theme.colors.info }} />
+            <div className="w-3 h-3 rounded-full" style={{ background: infoColor }} />
             <span>Tags</span>
           </div>
         </div>

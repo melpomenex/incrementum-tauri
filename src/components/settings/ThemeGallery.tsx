@@ -97,7 +97,7 @@ function ColorPalette({ theme }: { theme: Theme }) {
   const colors = [
     theme.colors.primary,
     theme.colors.secondary,
-    theme.colors.tertiary,
+    theme.colors.primaryContainer,
     theme.colors.error,
     theme.colors.warning,
     theme.colors.success,
@@ -173,13 +173,13 @@ function ThemeGalleryCard({
         <div className="flex items-center justify-between mt-0.5">
           <span
             className="text-xs"
-            style={{ color: theme.colors.onSurfaceVariant }}
+            style={{ color: theme.colors.textSecondary }}
           >
             {theme.variant}
           </span>
           <Smartphone
             className="w-3 h-3"
-            style={{ color: theme.colors.onSurfaceVariant }}
+            style={{ color: theme.colors.textSecondary }}
           />
         </div>
       </div>
@@ -249,14 +249,14 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
             >
               Theme Gallery
             </h2>
-            <p className="text-sm" style={{ color: theme.colors.onSurfaceVariant }}>
+            <p className="text-sm" style={{ color: theme.colors.textSecondary }}>
               Preview all available themes
             </p>
           </div>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-black/5 transition-colors"
-            style={{ color: theme.colors.onSurfaceVariant }}
+            style={{ color: theme.colors.textSecondary }}
           >
             <X className="w-5 h-5" />
           </button>
@@ -269,7 +269,7 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
             <section>
               <h3
                 className="text-sm font-semibold mb-3 uppercase tracking-wide"
-                style={{ color: theme.colors.onSurfaceVariant }}
+                style={{ color: theme.colors.textSecondary }}
               >
                 Light Themes
               </h3>
@@ -291,7 +291,7 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
             <section>
               <h3
                 className="text-sm font-semibold mb-3 uppercase tracking-wide"
-                style={{ color: theme.colors.onSurfaceVariant }}
+                style={{ color: theme.colors.textSecondary }}
               >
                 Dark Themes
               </h3>
@@ -313,7 +313,7 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
             <section>
               <h3
                 className="text-sm font-semibold mb-3 uppercase tracking-wide"
-                style={{ color: theme.colors.onSurfaceVariant }}
+                style={{ color: theme.colors.textSecondary }}
               >
                 Custom Themes
               </h3>
@@ -336,7 +336,7 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
           className="flex items-center justify-between p-4 border-t"
           style={{ borderColor: theme.colors.outline }}
         >
-          <div className="text-sm" style={{ color: theme.colors.onSurfaceVariant }}>
+          <div className="text-sm" style={{ color: theme.colors.textSecondary }}>
             {themes.length} themes available
           </div>
           <button
@@ -367,7 +367,7 @@ export function ThemeGalleryButton({ onSelect }: { onSelect?: (themeId: ThemeId)
       <button
         onClick={() => setIsOpen(true)}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-black/5 transition-colors"
-        style={{ color: theme.colors.onSurfaceVariant }}
+        style={{ color: theme.colors.textSecondary }}
       >
         <Maximize2 className="w-4 h-4" />
         <span className="text-sm">Open Gallery</span>

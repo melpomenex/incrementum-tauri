@@ -24,11 +24,15 @@ export async function submitReview(
   timeTaken: number,
   sessionId?: string
 ): Promise<LearningItem> {
+  const normalizedSessionId = sessionId?.trim() ? sessionId : undefined;
   return await invoke<LearningItem>("submit_review", {
+    item_id: itemId,
     itemId,
     rating,
+    time_taken: timeTaken,
     timeTaken,
-    sessionId,
+    session_id: normalizedSessionId,
+    sessionId: normalizedSessionId,
   });
 }
 
@@ -40,6 +44,7 @@ export async function previewReviewIntervals(
   itemId: string
 ): Promise<PreviewIntervals> {
   return await invoke<PreviewIntervals>("preview_review_intervals", {
+    item_id: itemId,
     itemId,
   });
 }

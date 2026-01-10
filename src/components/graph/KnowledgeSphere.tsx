@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { GraphNode, GraphEdge, GraphNodeType } from "./KnowledgeGraph";
-import { useTheme } from "../common/ThemeSystem";
+import { useTheme } from "../../contexts/ThemeContext";
 
 /**
  * 3D point
@@ -58,7 +58,10 @@ export function KnowledgeSphere({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
-  const theme = useTheme();
+  const { theme } = useTheme();
+  const accentColor = theme.colors.secondary;
+  const infoColor = theme.colors.link;
+  const textColor = theme.colors.onBackground || theme.colors.text;
 
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -146,7 +149,7 @@ export function KnowledgeSphere({
     ctx.clearRect(0, 0, width, height);
 
     // Get colors from theme
-    const colors = theme.theme.colors;
+    const colors = theme.colors;
 
     // Sort nodes by z-depth (painter's algorithm)
     const projectedNodes = sphereNodes.current.map((node) => {
@@ -188,7 +191,7 @@ export function KnowledgeSphere({
           strokeColor = colors.success;
           break;
         case "related":
-          strokeColor = colors.accent;
+          strokeColor = accentColor;
           break;
       }
 
@@ -212,7 +215,7 @@ export function KnowledgeSphere({
             nodeColor = colors.primary;
             break;
           case GraphNodeType.Extract:
-            nodeColor = colors.accent;
+            nodeColor = accentColor;
             break;
           case GraphNodeType.Flashcard:
             nodeColor = colors.success;
@@ -221,7 +224,7 @@ export function KnowledgeSphere({
             nodeColor = colors.warning;
             break;
           case GraphNodeType.Tag:
-            nodeColor = colors.info;
+            nodeColor = infoColor;
             break;
         }
       }
@@ -255,7 +258,7 @@ export function KnowledgeSphere({
 
       // Draw border for selected/hovered
       if (hoveredNode === node.id) {
-        ctx.strokeStyle = colors.foreground;
+        ctx.strokeStyle = textColor;
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -263,7 +266,7 @@ export function KnowledgeSphere({
       // Draw label
       if (showLabels && projected.scale > 0.5) {
         ctx.font = `${10 * projected.scale}px sans-serif`;
-        ctx.fillStyle = colors.foreground;
+        ctx.fillStyle = textColor;
         ctx.globalAlpha = opacity;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
@@ -271,7 +274,18 @@ export function KnowledgeSphere({
         ctx.globalAlpha = 1;
       }
     });
-  }, [edges, project, theme, hoveredNode, showLabels, nodeSize, edgeOpacity]);
+  }, [
+    edges,
+    project,
+    theme,
+    accentColor,
+    infoColor,
+    textColor,
+    hoveredNode,
+    showLabels,
+    nodeSize,
+    edgeOpacity,
+  ]);
 
   // Animation loop
   useEffect(() => {
@@ -460,47 +474,49 @@ export function KnowledgeSphere({
  * Hook to manage sphere theming
  */
 export function useSphereThemess() {
-  const theme = useTheme();
+  const { theme } = useTheme();
+  const accentColor = theme.colors.secondary;
+  const infoColor = theme.colors.link;
 
   const getNodeTypeColor = useCallback(
     (type: GraphNodeType): string => {
-      const colors = theme.theme.colors;
+      const colors = theme.colors;
       switch (type) {
         case GraphNodeType.Document:
           return colors.primary;
         case GraphNodeType.Extract:
-          return colors.accent;
+          return accentColor;
         case GraphNodeType.Flashcard:
           return colors.success;
         case GraphNodeType.Category:
           return colors.warning;
         case GraphNodeType.Tag:
-          return colors.info;
+          return infoColor;
       }
     },
-    [theme]
+    [theme, accentColor, infoColor]
   );
 
   const getEdgeTypeColor = useCallback(
     (type?: string): string => {
-      const colors = theme.theme.colors;
+      const colors = theme.colors;
       switch (type) {
         case "reference":
           return colors.primary;
         case "derived":
           return colors.success;
         case "related":
-          return colors.accent;
+          return accentColor;
         default:
           return colors.border;
       }
     },
-    [theme]
+    [theme, accentColor]
   );
 
   return {
     getNodeTypeColor,
     getEdgeTypeColor,
-    theme: theme.theme,
+    theme,
   };
 }

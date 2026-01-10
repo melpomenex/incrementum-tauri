@@ -33,6 +33,12 @@
   --radius-xl: 0.75rem;
 }
 
+@layer base {
+  .text-foreground-secondary {
+    color: var(--color-muted-foreground);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   @theme {
     --color-background: #020817;
