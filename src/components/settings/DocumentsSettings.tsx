@@ -1,7 +1,9 @@
 import { useSettingsStore } from "../../stores/settingsStore";
+import { OCRSettings } from "./OCRSettings";
 
 export function DocumentsSettings() {
   const { settings, updateSettings } = useSettingsStore();
+  const { updateSettingsCategory } = useSettingsStore();
 
   return (
     <div className="space-y-6">
@@ -292,80 +294,15 @@ export function DocumentsSettings() {
       {/* OCR Settings */}
       <div>
         <h3 className="text-lg font-semibold mb-3">OCR (Optical Character Recognition)</h3>
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="ocrProvider" className="block text-sm font-medium mb-2">
-              OCR Provider
-            </label>
-            <select
-              id="ocrProvider"
-              value={settings.documents.ocr.provider}
-              onChange={(e) =>
-                updateSettings({
-                  documents: {
-                    ...settings.documents,
-                    ocr: { ...settings.documents.ocr, provider: e.target.value as any },
-                  },
-                })
-              }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
-            >
-              <option value="tesseract">Tesseract (Local)</option>
-              <option value="google">Google Document AI</option>
-              <option value="aws">AWS Textract</option>
-              <option value="azure">Azure Computer Vision</option>
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="ocrLanguage" className="block text-sm font-medium mb-2">
-              OCR Language
-            </label>
-            <select
-              id="ocrLanguage"
-              value={settings.documents.ocr.language}
-              onChange={(e) =>
-                updateSettings({
-                  documents: {
-                    ...settings.documents,
-                    ocr: { ...settings.documents.ocr, language: e.target.value },
-                  },
-                })
-              }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
-            >
-              <option value="eng">English</option>
-              <option value="spa">Spanish</option>
-              <option value="fra">French</option>
-              <option value="deu">German</option>
-              <option value="chi_sim">Chinese (Simplified)</option>
-              <option value="jpn">Japanese</option>
-              <option value="kor">Korean</option>
-            </select>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Auto-OCR images</p>
-              <p className="text-xs text-muted-foreground">
-                Automatically OCR images in imported documents
-              </p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.documents.ocr.autoOCR}
-                onChange={(e) =>
-                  updateSettings({
-                    documents: { ...settings.documents, ocr: { ...settings.documents.ocr, autoOCR: e.target.checked } },
-                  })
-                }
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-            </label>
-          </div>
-        </div>
+        <OCRSettings
+          settings={settings.documents.ocr}
+          onUpdateSettings={(updates) =>
+            updateSettingsCategory("documents", {
+              ...settings.documents,
+              ocr: { ...settings.documents.ocr, ...updates },
+            })
+          }
+        />
       </div>
 
       {/* Storage */}

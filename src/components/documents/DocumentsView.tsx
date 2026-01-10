@@ -1,0 +1,927 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link2, List, Search, X, Youtube, LayoutGrid } from "lucide-react";
+import { useDocumentStore } from "../../stores/documentStore";
+import type { Document } from "../../types/document";
+import {
+  DocumentSortDirection,
+  DocumentSortKey,
+  DocumentViewMode,
+  SMART_SECTION_LABELS,
+  formatRelativeTime,
+  getLastTouched,
+  getNextAction,
+  getPriorityReason,
+  getPrioritySignal,
+  getPriorityTier,
+  getProgressSegments,
+  getSmartSection,
+  matchesDocumentSearch,
+  parseDocumentSearch,
+  sortDocuments,
+} from "../../utils/documentsView";
+import { importYouTubeVideo } from "../../api/documents";
+
+const MODE_STORAGE_KEY = "documentsViewMode";
+const SAVED_VIEWS_KEY = "documentsSavedViews";
+const MAX_VISIBLE_TAGS = 3;
+
+type SavedView = {
+  id: string;
+  name: string;
+  query: string;
+  sortKey: DocumentSortKey;
+  sortDirection: DocumentSortDirection;
+  mode: DocumentViewMode;
+  showNextAction: boolean;
+};
+
+const defaultSortByKey: Record<DocumentSortKey, DocumentSortDirection> = {
+  priority: "desc",
+  lastTouched: "desc",
+  added: "desc",
+  title: "asc",
+  type: "asc",
+  extracts: "desc",
+  cards: "desc",
+};
+
+interface DocumentsViewProps {
+  onOpenDocument?: (doc: Document) => void;
+  enableYouTubeImport?: boolean;
+}
+
+export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: DocumentsViewProps) {
+  const {
+    documents,
+    isLoading,
+    isImporting,
+    importProgress,
+    error,
+    loadDocuments,
+    openFilePickerAndImport,
+    importFromFiles,
+    updateDocument,
+  } = useDocumentStore();
+
+  const [mode, setMode] = useState<DocumentViewMode>(() => {
+    if (typeof window === "undefined") return "grid";
+    const stored = window.localStorage.getItem(MODE_STORAGE_KEY);
+    return stored === "list" ? "list" : "grid";
+  });
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sortKey, setSortKey] = useState<DocumentSortKey>("priority");
+  const [sortDirection, setSortDirection] = useState<DocumentSortDirection>("desc");
+  const [showNextAction, setShowNextAction] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isInspectorOpen, setInspectorOpen] = useState(true);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [showYouTubeImport, setShowYouTubeImport] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeError, setYoutubeError] = useState<string | null>(null);
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
+
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
+    if (typeof window === "undefined") return [];
+    const stored = window.localStorage.getItem(SAVED_VIEWS_KEY);
+    if (!stored) return [];
+    try {
+      const parsed = JSON.parse(stored) as SavedView[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearch(searchInput);
+    }, 150);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MODE_STORAGE_KEY, mode);
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(savedViews));
+    }
+  }, [savedViews]);
+
+  const searchTokens = useMemo(() => parseDocumentSearch(debouncedSearch), [debouncedSearch]);
+
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => matchesDocumentSearch(doc, searchTokens));
+  }, [documents, searchTokens]);
+
+  const sortedDocuments = useMemo(() => {
+    return sortDocuments(filteredDocuments, sortKey, sortDirection);
+  }, [filteredDocuments, sortKey, sortDirection]);
+
+  const sectionedDocuments = useMemo(() => {
+    const sections: Record<string, Document[]> = {};
+    for (const doc of sortedDocuments) {
+      const section = getSmartSection(doc);
+      if (!sections[section]) sections[section] = [];
+      sections[section].push(doc);
+    }
+    return sections;
+  }, [sortedDocuments]);
+
+  useEffect(() => {
+    const visibleIds = new Set(sortedDocuments.map((doc) => doc.id));
+    setSelectedIds((prev) => new Set(Array.from(prev).filter((id) => visibleIds.has(id))));
+    if (activeId && !visibleIds.has(activeId)) {
+      setActiveId(sortedDocuments[0]?.id ?? null);
+    }
+  }, [sortedDocuments, activeId]);
+
+  const handleImport = useCallback(async () => {
+    try {
+      await openFilePickerAndImport();
+    } catch (err) {
+      console.error("Failed to import documents:", err);
+    }
+  }, [openFilePickerAndImport]);
+
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (event: React.DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDragging(false);
+
+      const files = Array.from(event.dataTransfer.files);
+      if (files.length === 0) return;
+      const filePaths = files
+        .map((file) => (file as any).path)
+        .filter((path) => path && typeof path === "string");
+
+      if (filePaths.length === 0) return;
+      try {
+        await importFromFiles(filePaths);
+      } catch (err) {
+        console.error("Failed to import dropped files:", err);
+      }
+    },
+    [importFromFiles]
+  );
+
+  const handleYouTubeImport = async () => {
+    if (!youtubeUrl.trim()) {
+      setYoutubeError("Please enter a YouTube URL");
+      return;
+    }
+    setYoutubeLoading(true);
+    setYoutubeError(null);
+    try {
+      const document = await importYouTubeVideo(youtubeUrl.trim());
+      await loadDocuments();
+      setShowYouTubeImport(false);
+      setYoutubeUrl("");
+      if (onOpenDocument) {
+        onOpenDocument(document);
+      }
+    } catch (err) {
+      setYoutubeError(err instanceof Error ? err.message : "Failed to import YouTube video");
+    } finally {
+      setYoutubeLoading(false);
+    }
+  };
+
+  const handleSelectRow = (doc: Document, multiSelect: boolean) => {
+    if (multiSelect) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(doc.id)) {
+          next.delete(doc.id);
+        } else {
+          next.add(doc.id);
+        }
+        return next;
+      });
+    } else {
+      setSelectedIds(new Set([doc.id]));
+    }
+    setActiveId(doc.id);
+  };
+
+  const handleBulkArchive = () => {
+    if (selectedIds.size === 0) return;
+    selectedIds.forEach((id) => {
+      updateDocument(id, { isArchived: true });
+    });
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkTag = () => {
+    if (selectedIds.size === 0) return;
+    const tag = window.prompt("Add tag to selected documents:");
+    if (!tag) return;
+    selectedIds.forEach((id) => {
+      const doc = documents.find((item) => item.id === id);
+      if (!doc) return;
+      const nextTags = new Set(doc.tags);
+      nextTags.add(tag);
+      updateDocument(id, { tags: Array.from(nextTags) });
+    });
+  };
+
+  const handleBulkReprioritize = () => {
+    if (selectedIds.size === 0) return;
+    const value = window.prompt("Set priority rating (0-5) for selected documents:");
+    if (!value) return;
+    const nextRating = Number(value);
+    if (Number.isNaN(nextRating)) return;
+    selectedIds.forEach((id) => {
+      updateDocument(id, { priorityRating: nextRating, priorityScore: nextRating * 20 });
+    });
+  };
+
+  const handleSort = (key: DocumentSortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(defaultSortByKey[key]);
+  };
+
+  const activeDocument = useMemo(
+    () => sortedDocuments.find((doc) => doc.id === activeId) ?? null,
+    [sortedDocuments, activeId]
+  );
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) {
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+
+      if (event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        setInspectorOpen((prev) => !prev);
+        return;
+      }
+
+      if (mode === "list" && (event.key.toLowerCase() === "j" || event.key.toLowerCase() === "k")) {
+        event.preventDefault();
+        if (sortedDocuments.length === 0) return;
+        const currentIndex = sortedDocuments.findIndex((doc) => doc.id === activeId);
+        const delta = event.key.toLowerCase() === "j" ? 1 : -1;
+        const nextIndex = currentIndex === -1 ? 0 : Math.min(sortedDocuments.length - 1, Math.max(0, currentIndex + delta));
+        const nextDoc = sortedDocuments[nextIndex];
+        setActiveId(nextDoc.id);
+        setSelectedIds(new Set([nextDoc.id]));
+        return;
+      }
+
+      if (event.key === "Enter") {
+        const doc = activeDocument ?? sortedDocuments[0];
+        if (doc && onOpenDocument) {
+          onOpenDocument(doc);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [activeDocument, activeId, mode, onOpenDocument, sortedDocuments]);
+
+  const handleSaveView = () => {
+    const name = window.prompt("Name this view:");
+    if (!name) return;
+    const view: SavedView = {
+      id: `${Date.now()}`,
+      name,
+      query: searchInput,
+      sortKey,
+      sortDirection,
+      mode,
+      showNextAction,
+    };
+    setSavedViews((prev) => [...prev, view]);
+    setActiveViewId(view.id);
+  };
+
+  const handleApplyView = (viewId: string) => {
+    if (!viewId) {
+      setActiveViewId(null);
+      return;
+    }
+    const view = savedViews.find((item) => item.id === viewId);
+    if (!view) return;
+    setSearchInput(view.query);
+    setDebouncedSearch(view.query);
+    setSortKey(view.sortKey);
+    setSortDirection(view.sortDirection);
+    setMode(view.mode);
+    setShowNextAction(view.showNextAction);
+    setActiveViewId(view.id);
+  };
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  return (
+    <div
+      className={`h-full flex flex-col bg-cream ${isDragging ? "bg-primary/10" : ""}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Header */}
+      <div className="border-b border-border bg-card p-4">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">Documents</h1>
+            <p className="text-sm text-muted-foreground">
+              {sortedDocuments.length} documents • prioritize your next action
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {enableYouTubeImport && (
+              <button
+                onClick={() => setShowYouTubeImport(true)}
+                className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors flex items-center gap-2 text-sm"
+                title="Import YouTube video"
+              >
+                <Youtube className="w-4 h-4" />
+                Import YouTube
+              </button>
+            )}
+            <button
+              onClick={handleImport}
+              disabled={isImporting}
+              className="px-3 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {isImporting ? "Importing..." : "Import Document"}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-muted/40 rounded-md p-1">
+            <button
+              onClick={() => setMode("grid")}
+              className={`px-2 py-1 rounded text-sm flex items-center gap-1 ${
+                mode === "grid" ? "bg-background shadow text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Grid
+            </button>
+            <button
+              onClick={() => setMode("list")}
+              className={`px-2 py-1 rounded text-sm flex items-center gap-1 ${
+                mode === "list" ? "bg-background shadow text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <List className="w-4 h-4" />
+              List
+            </button>
+          </div>
+          <button
+            onClick={() => setInspectorOpen((prev) => !prev)}
+            className="px-3 py-2 bg-muted text-foreground rounded-md text-sm hover:bg-muted/80"
+          >
+            {isInspectorOpen ? "Hide Inspector" : "Show Inspector"}
+          </button>
+
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search documents or use tag:History extracts=0"
+              className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={activeViewId ?? ""}
+              onChange={(event) => handleApplyView(event.target.value)}
+              className="px-3 py-2 bg-background border border-border rounded-md text-sm"
+            >
+              <option value="">Saved Views</option>
+              {savedViews.map((view) => (
+                <option key={view.id} value={view.id}>
+                  {view.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleSaveView}
+              className="px-3 py-2 bg-muted text-foreground rounded-md text-sm hover:bg-muted/80"
+            >
+              Save View
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mx-4 mt-4 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {isImporting && importProgress.total > 0 && (
+        <div className="mx-4 mt-4 p-4 bg-muted rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-foreground">
+              {importProgress.fileName ? `Importing ${importProgress.fileName}...` : "Importing documents..."}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {importProgress.current} / {importProgress.total}
+            </span>
+          </div>
+          <div className="h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div className="mx-4 mt-4 p-3 bg-primary/10 border border-primary/20 rounded-md flex items-center justify-between">
+          <span className="text-sm text-primary">
+            {selectedIds.size} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkTag}
+              className="px-3 py-1.5 bg-background border border-border rounded text-sm hover:bg-muted"
+            >
+              Tag
+            </button>
+            <button
+              onClick={handleBulkReprioritize}
+              className="px-3 py-1.5 bg-background border border-border rounded text-sm hover:bg-muted"
+            >
+              Reprioritize
+            </button>
+            <button
+              onClick={handleBulkArchive}
+              className="px-3 py-1.5 bg-destructive text-destructive-foreground rounded text-sm hover:opacity-90"
+            >
+              Archive
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-auto p-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-muted-foreground">Loading documents...</div>
+            </div>
+          ) : sortedDocuments.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">📄</div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">
+                No documents found
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                {searchInput ? "Try adjusting your search or filters" : "Import your first document to get started"}
+              </p>
+              <button
+                onClick={handleImport}
+                disabled={isImporting}
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isImporting ? "Importing..." : "Import Document"}
+              </button>
+            </div>
+          ) : mode === "list" ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground px-3">
+                <div className="flex items-center gap-4">
+                  <button onClick={() => handleSort("priority")} className="hover:text-foreground">
+                    Priority
+                  </button>
+                  <button onClick={() => handleSort("title")} className="hover:text-foreground">
+                    Title
+                  </button>
+                  <button onClick={() => handleSort("added")} className="hover:text-foreground">
+                    Added
+                  </button>
+                  <button onClick={() => handleSort("type")} className="hover:text-foreground">
+                    Type
+                  </button>
+                  <button onClick={() => handleSort("extracts")} className="hover:text-foreground">
+                    Extracts
+                  </button>
+                  <button onClick={() => handleSort("cards")} className="hover:text-foreground">
+                    Cards
+                  </button>
+                  <button onClick={() => handleSort("lastTouched")} className="hover:text-foreground">
+                    Last Touched
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={showNextAction}
+                    onChange={(event) => setShowNextAction(event.target.checked)}
+                  />
+                  Next Action
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                {sortedDocuments.map((doc) => (
+                  <div
+                    key={doc.id}
+                    onClick={(event) => handleSelectRow(doc, event.metaKey || event.ctrlKey)}
+                    className={`border rounded-lg p-3 cursor-pointer transition-colors ${
+                      selectedIds.has(doc.id) ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(doc.id)}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          handleSelectRow(doc, true);
+                        }}
+                        className="mt-1"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <PriorityBadge doc={doc} />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-foreground truncate">{doc.title}</div>
+                              <div className="text-xs text-muted-foreground truncate">{getPriorityReason(doc)}</div>
+                            </div>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{formatRelativeTime(getLastTouched(doc))}</span>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="px-2 py-0.5 rounded bg-muted/60 text-muted-foreground">{doc.fileType}</span>
+                          <ProgressBar doc={doc} />
+                          {showNextAction && (
+                            <span className="px-2 py-0.5 rounded bg-primary/10 text-primary">{getNextAction(doc)}</span>
+                          )}
+                          <TagsInline tags={doc.tags} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(SMART_SECTION_LABELS).map(([sectionId, label]) => {
+                const docs = sectionedDocuments[sectionId] ?? [];
+                if (docs.length === 0) return null;
+                const isCollapsed = collapsedSections[sectionId];
+                return (
+                  <div key={sectionId} className="bg-card border border-border rounded-lg">
+                    <button
+                      onClick={() => toggleSection(sectionId)}
+                      className="w-full px-4 py-3 flex items-center justify-between text-sm font-semibold text-foreground"
+                    >
+                      <span>{label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {isCollapsed ? "Show" : "Hide"} ({docs.length})
+                      </span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {docs.map((doc) => (
+                          <div
+                            key={doc.id}
+                            onClick={(event) => handleSelectRow(doc, event.metaKey || event.ctrlKey)}
+                            className={`p-4 rounded-lg border transition-shadow cursor-pointer ${
+                              selectedIds.has(doc.id)
+                                ? "border-primary bg-primary/5"
+                                : "border-border bg-background hover:shadow-md"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(doc.id)}
+                                onChange={(event) => {
+                                  event.stopPropagation();
+                                  handleSelectRow(doc, true);
+                                }}
+                              />
+                              <span className="text-xs text-muted-foreground">{formatRelativeTime(getLastTouched(doc))}</span>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <PriorityBadge doc={doc} />
+                              <span className="text-xs text-muted-foreground">{getPriorityReason(doc)}</span>
+                            </div>
+                            <h3 className="mt-2 font-semibold text-foreground line-clamp-2">{doc.title}</h3>
+                            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="px-2 py-0.5 rounded bg-muted/60 text-muted-foreground">{doc.fileType}</span>
+                              <ProgressBar doc={doc} />
+                            </div>
+                            <div className="mt-3">
+                              <TagsInline tags={doc.tags} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {isInspectorOpen && (
+          <aside className="w-80 border-l border-border bg-card p-4 overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-foreground">Inspector</h2>
+              <button
+                onClick={() => setInspectorOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {!activeDocument ? (
+              <div className="text-sm text-muted-foreground">
+                Select a document to see details.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Title</div>
+                  <div className="text-sm font-semibold text-foreground">{activeDocument.title}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{activeDocument.fileType}</div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <PriorityBadge doc={activeDocument} />
+                  <span className="text-xs text-muted-foreground">{getPriorityReason(activeDocument)}</span>
+                </div>
+
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  <div>Added: {formatRelativeTime(activeDocument.dateAdded)}</div>
+                  <div>Last touched: {formatRelativeTime(getLastTouched(activeDocument))}</div>
+                  <div>Created: {formatRelativeTime(activeDocument.metadata?.createdAt)}</div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Progress</div>
+                  <ProgressBar doc={activeDocument} />
+                  <div className="text-xs text-muted-foreground mt-2">
+                    {activeDocument.extractCount} extracts • {activeDocument.learningItemCount} cards
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Tags</div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeDocument.tags.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">No tags</span>
+                    ) : (
+                      activeDocument.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-2 py-1 text-xs bg-primary/10 text-primary rounded"
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Actions</div>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => onOpenDocument?.(activeDocument)}
+                      className="px-3 py-2 bg-primary text-primary-foreground rounded text-sm"
+                    >
+                      Open / Read
+                    </button>
+                    <button
+                      onClick={() => onOpenDocument?.(activeDocument)}
+                      className="px-3 py-2 bg-background border border-border rounded text-sm"
+                    >
+                      Extract
+                    </button>
+                    <button
+                      onClick={() =>
+                        updateDocument(activeDocument.id, {
+                          priorityRating: (activeDocument.priorityRating ?? 0) + 1,
+                          priorityScore: (activeDocument.priorityScore ?? 0) + 10,
+                        })
+                      }
+                      className="px-3 py-2 bg-background border border-border rounded text-sm"
+                    >
+                      Reprioritize
+                    </button>
+                    <button
+                      onClick={() => updateDocument(activeDocument.id, { isArchived: true })}
+                      className="px-3 py-2 bg-destructive text-destructive-foreground rounded text-sm"
+                    >
+                      Archive
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Related items</div>
+                  <div className="text-xs text-muted-foreground">No related items available.</div>
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+
+      {isDragging && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/20 backdrop-blur-sm pointer-events-none">
+          <div className="text-center p-8 bg-card border-2 border-primary rounded-lg shadow-lg">
+            <div className="text-6xl mb-4">📄</div>
+            <h3 className="text-xl font-semibold text-foreground mb-2">
+              Drop files to import
+            </h3>
+            <p className="text-muted-foreground">
+              Release to import documents
+            </p>
+          </div>
+        </div>
+      )}
+
+      {enableYouTubeImport && showYouTubeImport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Youtube className="w-5 h-5 text-red-500" />
+                <h2 className="text-lg font-semibold text-foreground">Import YouTube Video</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowYouTubeImport(false);
+                  setYoutubeUrl("");
+                  setYoutubeError(null);
+                }}
+                className="p-1 text-muted-foreground hover:text-foreground rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  YouTube URL
+                </label>
+                <input
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={(event) => setYoutubeUrl(event.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={youtubeLoading}
+                />
+              </div>
+
+              {youtubeError && (
+                <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-lg text-sm">
+                  {youtubeError}
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground">
+                Note: yt-dlp must be installed for YouTube import to work
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowYouTubeImport(false);
+                    setYoutubeUrl("");
+                    setYoutubeError(null);
+                  }}
+                  disabled={youtubeLoading}
+                  className="px-4 py-2 text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleYouTubeImport}
+                  disabled={youtubeLoading}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+                >
+                  {youtubeLoading ? "Importing..." : "Import"}
+                  <Link2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriorityBadge({ doc }: { doc: Document }) {
+  const tier = getPriorityTier(doc);
+  const signal = getPrioritySignal(doc);
+  const tierStyles =
+    tier === "high"
+      ? "bg-red-500/15 text-red-600"
+      : tier === "medium"
+      ? "bg-amber-500/15 text-amber-600"
+      : "bg-emerald-500/15 text-emerald-600";
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${tierStyles}`}>
+      {signal}
+    </span>
+  );
+}
+
+function ProgressBar({ doc }: { doc: Document }) {
+  const { extracts, cards, total, extractRatio, cardRatio } = getProgressSegments(doc);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative h-2 w-24 bg-muted/60 rounded-full overflow-hidden">
+        <div className="absolute left-0 top-0 h-full bg-primary/70" style={{ width: `${extractRatio * 100}%` }} />
+        {total > 0 && (
+          <div
+            className="absolute top-0 h-full bg-foreground/30"
+            style={{ width: `${cardRatio * 100}%`, left: `${extractRatio * 100}%` }}
+          />
+        )}
+      </div>
+      <span className="text-[11px] text-muted-foreground">
+        {extracts} / {cards}
+      </span>
+    </div>
+  );
+}
+
+function TagsInline({ tags }: { tags: string[] }) {
+  if (!tags || tags.length === 0) {
+    return <span className="text-xs text-muted-foreground">No tags</span>;
+  }
+  const visible = tags.slice(0, MAX_VISIBLE_TAGS);
+  const remaining = tags.length - visible.length;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((tag) => (
+        <span key={tag} className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded">
+          {tag}
+        </span>
+      ))}
+      {remaining > 0 && (
+        <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded">
+          +{remaining}
+        </span>
+      )}
+    </div>
+  );
+}

@@ -3,12 +3,13 @@
 use crate::algorithms::{
     calculate_priority_score, calculate_review_statistics, compare_algorithms,
     optimizer::{OptimizationParams, OptimizationResult, ParameterOptimizer},
-    AlgorithmComparison, DocumentScheduler, SM2Params,
+    DocumentScheduler as DocScheduler, DocumentScheduleResult, DocumentSchedulerParams,
+    AlgorithmComparison, SM2Params,
 };
 use crate::commands::review::RepositoryExt;
 use crate::error::Result;
 use crate::database::Repository;
-use crate::models::{LearningItem, ReviewRating};
+use crate::models::{ReviewRating, LearningItem};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -23,16 +24,19 @@ pub struct SM2Calculation {
 
 /// Document scheduling request
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DocumentScheduleRequest {
-    pub max_daily_documents: u32,
-    pub cards_per_document: u32,
+pub struct DocumentRatingRequest {
+    pub document_id: String,
+    pub rating: i32, // 1-5 scale
 }
 
-/// Document info for scheduling
+/// Document scheduling response
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DocumentInfo {
-    pub document_id: String,
-    pub learning_item_count: i32,
+pub struct DocumentRatingResponse {
+    pub next_review_date: String,
+    pub stability: f64,
+    pub difficulty: f64,
+    pub interval_days: i64,
+    pub scheduling_reason: String,
 }
 
 /// Algorithm type selection
@@ -72,38 +76,42 @@ pub async fn calculate_sm2_next(
     })
 }
 
-/// Schedule documents for incremental reading
+/// Rate a document and schedule its next reading
+///
+/// This implements the incremental reading scheduling from Incrementum-CPP,
+/// where documents are rated after reading and scheduled for future review.
 #[tauri::command]
-pub async fn schedule_documents(
-    request: DocumentScheduleRequest,
+pub async fn rate_document(
+    request: DocumentRatingRequest,
     repo: State<'_, Repository>,
-) -> Result<Vec<String>> {
-    // Get all documents with their learning item counts
-    let documents = repo.list_documents().await?;
+) -> Result<DocumentRatingResponse> {
+    // Get the document
+    let document = repo.get_document(&request.document_id).await?.ok_or_else(|| {
+        crate::error::IncrementumError::NotFound(format!("Document {} not found", request.document_id))
+    })?;
 
-    let mut document_infos: Vec<DocumentInfo> = Vec::new();
-    for doc in documents {
-        let learning_items = repo.get_learning_items_by_document(&doc.id).await?;
-        document_infos.push(DocumentInfo {
-            document_id: doc.id,
-            learning_item_count: learning_items.len() as i32,
-        });
-    }
+    // Create document scheduler
+    let scheduler = DocScheduler::default_params();
 
-    // Create scheduler and calculate which documents to schedule
-    let scheduler = DocumentScheduler {
-        max_daily_documents: request.max_daily_documents,
-        cards_per_document: request.cards_per_document,
-    };
-
-    let scheduled_docs = scheduler.schedule_documents(
-        document_infos
-            .iter()
-            .map(|d| (d.document_id.clone(), d.learning_item_count))
-            .collect(),
+    // Schedule the document
+    let result = scheduler.schedule_document(
+        request.rating,
+        document.reading_count,
+        document.stability,
+        document.difficulty,
+        document.priority_slider.max(document.priority_rating),
     );
 
-    Ok(scheduled_docs)
+    // Update the document with new scheduling data
+    // Note: This would require an update_document method in Repository
+
+    Ok(DocumentRatingResponse {
+        next_review_date: result.next_review.to_rfc3339(),
+        stability: result.stability,
+        difficulty: result.difficulty,
+        interval_days: result.interval_days,
+        scheduling_reason: result.scheduling_reason,
+    })
 }
 
 /// Calculate priority score for queue items

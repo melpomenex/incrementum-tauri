@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useDocumentStore, useTabsStore } from "../../stores";
+import { useDocumentStore, useTabsStore, useSettingsStore } from "../../stores";
 import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { EPUBViewer } from "./EPUBViewer";
@@ -15,6 +15,7 @@ import { useQueueNavigation } from "../../hooks/useQueueNavigation";
 import { cn } from "../../utils";
 import * as documentsApi from "../../api/documents";
 import type { ReviewRating } from "../../api/review";
+import { autoExtractWithCache, isAutoExtractEnabled } from "../../utils/documentAutoExtract";
 
 type ViewMode = "document" | "extracts" | "cards";
 
@@ -50,9 +51,14 @@ function extractYouTubeId(urlOrId: string): string {
 interface DocumentViewerProps {
   documentId: string;
   disableHoverRating?: boolean;
+  onSelectionChange?: (selection: string) => void;
 }
 
-export function DocumentViewer({ documentId, disableHoverRating = false }: DocumentViewerProps) {
+export function DocumentViewer({
+  documentId,
+  disableHoverRating = false,
+  onSelectionChange,
+}: DocumentViewerProps) {
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
   const { closeTab, tabs } = useTabsStore();
 
@@ -69,6 +75,7 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
+  const lastSelectionRef = useRef("");
 
   // Queue navigation
   const queueNav = useQueueNavigation();
@@ -90,6 +97,7 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
       const text = selection?.toString().trim();
       if (text && text.length > 0 && text.length < 1000) {
         setSelectedText(text);
+        lastSelectionRef.current = text;
       } else {
         setSelectedText("");
       }
@@ -103,6 +111,10 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
       document.removeEventListener("keyup", handleSelection);
     };
   }, []);
+
+  useEffect(() => {
+    onSelectionChange?.(selectedText);
+  }, [selectedText, onSelectionChange]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -192,6 +204,30 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
     } else {
       setIsLoading(false);
     }
+
+    // Auto-extract content if enabled
+    if (isAutoExtractEnabled() && doc.filePath) {
+      try {
+        console.log("[DocumentViewer] Auto-extracting content...");
+        const extractionResult = await autoExtractWithCache(
+          doc.id,
+          doc.filePath,
+          inferredType
+        );
+
+        // Store extraction result for use in the UI
+        if (extractionResult.text || extractionResult.keyPhrases.length > 0) {
+          console.log("[DocumentViewer] Extraction result:", {
+            textLength: extractionResult.text.length,
+            keyPhrases: extractionResult.keyPhrases.length,
+            mathExpressions: extractionResult.mathExpressions.length,
+            ocrUsed: extractionResult.ocrUsed,
+          });
+        }
+      } catch (error) {
+        console.error("[DocumentViewer] Auto-extract failed:", error);
+      }
+    }
   };
 
   const handlePrevPage = () => {
@@ -242,6 +278,11 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
   };
 
   const openExtractDialog = () => {
+    const selection = window.getSelection()?.toString().trim();
+    const selectionText = selection || lastSelectionRef.current;
+    if (selectionText) {
+      setSelectedText(selectionText);
+    }
     setIsExtractDialogOpen(true);
   };
 

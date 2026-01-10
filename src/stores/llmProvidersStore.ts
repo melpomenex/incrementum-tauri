@@ -18,7 +18,7 @@ interface LLMProvidersState {
   removeProvider: (id: string) => void;
   getProvider: (id: string) => LLMProviderConfig | undefined;
   getEnabledProviders: () => LLMProviderConfig[];
-  getProvidersByType: (type: 'openai' | 'anthropic' | 'ollama') => LLMProviderConfig[];
+  getProvidersByType: (type: 'openai' | 'anthropic' | 'ollama' | 'openrouter') => LLMProviderConfig[];
 }
 
 export const useLLMProvidersStore = create<LLMProvidersState>()(

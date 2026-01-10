@@ -57,9 +57,24 @@ interface SegmentationSettings {
  * OCR Settings
  */
 interface OCRSettings {
-  provider: "tesseract" | "google" | "aws" | "azure";
+  provider: "tesseract" | "google" | "aws" | "azure" | "marker" | "nougat";
   language: string;
   autoOCR: boolean;
+  googleProjectId?: string;
+  googleLocation?: string;
+  googleProcessorId?: string;
+  googleCredentialsPath?: string;
+  awsRegion?: string;
+  awsAccessKey?: string;
+  awsSecretKey?: string;
+  azureEndpoint?: string;
+  azureApiKey?: string;
+  preferLocal: boolean;
+  mathOcrEnabled: boolean;
+  mathOcrCommand?: string;
+  mathOcrModelDir?: string;
+  keyPhraseExtraction: boolean;
+  autoExtractOnLoad: boolean;
 }
 
 /**
@@ -260,6 +275,21 @@ export const defaultSettings: Settings = {
       provider: "tesseract",
       language: "eng",
       autoOCR: false,
+      googleProjectId: undefined,
+      googleLocation: "us",
+      googleProcessorId: undefined,
+      googleCredentialsPath: undefined,
+      awsRegion: "us-east-1",
+      awsAccessKey: undefined,
+      awsSecretKey: undefined,
+      azureEndpoint: undefined,
+      azureApiKey: undefined,
+      preferLocal: true,
+      mathOcrEnabled: false,
+      mathOcrCommand: "nougat",
+      mathOcrModelDir: undefined,
+      keyPhraseExtraction: false,
+      autoExtractOnLoad: false,
     },
     cacheContent: true,
     autoCleanupCache: false,

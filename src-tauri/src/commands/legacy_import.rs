@@ -514,6 +514,13 @@ fn parse_document_row(row: &sqlx::sqlite::SqliteRow) -> Result<Document> {
         is_archived: row.try_get::<i64, _>("is_archived").unwrap_or(0) != 0,
         is_favorite: row.try_get::<i64, _>("is_favorite").unwrap_or(0) != 0,
         metadata,
+        // Scheduling fields - use try_get for compatibility
+        next_reading_date: row.try_get("next_reading_date").ok(),
+        reading_count: row.try_get("reading_count").unwrap_or(0),
+        stability: row.try_get("stability").ok(),
+        difficulty: row.try_get("difficulty").ok(),
+        reps: row.try_get("reps").ok(),
+        total_time_spent: row.try_get("total_time_spent").ok(),
     })
 }
 

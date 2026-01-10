@@ -3,6 +3,8 @@
 //! This module provides different spaced repetition algorithms:
 //! - FSRS-5 (Free Spaced Repetition Scheduler)
 //! - SM-2, SM-5, SM-8, SM-15 (SuperMemo algorithms)
+//! - Queue selector with weighted randomization
+//! - Document scheduler for incremental reading
 
 use crate::models::{LearningItem, ReviewRating};
 use chrono::{Utc, Duration};
@@ -10,11 +12,15 @@ use chrono::{Utc, Duration};
 pub mod optimizer;
 pub mod fsrs;
 pub mod supermemo;
+pub mod queue_selector;
+pub mod document_scheduler;
 
 // Re-exports
 pub use fsrs::{FSRSParams, FSRSScheduler, FSRSState};
 pub use supermemo::{SM2Algorithm, SM2State, SM5Algorithm, SM5State, SM8Algorithm, SM8State, SM15Algorithm, SM15State};
 pub use optimizer::calculate_review_statistics;
+pub use queue_selector::QueueSelector;
+pub use document_scheduler::{DocumentScheduler, DocumentSchedulerParams, DocumentScheduleResult};
 
 #[cfg(test)]
 mod tests;
@@ -190,42 +196,6 @@ pub fn calculate_document_priority_score(
     };
 
     ((slider + rating_normalized) / 2.0).max(0.0).min(100.0)
-}
-
-/// Document scheduler - schedules documents for incremental reading
-pub struct DocumentScheduler {
-    /// Maximum documents to schedule per day
-    pub max_daily_documents: u32,
-    /// Cards per document before moving to next
-    pub cards_per_document: u32,
-}
-
-impl Default for DocumentScheduler {
-    fn default() -> Self {
-        Self {
-            max_daily_documents: 5,
-            cards_per_document: 10,
-        }
-    }
-}
-
-impl DocumentScheduler {
-    /// Calculate which documents should be scheduled for today
-    pub fn schedule_documents(
-        &self,
-        documents: Vec<(String, i32)>, // (document_id, learning_item_count)
-    ) -> Vec<String> {
-        // Sort by learning item count (fewer items first = newer content)
-        let mut sorted = documents.clone();
-        sorted.sort_by_key(|(_, count)| *count);
-
-        // Take top N documents
-        sorted
-            .into_iter()
-            .take(self.max_daily_documents as usize)
-            .map(|(id, _)| id)
-            .collect()
-    }
 }
 
 #[derive(Clone, serde::Serialize)]

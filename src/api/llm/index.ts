@@ -38,6 +38,7 @@ export interface LLMContext {
   url?: string;
   selection?: string;
   content?: string;
+  contextWindowTokens?: number;
 }
 
 export interface StreamOptions {
@@ -66,6 +67,7 @@ export async function chatWithLLM(request: LLMRequest): Promise<LLMResponse> {
  */
 export async function chatWithContext(
   provider: LLMProvider,
+  model: string | undefined,
   messages: LLMMessage[],
   context: LLMContext,
   apiKey?: string,
@@ -73,6 +75,7 @@ export async function chatWithContext(
 ): Promise<LLMResponse> {
   return await invoke<LLMResponse>("llm_chat_with_context", {
     provider,
+    model,
     messages,
     context: {
       type: context.type,
@@ -80,6 +83,7 @@ export async function chatWithContext(
       url: context.url,
       selection: context.selection,
       content: context.content,
+      contextWindowTokens: context.contextWindowTokens,
     },
     apiKey,
     baseUrl,
@@ -194,17 +198,18 @@ export const PROVIDER_CONFIGS = {
   openrouter: {
     name: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1",
-    defaultModel: "anthropic/claude-3.5-sonnet",
+    defaultModel: "google/gemma-2-9b-it:free",
     models: [
-      "anthropic/claude-3.5-sonnet",
-      "anthropic/claude-3.5-sonnet:beta",
+      "google/gemma-2-9b-it:free",
+      "google/gemma-2-9b-it",
+      "meta-llama/llama-3-8b-instruct:free",
+      "meta-llama/llama-3-8b-instruct",
+      "microsoft/phi-3-medium-128k-instruct:free",
+      "microsoft/phi-3-mini-128k-instruct:free",
       "anthropic/claude-3.5-haiku",
-      "anthropic/claude-3-opus",
-      "openai/gpt-4o",
+      "anthropic/claude-3.5-sonnet:beta",
       "openai/gpt-4o-mini",
-      "openai/gpt-4-turbo",
-      "google/gemini-pro-1.5",
-      "meta-llama/llama-3.1-405b-instruct",
+      "openai/gpt-4o",
       "deepseek/deepseek-chat",
     ],
   },

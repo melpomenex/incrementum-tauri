@@ -232,8 +232,8 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
                 color: inherit !important;
                 background: transparent !important;
                 max-width: 100% !important;
-                overflow-y: auto !important;
-                overflow-x: hidden !important;
+                overflow: hidden !important;
+                /* Let epubjs handle scrolling through the scrolled-doc flow */
               }
               body {
                 font-size: ${fontSize}% !important;

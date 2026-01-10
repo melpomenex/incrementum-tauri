@@ -5,6 +5,7 @@ use crate::error::Result;
 use std::path::Path;
 
 /// OCR processor that handles OCR operations
+#[derive(Clone)]
 pub struct OCRProcessor {
     config: crate::ocr::OCRConfig,
 }
@@ -89,6 +90,20 @@ impl OCRProcessor {
                 if provider.is_available() {
                     available.push(OCRProviderType::AzureVision);
                 }
+            }
+        }
+
+        // Check Marker
+        if let Ok(provider) = create_provider(OCRProviderType::Marker, &self.config) {
+            if provider.is_available() {
+                available.push(OCRProviderType::Marker);
+            }
+        }
+
+        // Check Nougat
+        if let Ok(provider) = create_provider(OCRProviderType::Nougat, &self.config) {
+            if provider.is_available() {
+                available.push(OCRProviderType::Nougat);
             }
         }
 

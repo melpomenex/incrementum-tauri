@@ -18,6 +18,7 @@ struct OpenAIRequest {
     messages: Vec<OpenAIMessage>,
     temperature: f64,
     max_tokens: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
 }
 
@@ -170,7 +171,7 @@ pub async fn llm_chat(
     base_url: Option<String>,
 ) -> Result<LLMResponse, String> {
     let client = Client::new();
-    let model = model.unwrap_or_else(|| get_default_model(&provider));
+    let model = normalize_model(model, &provider);
     let max_tokens = if max_tokens == 0 { DEFAULT_MAX_TOKENS } else { max_tokens };
     let base_url = normalize_base_url(base_url, &provider);
     let api_key = normalize_api_key(api_key);
@@ -201,13 +202,19 @@ pub async fn llm_chat(
 #[tauri::command]
 pub async fn llm_chat_with_context(
     provider: String,
+    model: Option<String>,
     messages: Vec<LLMMessage>,
     context: LLMContextRequest,
     api_key: Option<String>,
     base_url: Option<String>,
 ) -> Result<LLMResponse, String> {
-    // Build context prompt
-    let context_prompt = build_context_prompt(&context);
+    // Build context prompt using the latest user message for relevance
+    let latest_user_message = messages
+        .iter()
+        .rev()
+        .find(|message| message.role == "user")
+        .map(|message| message.content.as_str());
+    let context_prompt = build_context_prompt(&context, latest_user_message);
 
     // Prepend context as a system message
     let mut messages_with_context = vec![
@@ -219,7 +226,7 @@ pub async fn llm_chat_with_context(
     messages_with_context.extend(messages);
 
     // Call with default parameters
-    llm_chat(provider, None, messages_with_context, 0.7, DEFAULT_MAX_TOKENS, api_key, base_url).await
+    llm_chat(provider, model, messages_with_context, 0.7, DEFAULT_MAX_TOKENS, api_key, base_url).await
 }
 
 // Streaming command - emits events to frontend
@@ -235,7 +242,7 @@ pub async fn llm_stream_chat(
     base_url: Option<String>,
 ) -> Result<(), String> {
     let client = Client::new();
-    let model = model.unwrap_or_else(|| get_default_model(&provider));
+    let model = normalize_model(model, &provider);
     let max_tokens = if max_tokens == 0 { DEFAULT_MAX_TOKENS } else { max_tokens };
     let base_url = normalize_base_url(base_url, &provider);
     let api_key = normalize_api_key(api_key);
@@ -851,6 +858,13 @@ async fn call_openrouter_with_key(
     api_key: &str,
     base_url: &str,
 ) -> Result<LLMResponse, String> {
+    // Clamp temperature to valid range for OpenAI-compatible APIs (0-2)
+    let temperature = temperature.clamp(0.0, 2.0);
+
+    // Log the request for debugging
+    eprintln!("OpenRouter request: model={}, temperature={}, max_tokens={}, messages_count={}",
+        model, temperature, max_tokens, messages.len());
+
     let request = OpenAIRequest {
         model: model.to_string(),
         messages: messages
@@ -865,6 +879,8 @@ async fn call_openrouter_with_key(
         stream: None,
     };
 
+    eprintln!("OpenRouter request body: {}", serde_json::to_string(&request).unwrap_or_default());
+
     let response = client
         .post(&format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
@@ -878,6 +894,7 @@ async fn call_openrouter_with_key(
     if !response.status().is_success() {
         let status = response.status();
         let error_text = response.text().await.unwrap_or_default();
+        eprintln!("OpenRouter error response: {}", error_text);
         return Err(format!("OpenRouter API error ({}): {}", status, error_text));
     }
 
@@ -1052,7 +1069,8 @@ fn get_default_model(provider: &str) -> String {
         "openai" => "gpt-4o".to_string(),
         "anthropic" => "claude-3-5-sonnet-20241022".to_string(),
         "ollama" => "llama3.2".to_string(),
-        "openrouter" => "anthropic/claude-3.5-sonnet".to_string(),
+        // Use a free model that's actually available on OpenRouter
+        "openrouter" => "google/gemma-2-9b-it:free".to_string(),
         _ => "default".to_string(),
     }
 }
@@ -1061,6 +1079,13 @@ fn normalize_api_key(api_key: Option<String>) -> Option<String> {
     api_key
         .map(|key| key.trim().to_string())
         .filter(|key| !key.is_empty())
+}
+
+fn normalize_model(model: Option<String>, provider: &str) -> String {
+    model
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| get_default_model(provider))
 }
 
 fn normalize_base_url(base_url: Option<String>, provider: &str) -> String {
@@ -1082,25 +1107,181 @@ fn get_default_base_url(provider: &str) -> String {
     }
 }
 
-fn build_context_prompt(context: &LLMContextRequest) -> String {
+fn build_context_prompt(
+    context: &LLMContextRequest,
+    latest_user_message: Option<&str>,
+) -> String {
+    let mut instructions = String::from(
+        "Use the provided context to answer the user's request. \
+If the user asks for a summary, summarize the relevant context. \
+If the answer is not in the provided context, say so.",
+    );
+
+    instructions.push('\n');
+
     match context.r#type.as_str() {
         "document" => {
-            format!(
-                "The user is viewing a document{}{}{}Please provide assistance based on this context.",
-                context.document_id.as_ref().map(|id| format!(" (ID: {})", id)).unwrap_or_default(),
-                context.selection.as_ref().map(|s| format!("\nSelected text: \"{}\"", s)).unwrap_or_default(),
-                context.content.as_ref().map(|c| format!("\nContent: {}", c)).unwrap_or_default()
-            )
+            let mut prompt = format!(
+                "The user is viewing a document{}.",
+                context
+                    .document_id
+                    .as_ref()
+                    .map(|id| format!(" (ID: {})", id))
+                    .unwrap_or_default()
+            );
+
+            if let Some(selection) = context.selection.as_ref() {
+                if !selection.trim().is_empty() {
+                    prompt.push_str(&format!("\nSelected text: \"{}\"", selection));
+                }
+            }
+
+            if let Some(content) = context.content.as_ref() {
+                let excerpt = select_relevant_excerpt(
+                    content,
+                    context.context_window_tokens,
+                    latest_user_message,
+                );
+                if !excerpt.trim().is_empty() {
+                    prompt.push_str("\nDocument content (excerpt):\n");
+                    prompt.push_str(&excerpt);
+                }
+            }
+
+            instructions.push_str(&prompt);
+            instructions
         }
         "web" => {
-            format!(
-                "The user is browsing the web page: {}{}Please provide assistance based on this context.",
-                context.url.as_ref().map(|u| u.as_str()).unwrap_or("Unknown"),
-                context.selection.as_ref().map(|s| format!("\nSelected text: \"{}\"", s)).unwrap_or_default()
-            )
+            let mut prompt = format!(
+                "The user is browsing the web page: {}.",
+                context.url.as_ref().map(|u| u.as_str()).unwrap_or("Unknown")
+            );
+
+            if let Some(selection) = context.selection.as_ref() {
+                if !selection.trim().is_empty() {
+                    prompt.push_str(&format!("\nSelected text: \"{}\"", selection));
+                }
+            }
+
+            if let Some(content) = context.content.as_ref() {
+                let excerpt = select_relevant_excerpt(
+                    content,
+                    context.context_window_tokens,
+                    latest_user_message,
+                );
+                if !excerpt.trim().is_empty() {
+                    prompt.push_str("\nPage content (excerpt):\n");
+                    prompt.push_str(&excerpt);
+                }
+            }
+
+            instructions.push_str(&prompt);
+            instructions
         }
-        _ => "You are a helpful assistant.".to_string(),
+        _ => {
+            instructions.push_str("You are a helpful assistant.");
+            instructions
+        }
     }
+}
+
+fn select_relevant_excerpt(
+    content: &str,
+    context_window_tokens: Option<usize>,
+    user_query: Option<&str>,
+) -> String {
+    let max_chars = estimate_context_chars(context_window_tokens);
+    let mut char_indices: Vec<usize> = content.char_indices().map(|(i, _)| i).collect();
+    char_indices.push(content.len());
+    let total_chars = char_indices.len().saturating_sub(1);
+
+    if total_chars <= max_chars {
+        return content.to_string();
+    }
+
+    let query_terms = user_query
+        .map(extract_query_terms)
+        .unwrap_or_default();
+
+    if query_terms.is_empty() {
+        return content.chars().take(max_chars).collect();
+    }
+
+    let mut best_chunks: Vec<(usize, usize, usize)> = Vec::new(); // (score, start, end)
+    let chunk_len = max_chars.min(1200).max(400).min(total_chars);
+    let overlap = 200.min(chunk_len / 3);
+    let mut start_char = 0;
+
+    while start_char < total_chars {
+        let end_char = (start_char + chunk_len).min(total_chars);
+        let start = char_indices[start_char];
+        let end = char_indices[end_char];
+        let chunk = &content[start..end];
+        let score = score_chunk(chunk, &query_terms);
+        best_chunks.push((score, start, end));
+
+        if end_char == total_chars {
+            break;
+        }
+        start_char = end_char.saturating_sub(overlap);
+    }
+
+    best_chunks.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut selected = String::new();
+
+    for (score, start, end) in best_chunks {
+        if score == 0 && !selected.is_empty() {
+            break;
+        }
+        let chunk = &content[start..end];
+        let selected_chars = selected.chars().count();
+        let chunk_chars = chunk.chars().count();
+        if selected_chars + chunk_chars + 12 > max_chars {
+            break;
+        }
+        if !selected.is_empty() {
+            selected.push_str("\n\n[...]\n\n");
+        }
+        selected.push_str(chunk);
+        if selected.chars().count() >= max_chars {
+            break;
+        }
+    }
+
+    if selected.is_empty() {
+        content.chars().take(max_chars).collect()
+    } else {
+        selected
+    }
+}
+
+fn estimate_context_chars(context_window_tokens: Option<usize>) -> usize {
+    let tokens = context_window_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+    tokens.saturating_mul(4)
+}
+
+fn extract_query_terms(query: &str) -> Vec<String> {
+    let stop_words = [
+        "the", "and", "or", "of", "to", "in", "a", "an", "is", "are", "was", "were", "what",
+        "how", "why", "when", "where", "which", "who", "summarize", "summary", "chapter", "page",
+        "book", "document", "this", "that",
+    ];
+
+    query
+        .to_lowercase()
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter(|term| term.len() >= 4)
+        .filter(|term| !stop_words.contains(term))
+        .map(|term| term.to_string())
+        .collect()
+}
+
+fn score_chunk(chunk: &str, terms: &[String]) -> usize {
+    let chunk_lower = chunk.to_lowercase();
+    terms
+        .iter()
+        .map(|term| chunk_lower.matches(term).count())
+        .sum()
 }
 
 // Types for Tauri commands
@@ -1125,6 +1306,7 @@ pub struct LLMUsage {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LLMContextRequest {
     #[serde(rename = "type")]
     pub r#type: String,
@@ -1132,4 +1314,5 @@ pub struct LLMContextRequest {
     pub url: Option<String>,
     pub selection: Option<String>,
     pub content: Option<String>,
+    pub context_window_tokens: Option<usize>,
 }

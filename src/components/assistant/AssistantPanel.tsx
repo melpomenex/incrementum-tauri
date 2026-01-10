@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { chatWithContext } from "../../api/llm";
+import { useSettingsStore } from "../../stores";
 import { useLLMProvidersStore } from "../../stores/llmProvidersStore";
 
 export interface AssistantContext {
@@ -56,12 +57,20 @@ export function AssistantPanel({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<"openai" | "anthropic" | "ollama" | "openrouter">("openai");
+  const [selectedProvider, setSelectedProvider] = useState<"openai" | "anthropic" | "ollama" | "openrouter">(() => {
+    const stored = localStorage.getItem("assistant-llm-provider");
+    if (stored === "openai" || stored === "anthropic" || stored === "ollama" || stored === "openrouter") {
+      return stored;
+    }
+    return "openai";
+  });
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isInputHovered, setIsInputHovered] = useState(false);
+  const contextWindowTokens = useSettingsStore((state) => state.settings.ai.maxTokens);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastContextSignatureRef = useRef<string | null>(null);
 
   const providers = [
     { id: "openai", name: "OpenAI", icon: Sparkles, color: "text-green-500" },
@@ -82,9 +91,18 @@ export function AssistantPanel({
     onInputHoverChange?.(isInputFocused || isInputHovered);
   }, [isInputFocused, isInputHovered, onInputHoverChange]);
 
+  useEffect(() => {
+    localStorage.setItem("assistant-llm-provider", selectedProvider);
+  }, [selectedProvider]);
+
   // Add context message when context changes
   useEffect(() => {
     if (context) {
+      const signature = `${context.type}:${context.documentId ?? ""}:${context.url ?? ""}`;
+      if (lastContextSignatureRef.current === signature) {
+        return;
+      }
+      lastContextSignatureRef.current = signature;
       const contextMessage: Message = {
         id: `context-${Date.now()}`,
         role: "system",
@@ -106,6 +124,177 @@ export function AssistantPanel({
     }
   };
 
+  const renderMarkdown = (text: string): string => {
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const codeBlocks: string[] = [];
+    const escaped = escapeHtml(text);
+    const withPlaceholders = escaped.replace(/```([\s\S]*?)```/g, (_match, code) => {
+      const index = codeBlocks.length;
+      const trimmed = code.trim();
+      codeBlocks.push(
+        `<pre class="mt-2 overflow-x-auto rounded bg-background/80 p-2 text-xs"><code>${trimmed}</code></pre>`
+      );
+      return `@@CODEBLOCK_${index}@@`;
+    });
+
+    const formatInline = (value: string) => {
+      let formatted = value;
+      formatted = formatted.replace(/`([^`]+)`/g, "<code class=\"rounded bg-background/80 px-1 py-0.5 text-xs\">$1</code>");
+      formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<a class=\"underline decoration-dotted underline-offset-4\" href=\"$2\" target=\"_blank\" rel=\"noreferrer\">$1</a>");
+      formatted = formatted.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      formatted = formatted.replace(/_(.+?)_/g, "<em>$1</em>");
+      return formatted;
+    };
+
+    const lines = withPlaceholders.split(/\r?\n/);
+    let html = "";
+    let listType: "ul" | "ol" | null = null;
+    let blockquoteLines: string[] = [];
+
+    const isTableSeparator = (line: string) =>
+      /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+    const hasTablePipe = (line: string) => /\|/.test(line);
+
+    const flushList = () => {
+      if (listType) {
+        html += listType === "ul" ? "</ul>" : "</ol>";
+        listType = null;
+      }
+    };
+
+    const flushBlockquote = () => {
+      if (blockquoteLines.length > 0) {
+        const content = blockquoteLines.map(formatInline).join("<br>");
+        html += `<blockquote class="border-l-2 border-border pl-3 italic text-muted-foreground">${content}</blockquote>`;
+        blockquoteLines = [];
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      const blockquoteMatch = line.match(/^\s*>\s?(.*)$/);
+      const unorderedMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+      const orderedMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+      const hrMatch = line.match(/^\s*((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})\s*$/);
+
+      if (headingMatch) {
+        flushList();
+        flushBlockquote();
+        const level = headingMatch[1].length;
+        const content = formatInline(headingMatch[2]);
+        const sizeClass =
+          level === 1 ? "text-lg" : level === 2 ? "text-base" : "text-sm";
+        html += `<h${level} class="${sizeClass} font-semibold mt-2 mb-1">${content}</h${level}>`;
+        continue;
+      }
+
+      if (hrMatch) {
+        flushList();
+        flushBlockquote();
+        html += "<hr class=\"my-2 border-border\" />";
+        continue;
+      }
+
+      if (blockquoteMatch) {
+        flushList();
+        blockquoteLines.push(blockquoteMatch[1]);
+        continue;
+      }
+
+      if (hasTablePipe(line) && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+        flushList();
+        flushBlockquote();
+        const headerLine = line;
+        const separatorLine = lines[i + 1];
+        const rows: string[] = [];
+        i += 2;
+        while (i < lines.length && hasTablePipe(lines[i]) && lines[i].trim() !== "") {
+          rows.push(lines[i]);
+          i += 1;
+        }
+        i -= 1;
+
+        const parseRow = (row: string) =>
+          row
+            .trim()
+            .replace(/^\|/, "")
+            .replace(/\|$/, "")
+            .split("|")
+            .map((cell) => formatInline(cell.trim()));
+
+        const headerCells = parseRow(headerLine);
+        const bodyRows = rows.map(parseRow);
+
+        html += "<div class=\"overflow-x-auto\"><table class=\"w-full border-collapse text-sm\">";
+        html += "<thead><tr>";
+        headerCells.forEach((cell) => {
+          html += `<th class="border border-border px-2 py-1 text-left font-semibold">${cell}</th>`;
+        });
+        html += "</tr></thead>";
+        html += "<tbody>";
+        bodyRows.forEach((cells) => {
+          html += "<tr>";
+          cells.forEach((cell) => {
+            html += `<td class="border border-border px-2 py-1 align-top">${cell}</td>`;
+          });
+          html += "</tr>";
+        });
+        html += "</tbody></table></div>";
+        continue;
+      }
+
+      if (unorderedMatch) {
+        flushBlockquote();
+        if (listType !== "ul") {
+          flushList();
+          listType = "ul";
+          html += "<ul class=\"list-disc pl-5 space-y-1\">";
+        }
+        html += `<li>${formatInline(unorderedMatch[1])}</li>`;
+        continue;
+      }
+
+      if (orderedMatch) {
+        flushBlockquote();
+        if (listType !== "ol") {
+          flushList();
+          listType = "ol";
+          html += "<ol class=\"list-decimal pl-5 space-y-1\">";
+        }
+        html += `<li>${formatInline(orderedMatch[1])}</li>`;
+        continue;
+      }
+
+      if (line.trim() === "") {
+        flushList();
+        flushBlockquote();
+        html += "<br>";
+        continue;
+      }
+
+      flushList();
+      flushBlockquote();
+      html += `<p>${formatInline(line)}</p>`;
+    }
+
+    flushList();
+    flushBlockquote();
+
+    codeBlocks.forEach((block, index) => {
+      html = html.replace(`@@CODEBLOCK_${index}@@`, block);
+    });
+
+    return html;
+  };
+
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -117,14 +306,67 @@ export function AssistantPanel({
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const userInput = input;
     setInput("");
     setIsLoading(true);
 
     try {
+      // Handle slash commands locally
+      if (userInput === "/help") {
+        const helpMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: `**Available Commands:**
+
+/help - Show this help message
+/tools - List available tools
+/clear - Clear conversation
+
+**Available Tools:**
+• create_document - Create a new document
+• get_document - Get document details
+• search_documents - Search documents by content
+• create_extract - Create an extract from selection
+• create_qa_card - Create a Q&A flashcard
+• get_review_queue - Get items due for review
+
+I also have context of what you're currently viewing, so feel free to ask questions about your documents!`,
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, helpMessage]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (userInput === "/tools") {
+        const tools = getAvailableTools();
+        const toolsList = tools.map(t => `• **${t.name}** - ${t.description}`).join('\n');
+        const toolsMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: `**Available Tools:**\n\n${toolsList}`,
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, toolsMessage]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (userInput === "/clear") {
+        setMessages([]);
+        setIsLoading(false);
+        return;
+      }
+
       // Build context for the LLM
+      // Filter conversation history to only include user and assistant messages
+      const filteredHistory = messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .slice(-10); // Last 10 messages (excluding system messages)
+
       const contextData = {
         currentContext: context,
-        conversationHistory: messages.slice(-10), // Last 10 messages
+        conversationHistory: filteredHistory,
         availableTools: getAvailableTools(),
       };
 
@@ -158,27 +400,43 @@ export function AssistantPanel({
     contextData: Record<string, unknown>
   ): Promise<{ content: string; toolCalls?: ToolCall[] }> => {
     try {
-      // Get the enabled provider for the selected provider type
-      const providers = useLLMProvidersStore.getState().getEnabledProviders();
-      console.log("Available providers:", providers.map((p) => ({
+      // Get all providers to check if selected provider exists but is disabled
+      const allProviders = useLLMProvidersStore.getState().providers;
+      const enabledProviders = useLLMProvidersStore.getState().getEnabledProviders();
+
+      console.log("All providers:", allProviders.map((p) => ({
         id: p.id,
         provider: p.provider,
         name: p.name,
+        enabled: p.enabled,
         hasApiKey: !!p.apiKey && p.apiKey.trim().length > 0,
       })));
-      const provider = providers.find((p) => p.provider === selectedProvider);
 
-      if (!provider) {
-        const availableTypes = providers.map((p) => p.provider).join(", ");
+      // Check if the selected provider exists but is disabled
+      const selectedTypeProvider = allProviders.find((p) => p.provider === selectedProvider);
+
+      if (!selectedTypeProvider) {
+        // Provider doesn't exist at all
+        const availableTypes = enabledProviders.map((p) => p.provider).join(", ");
         return {
           content: `No ${selectedProvider} provider configured. Available providers: ${availableTypes || "None"}. Please add an API key in Settings.`,
         };
       }
-      if (!provider.apiKey || !provider.apiKey.trim()) {
+
+      if (!selectedTypeProvider.enabled) {
+        // Provider exists but is disabled
+        return {
+          content: `The ${selectedProvider} provider is configured but disabled. Please enable it in Settings, or select a different provider.`,
+        };
+      }
+
+      if (!selectedTypeProvider.apiKey || !selectedTypeProvider.apiKey.trim()) {
         return {
           content: `${selectedProvider} provider found but API key is empty. Please remove and re-add the provider in Settings.`,
         };
       }
+
+      const provider = selectedTypeProvider;
 
       // Convert messages to LLM format
       const llmMessages = [
@@ -194,10 +452,12 @@ export function AssistantPanel({
 
       // Build LLM context
       const llmContext = contextData.currentContext as AssistantContext;
+      const contextWindow = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
 
       // Call the LLM API
       const response = await chatWithContext(
         selectedProvider,
+        provider.model,
         llmMessages,
         {
           type: llmContext.type,
@@ -205,6 +465,7 @@ export function AssistantPanel({
           url: llmContext.url,
           selection: llmContext.selection,
           content: llmContext.content,
+          contextWindowTokens: contextWindow,
         },
         provider.apiKey,
         provider.baseUrl && provider.baseUrl.trim() ? provider.baseUrl : undefined
@@ -213,8 +474,14 @@ export function AssistantPanel({
       return { content: response.content };
     } catch (error) {
       console.error("LLM API error:", error);
+      // Better error handling - Tauri errors can be strings or objects
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+        ? error
+        : JSON.stringify(error);
       return {
-        content: `Error calling LLM: ${error instanceof Error ? error.message : "Unknown error"}`,
+        content: `Error calling LLM: ${errorMessage}`,
       };
     }
   };
@@ -293,7 +560,7 @@ export function AssistantPanel({
 
   if (isCollapsed) {
     return (
-      <div className={`flex flex-col bg-card border-l border-border ${className}`}>
+      <div className={`flex flex-col bg-card border-l border-border relative ${className}`}>
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 hover:bg-muted transition-colors border-r border-border"
@@ -309,7 +576,7 @@ export function AssistantPanel({
 
   return (
     <div
-      className={`flex flex-col bg-card border-l border-border ${className}`}
+      className={`flex flex-col bg-card border-l border-border relative ${className}`}
       style={{ width: isCollapsed ? "auto" : width }}
     >
       {/* Header */}
@@ -408,7 +675,14 @@ export function AssistantPanel({
                     : "bg-muted text-foreground"
                 }`}
               >
-                {message.content}
+                {message.role === "user" ? (
+                  message.content
+                ) : (
+                  <div
+                    className="assistant-markdown leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+                  />
+                )}
               </div>
 
               {/* Tool Calls */}
@@ -453,7 +727,11 @@ export function AssistantPanel({
           </div>
 
           {/* Text Input */}
-          <div className="flex gap-2">
+          <div
+            className="flex gap-2"
+            onMouseEnter={() => setIsInputHovered(true)}
+            onMouseLeave={() => setIsInputHovered(false)}
+          >
             <textarea
               ref={textareaRef}
               value={input}
@@ -461,8 +739,6 @@ export function AssistantPanel({
               onKeyDown={handleKeyDown}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
-              onMouseEnter={() => setIsInputHovered(true)}
-              onMouseLeave={() => setIsInputHovered(false)}
               placeholder="Ask about your document, or type /help for commands..."
               className="flex-1 px-3 py-2 bg-background border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm"
               rows={2}
@@ -496,10 +772,10 @@ export function AssistantPanel({
               /help
             </button>
             <button
-              onClick={() => setMessages([])}
+              onClick={() => setInput("/clear")}
               className="px-2 py-1 bg-muted hover:bg-muted/80 rounded text-muted-foreground transition-colors ml-auto"
             >
-              Clear
+              /clear
             </button>
           </div>
         </div>

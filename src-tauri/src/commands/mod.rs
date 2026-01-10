@@ -19,6 +19,7 @@ pub mod llm;
 pub mod cloud;
 pub mod scheduler;
 pub mod legacy_import;
+pub mod ocr;
 
 // Re-export error types for use in commands
 pub use crate::error::Result;
@@ -40,6 +41,7 @@ pub use notifications::*;
 pub use mcp::*;
 pub use llm::*;
 pub use legacy_import::*;
+pub use ocr::*;
 
 // Cloud commands
 pub use cloud::oauth::*;

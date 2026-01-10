@@ -135,6 +135,10 @@ pub fn run() {
             commands::create_category,
             // Queue commands
             commands::get_queue,
+            commands::get_next_queue_item,
+            commands::get_queue_items,
+            commands::get_queued_items,
+            commands::get_due_queue_items,
             commands::get_queue_stats,
             commands::postpone_item,
             commands::bulk_suspend_items,
@@ -149,7 +153,7 @@ pub fn run() {
             commands::get_review_streak,
             // Algorithm commands
             commands::calculate_sm2_next,
-            commands::schedule_documents,
+            commands::rate_document,
             commands::calculate_priority_scores,
             commands::compare_algorithms_command,
             commands::get_algorithm_params,
@@ -281,6 +285,15 @@ pub fn run() {
             // Anki import commands
             anki::import_anki_package_to_learning_items,
             anki::import_anki_package_bytes_to_learning_items,
+            // OCR commands
+            commands::init_ocr,
+            commands::ocr_image_file,
+            commands::ocr_image_bytes,
+            commands::extract_key_phrases,
+            commands::get_available_ocr_providers,
+            commands::is_provider_available,
+            commands::get_ocr_config,
+            commands::update_ocr_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

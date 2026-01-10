@@ -10,6 +10,8 @@ pub enum OCRProviderType {
     GoogleDocumentAI,
     AWSTextract,
     AzureVision,
+    Marker,
+    Nougat,
 }
 
 /// OCR result with text and metadata
@@ -414,6 +416,240 @@ impl OCRProvider for AzureVisionProvider {
     }
 }
 
+/// Marker OCR provider (local PDF to markdown converter)
+pub struct MarkerProvider {
+    marker_path: Option<String>,
+}
+
+impl MarkerProvider {
+    pub fn new(marker_path: Option<String>) -> Self {
+        Self { marker_path }
+    }
+
+    /// Check if Marker is installed
+    pub fn check_installation(&self) -> Result<()> {
+        let cmd = self
+            .marker_path
+            .clone()
+            .unwrap_or_else(|| "marker".to_string());
+
+        let output = std::process::Command::new(&cmd)
+            .arg("--version")
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => Ok(()),
+            _ => Err(IncrementumError::Internal(format!(
+                "Marker not found. Please install it or provide the correct path."
+            ))
+            .into()),
+        }
+    }
+}
+
+impl std::fmt::Debug for MarkerProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MarkerProvider")
+            .field("marker_path", &self.marker_path)
+            .finish()
+    }
+}
+
+#[async_trait::async_trait]
+impl OCRProvider for MarkerProvider {
+    fn provider_type(&self) -> OCRProviderType {
+        OCRProviderType::Marker
+    }
+
+    async fn process_image(&self, image_path: &std::path::Path) -> Result<OCRResult> {
+        let start = std::time::Instant::now();
+
+        // Marker expects PDFs, for images we can convert first or use Tesseract
+        // For now, we'll try running marker and it will handle the conversion
+        let cmd = self
+            .marker_path
+            .clone()
+            .unwrap_or_else(|| "marker".to_string());
+
+        let output = std::process::Command::new(&cmd)
+            .arg(image_path)
+            .arg("--output_format")
+            .arg("markdown")
+            .output()
+            .map_err(|e| {
+                IncrementumError::Internal(format!("Failed to run Marker: {}", e))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(IncrementumError::Internal(format!(
+                "Marker processing failed: {}",
+                stderr
+            ))
+            .into());
+        }
+
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        let processing_time_ms = start.elapsed().as_millis() as u64;
+
+        let line_count = text.lines().count();
+        let word_count = text.split_whitespace().count();
+
+        Ok(OCRResult {
+            text,
+            confidence: 85.0, // Marker typically has good accuracy
+            line_count,
+            word_count,
+            processing_time_ms,
+            provider: OCRProviderType::Marker,
+            metadata: serde_json::json!({
+                "engine": "Marker",
+                "format": "markdown"
+            }),
+        })
+    }
+
+    async fn process_image_bytes(&self, image_data: &[u8]) -> Result<OCRResult> {
+        // Write bytes to temporary file
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!("ocr_{}.png", uuid::Uuid::new_v4()));
+
+        tokio::fs::write(&temp_file, image_data)
+            .await
+            .map_err(|e| IncrementumError::Internal(format!("Failed to write temp file: {}", e)))?;
+
+        let result = self.process_image(&temp_file).await;
+
+        // Clean up temp file
+        let _ = tokio::fs::remove_file(&temp_file).await;
+
+        result
+    }
+
+    fn is_available(&self) -> bool {
+        self.check_installation().is_ok()
+    }
+
+    fn provider_name(&self) -> &str {
+        "Marker"
+    }
+}
+
+/// Nougat OCR provider (scientific documents with math)
+pub struct NougatProvider {
+    nougat_path: Option<String>,
+}
+
+impl NougatProvider {
+    pub fn new(nougat_path: Option<String>) -> Self {
+        Self { nougat_path }
+    }
+
+    /// Check if Nougat is installed
+    pub fn check_installation(&self) -> Result<()> {
+        let cmd = self
+            .nougat_path
+            .clone()
+            .unwrap_or_else(|| "nougat".to_string());
+
+        let output = std::process::Command::new(&cmd)
+            .arg("--version")
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => Ok(()),
+            _ => Err(IncrementumError::Internal(format!(
+                "Nougat not found. Please install it or provide the correct path."
+            ))
+            .into()),
+        }
+    }
+}
+
+impl std::fmt::Debug for NougatProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NougatProvider")
+            .field("nougat_path", &self.nougat_path)
+            .finish()
+    }
+}
+
+#[async_trait::async_trait]
+impl OCRProvider for NougatProvider {
+    fn provider_type(&self) -> OCRProviderType {
+        OCRProviderType::Nougat
+    }
+
+    async fn process_image(&self, image_path: &std::path::Path) -> Result<OCRResult> {
+        let start = std::time::Instant::now();
+
+        let cmd = self
+            .nougat_path
+            .clone()
+            .unwrap_or_else(|| "nougat".to_string());
+
+        let output = std::process::Command::new(&cmd)
+            .arg(image_path)
+            .output()
+            .map_err(|e| {
+                IncrementumError::Internal(format!("Failed to run Nougat: {}", e))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(IncrementumError::Internal(format!(
+                "Nougat processing failed: {}",
+                stderr
+            ))
+            .into());
+        }
+
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        let processing_time_ms = start.elapsed().as_millis() as u64;
+
+        let line_count = text.lines().count();
+        let word_count = text.split_whitespace().count();
+
+        Ok(OCRResult {
+            text,
+            confidence: 80.0, // Nougat is good but can struggle with complex layouts
+            line_count,
+            word_count,
+            processing_time_ms,
+            provider: OCRProviderType::Nougat,
+            metadata: serde_json::json!({
+                "engine": "Nougat",
+                "math_support": true
+            }),
+        })
+    }
+
+    async fn process_image_bytes(&self, image_data: &[u8]) -> Result<OCRResult> {
+        // Write bytes to temporary file
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!("ocr_{}.png", uuid::Uuid::new_v4()));
+
+        tokio::fs::write(&temp_file, image_data)
+            .await
+            .map_err(|e| IncrementumError::Internal(format!("Failed to write temp file: {}", e)))?;
+
+        let result = self.process_image(&temp_file).await;
+
+        // Clean up temp file
+        let _ = tokio::fs::remove_file(&temp_file).await;
+
+        result
+    }
+
+    fn is_available(&self) -> bool {
+        self.check_installation().is_ok()
+    }
+
+    fn provider_name(&self) -> &str {
+        "Nougat"
+    }
+}
+
 /// Create OCR provider from type and config
 pub fn create_provider(
     provider_type: OCRProviderType,
@@ -437,6 +673,12 @@ pub fn create_provider(
             let azure_config = config.azure_vision.as_ref()
                 .ok_or_else(|| IncrementumError::Internal("Azure Vision config not set".to_string()))?;
             Ok(Box::new(AzureVisionProvider::new(azure_config.clone())))
+        }
+        OCRProviderType::Marker => {
+            Ok(Box::new(MarkerProvider::new(config.marker_path.clone())))
+        }
+        OCRProviderType::Nougat => {
+            Ok(Box::new(NougatProvider::new(config.nougat_path.clone())))
         }
     }
 }

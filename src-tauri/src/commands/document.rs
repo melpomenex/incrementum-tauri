@@ -129,8 +129,66 @@ pub async fn get_document(
     id: String,
     repo: State<'_, Repository>,
 ) -> Result<Option<Document>> {
-    let doc = repo.get_document(&id).await?;
-    Ok(doc)
+    let mut doc = match repo.get_document(&id).await? {
+        Some(doc) => doc,
+        None => return Ok(None),
+    };
+
+    let has_epub_placeholder = doc
+        .content
+        .as_ref()
+        .map(|content| {
+            let normalized = content.trim();
+            normalized.starts_with("EPUB file loaded (")
+                && normalized.contains("Full content extraction requires additional EPUB library integration.")
+        })
+        .unwrap_or(false);
+
+    let needs_content = doc
+        .content
+        .as_ref()
+        .map(|content| content.trim().is_empty())
+        .unwrap_or(true)
+        || has_epub_placeholder;
+
+    if needs_content && matches!(doc.file_type, FileType::Epub) {
+        if let Ok(extracted) = processor::extract_content(&doc.file_path, doc.file_type.clone()).await {
+            if !extracted.text.trim().is_empty() {
+                let content_hash = Some(processor::generate_content_hash(&extracted.text));
+                let metadata = Some(DocumentMetadata {
+                    author: extracted.author.clone(),
+                    subject: None,
+                    keywords: None,
+                    created_at: None,
+                    modified_at: None,
+                    file_size: None,
+                    language: extracted
+                        .metadata
+                        .get("language")
+                        .and_then(|value| value.as_str())
+                        .map(|value| value.to_string()),
+                    page_count: extracted.page_count.map(|p| p as i32),
+                    word_count: None,
+                });
+
+                repo.update_document_content(
+                    &doc.id,
+                    &extracted.text,
+                    content_hash.clone(),
+                    extracted.page_count.map(|p| p as i32),
+                    metadata.clone(),
+                )
+                .await?;
+
+                doc.content = Some(extracted.text);
+                doc.content_hash = content_hash;
+                doc.total_pages = extracted.page_count.map(|p| p as i32);
+                doc.metadata = metadata;
+            }
+        }
+    }
+
+    Ok(Some(doc))
 }
 
 #[tauri::command]

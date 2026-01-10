@@ -4,6 +4,7 @@ import { ReviewCard } from "../../components/review/ReviewCard";
 import { RatingButtons } from "../../components/review/RatingButtons";
 import { ReviewProgress } from "../../components/review/ReviewProgress";
 import { ReviewComplete } from "../../components/review/ReviewComplete";
+import { ReviewTransparencyPanel } from "../../components/review/ReviewTransparencyPanel";
 import { QueueNavigationControls } from "../queue/QueueNavigationControls";
 import { HoverRatingControls } from "../review/HoverRatingControls";
 import { AlertCircle } from "lucide-react";
@@ -20,6 +21,7 @@ export function ReviewTab() {
     reviewsCompleted,
     correctCount,
     sessionStartTime,
+    averageTimePerCard,
     currentIndex,
     streak,
     previewIntervals,
@@ -164,6 +166,13 @@ export function ReviewTab() {
     );
   }
 
+  const estimatedSecondsRemaining = getEstimatedTimeRemaining();
+  const perItemSeconds = averageTimePerCard > 0 ? averageTimePerCard : 30;
+  const remainingItems = queue.length - currentIndex;
+  const safeStopCount = Math.max(1, Math.min(remainingItems, Math.floor((20 * 60) / perItemSeconds)));
+  const minMinutes = Math.max(1, Math.round((estimatedSecondsRemaining / 60) * 0.85));
+  const maxMinutes = Math.max(1, Math.round((estimatedSecondsRemaining / 60) * 1.15));
+
   return (
     <div className="h-full flex flex-col p-6">
       {/* Header */}
@@ -171,7 +180,7 @@ export function ReviewTab() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Review</h1>
           <p className="text-muted-foreground">
-            Practice with spaced repetition
+            Focused session with clear time and retention feedback
           </p>
         </div>
 
@@ -226,46 +235,72 @@ export function ReviewTab() {
         )}
       </div>
 
-      {/* Progress */}
-      <ReviewProgress
-        currentIndex={currentIndex}
-        totalCards={queue.length}
-        reviewsCompleted={reviewsCompleted}
-        correctCount={correctCount}
-        estimatedTimeRemaining={getEstimatedTimeRemaining()}
-        streak={streak}
-      />
-
-      {/* Card and Ratings */}
-      <div className="flex-1 flex flex-col justify-center">
-        {isAnswerShown ? (
-          <>
-            {/* Card with answer shown */}
-            <ReviewCard
-              card={currentCard}
-              showAnswer={true}
-              onShowAnswer={() => {}}
-            />
-
-            {/* Rating Buttons */}
-            <div className="mt-6">
-              <RatingButtons
-                onSelectRating={handleRating}
-                disabled={isSubmitting}
-                previewIntervals={previewIntervals}
-              />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 flex-1">
+        <div className="flex flex-col gap-6">
+          <div className="bg-card border border-border rounded-lg p-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
+            <div>
+              Time remaining: <span className="text-foreground font-semibold">{minMinutes}-{maxMinutes} min</span>
             </div>
-          </>
-        ) : (
-          <>
-            {/* Card with answer hidden */}
-            <ReviewCard
-              card={currentCard}
-              showAnswer={false}
-              onShowAnswer={showAnswer}
-            />
-          </>
-        )}
+            <div>
+              Items remaining: <span className="text-foreground font-semibold">{remainingItems}</span>
+            </div>
+            <div>
+              Safe stop after: <span className="text-foreground font-semibold">{safeStopCount} items</span>
+            </div>
+            <div>
+              Session goal: <span className="text-foreground font-semibold">Retention maintenance</span>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <ReviewProgress
+            currentIndex={currentIndex}
+            totalCards={queue.length}
+            reviewsCompleted={reviewsCompleted}
+            correctCount={correctCount}
+            estimatedTimeRemaining={getEstimatedTimeRemaining()}
+            streak={streak}
+          />
+
+          {/* Card and Ratings */}
+          <div className="flex-1 flex flex-col justify-center">
+            {isAnswerShown ? (
+              <>
+                {/* Card with answer shown */}
+                <ReviewCard
+                  card={currentCard}
+                  showAnswer={true}
+                  onShowAnswer={() => {}}
+                />
+
+                {/* Rating Buttons */}
+                <div className="mt-6">
+                  <RatingButtons
+                    onSelectRating={handleRating}
+                    disabled={isSubmitting}
+                    previewIntervals={previewIntervals}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Card with answer hidden */}
+                <ReviewCard
+                  card={currentCard}
+                  showAnswer={false}
+                  onShowAnswer={showAnswer}
+                />
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <ReviewTransparencyPanel card={currentCard} previewIntervals={previewIntervals} />
+          <div className="bg-card border border-border rounded-lg p-4 text-xs text-muted-foreground">
+            Session cut-off guarantee: you can stop after item {safeStopCount} without penalty.
+          </div>
+        </div>
       </div>
     </div>
   );

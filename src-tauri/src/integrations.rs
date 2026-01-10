@@ -321,6 +321,13 @@ pub async fn import_from_obsidian_internal(
             page_count: None,
             word_count: None,
         }),
+        // Scheduling fields
+        next_reading_date: None,
+        reading_count: 0,
+        stability: None,
+        difficulty: None,
+        reps: None,
+        total_time_spent: None,
     };
 
     let created_doc = repo.create_document(&document).await?;

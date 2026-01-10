@@ -27,6 +27,10 @@ pub struct OCRConfig {
     pub aws_textract: Option<AWSTextractConfig>,
     /// Azure Computer Vision configuration
     pub azure_vision: Option<AzureVisionConfig>,
+    /// Marker installation path (for local PDF to markdown)
+    pub marker_path: Option<String>,
+    /// Nougat installation path (for math OCR)
+    pub nougat_path: Option<String>,
 }
 
 /// Google Document AI configuration
@@ -61,6 +65,8 @@ impl Default for OCRConfig {
             google_document_ai: None,
             aws_textract: None,
             azure_vision: None,
+            marker_path: None,
+            nougat_path: None,
         }
     }
 }

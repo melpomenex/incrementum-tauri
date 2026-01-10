@@ -1,20 +1,55 @@
 /**
  * Wrapper component that adds Assistant panel to DocumentViewer
  */
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DocumentViewer as BaseDocumentViewer } from "./DocumentViewer";
 import { AssistantPanel, type AssistantContext } from "../assistant/AssistantPanel";
+import { useDocumentStore } from "../../stores";
+import * as documentsApi from "../../api/documents";
 
 interface DocumentViewerWithAssistantProps {
   documentId: string;
 }
 
 export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps) {
-  const [assistantContext, setAssistantContext] = useState<AssistantContext>({
-    type: "document",
-    documentId,
-  });
   const [assistantInputActive, setAssistantInputActive] = useState(false);
+  const [selection, setSelection] = useState("");
+  const currentDocument = useDocumentStore((state) => state.currentDocument);
+  const [documentContent, setDocumentContent] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadDocumentContent = async () => {
+      try {
+        const doc = await documentsApi.getDocument(documentId);
+        if (isActive) {
+          setDocumentContent(doc?.content ?? undefined);
+        }
+      } catch (error) {
+        console.error("Failed to load document content for assistant:", error);
+        if (isActive) {
+          setDocumentContent(undefined);
+        }
+      }
+    };
+
+    loadDocumentContent();
+
+    return () => {
+      isActive = false;
+    };
+  }, [documentId]);
+
+  const assistantContext = useMemo<AssistantContext>(
+    () => ({
+      type: "document",
+      documentId,
+      selection: selection || undefined,
+      content: currentDocument?.content ?? documentContent,
+    }),
+    [currentDocument?.content, documentContent, documentId, selection]
+  );
 
   return (
     <div className="flex h-full">
@@ -23,6 +58,7 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
         <BaseDocumentViewer
           documentId={documentId}
           disableHoverRating={assistantInputActive}
+          onSelectionChange={setSelection}
         />
       </div>
 

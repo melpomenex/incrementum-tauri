@@ -1,0 +1,599 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Filter,
+  Keyboard,
+  LayoutList,
+  Play,
+  Sparkles,
+  Target,
+} from "lucide-react";
+import { useQueueStore } from "../../stores/queueStore";
+import type { QueueItem } from "../../types/queue";
+import {
+  PriorityPreset,
+  buildSessionBlocks,
+  formatMinutesRange,
+  getFsrsMetrics,
+  getPriorityScore,
+  getPriorityVector,
+  getQueueStatus,
+  getReadingImpact,
+  getStatusLabel,
+  getTimeEstimateRange,
+  isScheduledItem,
+} from "../../utils/reviewUx";
+
+type QueueMode = "reading" | "review";
+
+interface ReviewQueueViewProps {
+  onStartReview?: () => void;
+  onOpenDocument?: (item: QueueItem) => void;
+}
+
+export function ReviewQueueView({ onStartReview, onOpenDocument }: ReviewQueueViewProps) {
+  const {
+    items,
+    isLoading,
+    error,
+    searchQuery,
+    setSearchQuery,
+    loadQueue,
+    loadStats,
+    selectedIds,
+    setSelected,
+    selectAll,
+    clearSelection,
+    bulkSuspend,
+    bulkUnsuspend,
+    bulkDelete,
+    bulkOperationLoading,
+    bulkOperationResult,
+    clearBulkResult,
+  } = useQueueStore();
+  const [queueMode, setQueueMode] = useState<QueueMode>("reading");
+  const [preset, setPreset] = useState<PriorityPreset>("maximize-retention");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isInspectorOpen, setInspectorOpen] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showRawJson, setShowRawJson] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadQueue();
+    loadStats();
+  }, [loadQueue, loadStats]);
+
+  const visibleItems = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const queueItems = items.filter((item) => {
+      if (queueMode === "review") {
+        return item.itemType === "learning-item" && isScheduledItem(item);
+      }
+      // Reading mode: only show imported documents (books/articles/RSS), not extracts or learning items
+      return item.itemType === "document";
+    });
+    const searchedItems = normalizedQuery
+      ? queueItems.filter((item) => {
+          const haystack = [item.documentTitle, item.category, ...(item.tags ?? [])]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(normalizedQuery);
+        })
+      : queueItems;
+    return [...searchedItems].sort((a, b) => getPriorityScore(b, preset) - getPriorityScore(a, preset));
+  }, [items, queueMode, preset, searchQuery]);
+
+  const selectableItems = useMemo(
+    () => visibleItems.filter((item) => item.itemType === "learning-item"),
+    [visibleItems]
+  );
+
+  const allSelected = selectableItems.length > 0 && selectableItems.every((item) => selectedIds.has(item.id));
+
+  const sessionBlocks = useMemo(() => buildSessionBlocks(visibleItems), [visibleItems]);
+  const selectedItem = useMemo(
+    () => visibleItems.find((item) => item.id === selectedId) ?? null,
+    [visibleItems, selectedId]
+  );
+
+  useEffect(() => {
+    if (!selectedItem && visibleItems.length > 0) {
+      setSelectedId(visibleItems[0].id);
+    }
+  }, [selectedItem, visibleItems]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      if (event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        setInspectorOpen((prev) => !prev);
+        return;
+      }
+      if (event.key.toLowerCase() === "j" || event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (visibleItems.length === 0) return;
+        const currentIndex = visibleItems.findIndex((item) => item.id === selectedId);
+        const delta = event.key.toLowerCase() === "j" ? 1 : -1;
+        const nextIndex = currentIndex === -1 ? 0 : Math.min(visibleItems.length - 1, Math.max(0, currentIndex + delta));
+        setSelectedId(visibleItems[nextIndex].id);
+        return;
+      }
+      if (event.key === "Enter" && selectedItem) {
+        if (selectedItem.itemType === "learning-item") {
+          onStartReview?.();
+        } else {
+          onOpenDocument?.(selectedItem);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onOpenDocument, onStartReview, selectedId, selectedItem, visibleItems]);
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleStartOptimalSession = () => {
+    onStartReview?.();
+  };
+
+  const handleToggleSelectAll = () => {
+    if (allSelected) {
+      clearSelection();
+    } else {
+      selectAll();
+    }
+  };
+
+  const handleBulkSuspend = async () => {
+    await bulkSuspend();
+  };
+
+  const handleBulkUnsuspend = async () => {
+    await bulkUnsuspend();
+  };
+
+  const handleBulkDelete = async () => {
+    await bulkDelete();
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-cream">
+      <div className="border-b border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">
+              {queueMode === "reading" ? "Reading Queue" : "Review Queue"}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {queueMode === "reading"
+                ? "Imported books, articles, and RSS feeds scheduled for incremental reading"
+                : "Flashcards and learning items scheduled for review"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleStartOptimalSession}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 flex items-center gap-2"
+            >
+              <Play className="w-4 h-4" />
+              Start Optimal Session
+            </button>
+            <button className="px-4 py-2 bg-muted text-foreground rounded-md hover:bg-muted/80">
+              Customize Session
+            </button>
+            <button className="px-4 py-2 bg-background border border-border rounded-md hover:bg-muted/60">
+              Manual Browse
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1 bg-muted/60 rounded-md p-1">
+            <button
+              onClick={() => setQueueMode("reading")}
+              className={`px-3 py-1 text-sm rounded ${
+                queueMode === "reading" ? "bg-background shadow text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              Reading Queue
+            </button>
+            <button
+              onClick={() => setQueueMode("review")}
+              className={`px-3 py-1 text-sm rounded ${
+                queueMode === "review" ? "bg-background shadow text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              Review Queue
+            </button>
+          </div>
+          <div className="flex-1 min-w-[220px] relative">
+            <input
+              ref={searchRef}
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search tags, titles, or focus areas"
+              className="w-full pl-4 pr-10 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          </div>
+          <select
+            value={preset}
+            onChange={(event) => setPreset(event.target.value as PriorityPreset)}
+            className="px-3 py-2 bg-background border border-border rounded-md text-sm"
+          >
+            <option value="maximize-retention">Maximize Retention</option>
+            <option value="minimize-time">Minimize Daily Time</option>
+            <option value="aggressive-catchup">Aggressive Catch-Up</option>
+            <option value="exploratory">Exploratory Learning</option>
+            <option value="project-focused">Project-Focused</option>
+          </select>
+          <button
+            onClick={() => setInspectorOpen((prev) => !prev)}
+            className="px-3 py-2 bg-muted text-foreground rounded-md text-sm hover:bg-muted/80"
+          >
+            {isInspectorOpen ? "Hide Inspector" : "Show Inspector"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+          {error && (
+            <div className="p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
+              {error}
+            </div>
+          )}
+
+          {bulkOperationResult && (
+            <div className="p-3 bg-muted border border-border rounded-lg text-sm text-foreground flex items-center justify-between">
+              <span>
+                Bulk update: {bulkOperationResult.succeeded.length} succeeded, {bulkOperationResult.failed.length} failed
+              </span>
+              <button
+                onClick={clearBulkResult}
+                className="px-2 py-1 text-xs bg-background border border-border rounded"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {selectedIds.size > 0 && (
+            <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-between">
+              <span className="text-sm text-primary">
+                {selectedIds.size} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBulkSuspend}
+                  disabled={bulkOperationLoading}
+                  className="px-3 py-1.5 bg-background border border-border rounded text-sm"
+                >
+                  Suspend
+                </button>
+                <button
+                  onClick={handleBulkUnsuspend}
+                  disabled={bulkOperationLoading}
+                  className="px-3 py-1.5 bg-background border border-border rounded text-sm"
+                >
+                  Unsuspend
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkOperationLoading}
+                  className="px-3 py-1.5 bg-destructive text-destructive-foreground rounded text-sm"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="text-center py-12 text-muted-foreground">Loading queue...</div>
+          ) : visibleItems.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {queueMode === "reading"
+                ? "No documents in the reading queue. Import books, articles, or RSS feeds to get started."
+                : "No learning items scheduled for review."}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {sessionBlocks.map((block) => (
+                  <div key={block.id} className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-sm font-semibold text-foreground">{block.title}</h2>
+                      <span className="text-xs text-muted-foreground">
+                        {block.timeBudgetMinutes} min
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-3">
+                      Safe stop after item {block.safeStopCount}
+                    </div>
+                    <div className="space-y-2">
+                      {block.items.slice(0, 3).map((item) => (
+                        <div key={item.id} className="text-xs text-muted-foreground flex items-center gap-2">
+                          <span className="text-foreground">•</span>
+                          <span className="line-clamp-1">{item.documentTitle}</span>
+                        </div>
+                      ))}
+                      {block.items.length > 3 && (
+                        <div className="text-xs text-muted-foreground">
+                          +{block.items.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="w-4 h-4" />
+                <span>
+                  Session estimate: {formatMinutesRange(getTimeEstimateRange(visibleItems[0]))} per item
+                </span>
+                <span>•</span>
+                <span>Press J/K to navigate, Enter to open, I to toggle inspector</span>
+              </div>
+
+              <div className="space-y-3">
+                {selectableItems.length > 0 && queueMode === "review" && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={allSelected} onChange={handleToggleSelectAll} />
+                      Select all learning items
+                    </label>
+                  </div>
+                )}
+                {visibleItems.map((item) => {
+                  const isExpanded = expandedIds.has(item.id);
+                  const status = getQueueStatus(item);
+                  const priorityVector = getPriorityVector(item);
+                  const estimateRange = getTimeEstimateRange(item);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`border rounded-lg bg-card transition-colors ${
+                        item.id === selectedId ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
+                      }`}
+                    >
+                      <div
+                        onClick={() => setSelectedId(item.id)}
+                        className="p-4 flex flex-wrap items-center justify-between gap-3 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {item.itemType === "learning-item" && (
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(item.id)}
+                              onChange={(event) => {
+                                event.stopPropagation();
+                                setSelected(item.id, !selectedIds.has(item.id));
+                              }}
+                            />
+                          )}
+                          <StatusPill status={status} />
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-foreground line-clamp-1">
+                              {item.documentTitle}
+                            </div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatMinutesRange(estimateRange)} • Priority {getPriorityScore(item, preset)}
+                          </div>
+                          <TimeConfidenceBar min={estimateRange.min} max={estimateRange.max} />
+                        </div>
+                      </div>
+                        <div className="flex items-center gap-3">
+                          <PriorityGlyph vector={priorityVector} />
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleExpanded(item.id);
+                            }}
+                            className="p-2 bg-muted rounded-md text-muted-foreground hover:text-foreground"
+                          >
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="border-t border-border px-4 py-3 text-xs text-muted-foreground space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Sparkles className="w-4 h-4" />
+                            <span>
+                              Stability {getFsrsMetrics(item).stability} • Difficulty {getFsrsMetrics(item).difficulty} • Retrievability{" "}
+                              {Math.round(getFsrsMetrics(item).retrievability * 100)}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Target className="w-4 h-4" />
+                            <span>
+                              Next interval: {getFsrsMetrics(item).nextIntervalDays} days • Impact: {getReadingImpact(item)}
+                            </span>
+                          </div>
+                          {status === "drifted" && (
+                            <div className="flex items-center gap-3 text-muted-foreground">
+                              <AlertTriangle className="w-4 h-4" />
+                              <span>
+                                Drifted state: reschedule, compress intervals, or downgrade frequency.
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {isInspectorOpen && (
+          <aside className="w-80 border-l border-border bg-card p-4 overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-foreground">Inspector</h2>
+              <button
+                onClick={() => setInspectorOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+            </div>
+            {!selectedItem ? (
+              <div className="text-sm text-muted-foreground">Select an item to inspect.</div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Title</div>
+                  <div className="text-sm font-semibold text-foreground">{selectedItem.documentTitle}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{selectedItem.itemType}</div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Scheduling rationale</div>
+                  <div className="text-xs text-muted-foreground">
+                    Priority {getPriorityScore(selectedItem, preset)} • {getStatusLabel(getQueueStatus(selectedItem))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">FSRS Snapshot</div>
+                  <div className="text-xs text-muted-foreground">
+                    Stability {getFsrsMetrics(selectedItem).stability} • Difficulty {getFsrsMetrics(selectedItem).difficulty} • Retrievability{" "}
+                    {Math.round(getFsrsMetrics(selectedItem).retrievability * 100)}%
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Next interval</div>
+                  <div className="text-sm font-semibold text-foreground">
+                    {getFsrsMetrics(selectedItem).nextIntervalDays} days
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Conversion pathway</div>
+                  <div className="text-xs text-muted-foreground">
+                    Reading → Extract → Cloze → Review
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Impact: {getReadingImpact(selectedItem)}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Recovery actions</div>
+                  <div className="flex flex-col gap-2">
+                    <button className="px-3 py-2 bg-background border border-border rounded text-sm">
+                      Compress intervals
+                    </button>
+                    <button className="px-3 py-2 bg-background border border-border rounded text-sm">
+                      Reschedule intelligently
+                    </button>
+                    <button className="px-3 py-2 bg-background border border-border rounded text-sm">
+                      Downgrade frequency
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setShowAdvanced((prev) => !prev)}
+                    className="px-3 py-2 bg-muted rounded text-sm flex items-center gap-2"
+                  >
+                    <Keyboard className="w-4 h-4" />
+                    {showAdvanced ? "Hide advanced" : "Show advanced"}
+                  </button>
+                  {showAdvanced && (
+                    <div className="space-y-2 text-xs text-muted-foreground">
+                      <div>Raw FSRS values</div>
+                      <div>Override scheduling</div>
+                      <button
+                        onClick={() => setShowRawJson((prev) => !prev)}
+                        className="px-3 py-1 bg-background border border-border rounded"
+                      >
+                        {showRawJson ? "Hide JSON" : "Show JSON"}
+                      </button>
+                      {showRawJson && (
+                        <pre className="text-[10px] whitespace-pre-wrap bg-background border border-border rounded p-2">
+{JSON.stringify(selectedItem, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PriorityGlyph({ vector }: { vector: ReturnType<typeof getPriorityVector> }) {
+  const tooltip = `Retention ${vector.retentionRisk} • Load ${vector.cognitiveLoad} • Time ${vector.timeEfficiency} • Intent ${vector.userIntent} • Overdue ${vector.overduePenalty}`;
+  return (
+    <div className="flex items-center gap-1" title={tooltip}>
+      <div className="h-2 w-20 bg-muted/60 rounded-full overflow-hidden flex">
+        <div className="h-full bg-red-500/50" style={{ width: `${vector.retentionRisk / 5}%` }} />
+        <div className="h-full bg-amber-500/50" style={{ width: `${vector.cognitiveLoad / 5}%` }} />
+        <div className="h-full bg-emerald-500/50" style={{ width: `${vector.timeEfficiency / 5}%` }} />
+        <div className="h-full bg-blue-500/50" style={{ width: `${vector.userIntent / 5}%` }} />
+        <div className="h-full bg-slate-500/50" style={{ width: `${vector.overduePenalty / 5}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: ReturnType<typeof getQueueStatus> }) {
+  const label = getStatusLabel(status);
+  const styles =
+    status === "drifted"
+      ? "bg-slate-500/15 text-slate-600"
+      : status === "review"
+      ? "bg-indigo-500/15 text-indigo-600"
+      : status === "learning"
+      ? "bg-amber-500/15 text-amber-600"
+      : "bg-emerald-500/15 text-emerald-600";
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${styles}`}>{label}</span>
+  );
+}
+
+function TimeConfidenceBar({ min, max }: { min: number; max: number }) {
+  const width = Math.min(100, Math.max(10, Math.round((min / Math.max(max, 1)) * 100)));
+  return (
+    <div className="mt-1 h-1.5 w-24 bg-muted/60 rounded-full overflow-hidden">
+      <div className="h-full bg-primary/50" style={{ width: `${width}%` }} />
+    </div>
+  );
+}

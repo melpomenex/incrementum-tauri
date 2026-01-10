@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::algorithms::{calculate_document_priority_score, calculate_priority_score, DocumentScheduler, SM2Params};
+    use crate::algorithms::{calculate_document_priority_score, calculate_priority_score, DocumentScheduler, DocumentSchedulerParams, SM2Params};
     use crate::models::ReviewRating;
     use chrono::{Utc, Duration as ChronoDuration};
 
@@ -149,34 +149,33 @@ mod tests {
 
     #[test]
     fn test_document_scheduler_default() {
-        let scheduler = DocumentScheduler::default();
-        assert_eq!(scheduler.max_daily_documents, 5);
-        assert_eq!(scheduler.cards_per_document, 10);
+        let scheduler = DocumentScheduler::default_params();
+        let params = scheduler.params();
+        assert_eq!(params.min_interval_days, 1);
+        assert_eq!(params.max_interval_days, 3650);
     }
 
     #[test]
-    fn test_document_scheduler_schedule() {
-        let scheduler = DocumentScheduler {
-            max_daily_documents: 3,
-            cards_per_document: 10,
-        };
+    fn test_document_scheduler_schedule_new_document() {
+        let scheduler = DocumentScheduler::default_params();
 
-        let documents = vec![
-            ("doc1".to_string(), 5),
-            ("doc2".to_string(), 2),
-            ("doc3".to_string(), 10),
-            ("doc4".to_string(), 1),
-            ("doc5".to_string(), 8),
-        ];
+        // Schedule a new document with a good rating
+        let result = scheduler.schedule_document(4, 0, None, None, 50);
 
-        let scheduled = scheduler.schedule_documents(documents);
+        assert!(result.interval_days >= 1);
+        assert!(result.stability > 0.0);
+        assert!(result.difficulty > 0.0);
+    }
 
-        // Should return top 3 documents with fewest items
-        assert_eq!(scheduled.len(), 3);
-        // Sorted by learning item count: doc4(1), doc2(2), doc1(5)
-        assert_eq!(scheduled[0], "doc4");
-        assert_eq!(scheduled[1], "doc2");
-        assert_eq!(scheduled[2], "doc1");
+    #[test]
+    fn test_document_scheduler_schedule_with_existing_stability() {
+        let scheduler = DocumentScheduler::default_params();
+
+        // Schedule a document that has been read before
+        let result = scheduler.schedule_document(3, 5, Some(10.0), Some(3.0), 70);
+
+        assert!(result.interval_days >= 1);
+        assert!(result.stability >= 10.0); // Should grow or stay similar
     }
 
     #[test]

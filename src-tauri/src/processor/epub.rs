@@ -2,10 +2,9 @@
 
 use crate::error::Result;
 use crate::processor::ExtractedContent;
+use epub::doc::EpubDoc;
 use std::path::Path;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 
 /// Represents a chapter in an EPUB file
 #[derive(Debug, Clone)]
@@ -53,107 +52,144 @@ fn extract_text_from_html(html: &str) -> String {
     result.split_whitespace().collect::<Vec<&str>>().join(" ")
 }
 
-/// Extract metadata from EPUB document
-fn extract_epub_metadata() -> (Option<String>, Option<String>, HashMap<String, String>) {
-    let mut metadata = HashMap::new();
-    metadata.insert("format".to_string(), "EPUB".to_string());
-
-    (None, None, metadata)
+fn should_extract_text(mime: &str) -> bool {
+    let mime = mime.to_lowercase();
+    mime.contains("html") || mime.contains("xhtml") || mime.contains("xml") || mime.starts_with("text/")
 }
 
 /// Extract full content from an EPUB file including all chapters
 pub async fn extract_epub_content(file_path: &str) -> Result<ExtractedContent> {
     let path = Path::new(file_path);
 
-    // Try to open EPUB - for now we'll do basic file reading
-    let mut file = match File::open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            return Err(crate::error::IncrementumError::NotFound(format!(
-                "Failed to open EPUB: {}",
-                e
-            ))
-            .into())
-        }
-    };
+    let mut doc = EpubDoc::new(file_path).map_err(|e| {
+        crate::error::IncrementumError::NotFound(format!("Failed to open EPUB: {}", e))
+    })?;
 
-    let mut buffer = Vec::new();
-    if let Err(e) = file.read_to_end(&mut buffer) {
-        return Err(crate::error::IncrementumError::NotFound(format!(
-            "Failed to read EPUB: {}",
-            e
-        ))
-        .into());
+    let spine_items = doc.spine.clone();
+    let mut sections = Vec::new();
+
+    for item in spine_items {
+        if !item.linear {
+            continue;
+        }
+
+        if let Some((content, mime)) = doc.get_resource_str(&item.idref) {
+            if !should_extract_text(&mime) {
+                continue;
+            }
+
+            let text = if mime.contains("html") || mime.contains("xhtml") || mime.contains("xml") {
+                extract_text_from_html(&content)
+            } else {
+                content
+            };
+
+            if !text.trim().is_empty() {
+                sections.push(text);
+            }
+        }
     }
 
-    // For now, return basic content without full chapter extraction
-    // The epub crate v2 API is complex and would require more work
-    let text = format!("EPUB file loaded ({} bytes). Full content extraction requires additional EPUB library integration.", buffer.len());
+    let text = sections.join("\n\n");
+    let word_count = text.split_whitespace().count();
+    let reading_time_mins = if word_count == 0 {
+        0
+    } else {
+        (word_count as f64 / 200.0).ceil() as usize
+    };
+    let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    let language = doc.mdata("language").map(|item| item.value.clone());
 
-    // Calculate basic word count
-    let word_count = 0;
-
-    // Estimate reading time (average 200 words per minute)
-    let reading_time_mins = 0;
-
-    // Build metadata
     let mut epub_metadata = HashMap::new();
     epub_metadata.insert("format".to_string(), "EPUB".to_string());
-    epub_metadata.insert("file_size".to_string(), buffer.len().to_string());
+    epub_metadata.insert("file_size".to_string(), file_size.to_string());
     epub_metadata.insert("word_count".to_string(), word_count.to_string());
-    epub_metadata.insert("reading_time_minutes".to_string(), reading_time_mins.to_string());
+    epub_metadata.insert(
+        "reading_time_minutes".to_string(),
+        reading_time_mins.to_string(),
+    );
+    if let Some(lang) = &language {
+        epub_metadata.insert("language".to_string(), lang.clone());
+    }
 
     let metadata = serde_json::json!({
         "format": "EPUB",
-        "file_size": buffer.len(),
+        "file_size": file_size,
         "word_count": word_count,
         "reading_time_minutes": reading_time_mins,
-        "note": "Full EPUB content extraction requires library upgrade",
+        "language": language,
         "epub_metadata": epub_metadata
     });
 
     Ok(ExtractedContent {
         text,
-        title: None,
-        author: None,
-        page_count: None,
+        title: doc.get_title(),
+        author: doc.mdata("creator").map(|item| item.value.clone()),
+        page_count: if doc.spine.is_empty() { None } else { Some(doc.spine.len()) },
         metadata,
     })
 }
 
 /// Extract a specific chapter from an EPUB file
 pub async fn extract_epub_chapter(file_path: &str, chapter_num: usize) -> Result<EpubChapter> {
-    let _path = Path::new(file_path);
+    let mut doc = EpubDoc::new(file_path).map_err(|e| {
+        crate::error::IncrementumError::NotFound(format!("Failed to open EPUB: {}", e))
+    })?;
+    if chapter_num == 0 || chapter_num > doc.spine.len() {
+        return Err(crate::error::IncrementumError::NotFound(format!(
+            "Chapter {} not found",
+            chapter_num
+        ))
+        .into());
+    }
 
-    // For now, return a placeholder
+    let spine_item = doc.spine.get(chapter_num - 1).cloned().ok_or_else(|| {
+        crate::error::IncrementumError::NotFound(format!("Chapter {} not found", chapter_num))
+    })?;
+
+    let content = doc
+        .get_resource_str(&spine_item.idref)
+        .map(|(content, mime)| {
+            if should_extract_text(&mime) && (mime.contains("html") || mime.contains("xhtml") || mime.contains("xml")) {
+                extract_text_from_html(&content)
+            } else if should_extract_text(&mime) {
+                content
+            } else {
+                String::new()
+            }
+        })
+        .unwrap_or_default();
+
     Ok(EpubChapter {
         title: format!("Chapter {}", chapter_num),
-        content: "EPUB chapter extraction requires additional EPUB library integration.".to_string(),
+        content,
         index: chapter_num - 1,
     })
 }
 
 /// Get the number of chapters in an EPUB file
 pub async fn get_epub_chapter_count(file_path: &str) -> Result<usize> {
-    let path = Path::new(file_path);
+    let doc = EpubDoc::new(file_path).map_err(|e| {
+        crate::error::IncrementumError::NotFound(format!("Failed to open EPUB: {}", e))
+    })?;
 
-    let metadata = std::fs::metadata(path)
-        .map_err(|e| crate::error::IncrementumError::NotFound(format!("Failed to open EPUB: {}", e)))?;
-
-    // Return a placeholder based on file size
-    // Real implementation would parse EPUB structure
-    Ok((metadata.len() / 1024).min(100) as usize)
+    Ok(doc.spine.len())
 }
 
 /// Get the table of contents from an EPUB file
 pub async fn get_epub_toc(file_path: &str) -> Result<Vec<(String, usize)>> {
-    let _path = Path::new(file_path);
+    let doc = EpubDoc::new(file_path).map_err(|e| {
+        crate::error::IncrementumError::NotFound(format!("Failed to open EPUB: {}", e))
+    })?;
 
-    // Return a placeholder TOC
-    Ok(vec![
-        ("Chapter 1".to_string(), 1),
-        ("Chapter 2".to_string(), 2),
-    ])
+    let mut toc_entries = Vec::new();
+    for nav in doc.toc.iter() {
+        if let Some(chapter_index) = doc.resource_uri_to_chapter(&nav.content) {
+            toc_entries.push((nav.label.clone(), chapter_index + 1));
+        }
+    }
+
+    Ok(toc_entries)
 }
 
 #[cfg(test)]

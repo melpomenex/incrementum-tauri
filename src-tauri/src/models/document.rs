@@ -28,6 +28,20 @@ pub struct Document {
     pub is_archived: bool,
     pub is_favorite: bool,
     pub metadata: Option<DocumentMetadata>,
+
+    // Scheduling fields for incremental reading
+    /// Next scheduled reading date for this document
+    pub next_reading_date: Option<DateTime<Utc>>,
+    /// Number of times this document has been read
+    pub reading_count: i32,
+    /// FSRS stability (how long memory lasts, in days)
+    pub stability: Option<f64>,
+    /// FSRS difficulty (1-10 scale)
+    pub difficulty: Option<f64>,
+    /// Total repetitions/reviews
+    pub reps: Option<i32>,
+    /// Total time spent reading (in seconds)
+    pub total_time_spent: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +95,13 @@ impl Document {
             is_archived: false,
             is_favorite: false,
             metadata: None,
+            // Scheduling fields
+            next_reading_date: None,
+            reading_count: 0,
+            stability: None,
+            difficulty: None,
+            reps: None,
+            total_time_spent: None,
         }
     }
 }

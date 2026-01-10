@@ -3,7 +3,7 @@
 use sqlx::{Pool, Sqlite, Row};
 use chrono::Utc;
 use crate::error::Result;
-use crate::models::{Document, Extract, LearningItem, Category, FileType, ItemType, ItemState};
+use crate::models::{Document, DocumentMetadata, Extract, LearningItem, Category, FileType, ItemType, ItemState};
 
 pub struct Repository {
     pool: Pool<Sqlite>,
@@ -143,6 +143,13 @@ impl Repository {
                     is_archived: row.get("is_archived"),
                     is_favorite: row.get("is_favorite"),
                     metadata,
+                    // Scheduling fields - use try_get for compatibility with existing databases
+                    next_reading_date: row.try_get("next_reading_date").ok(),
+                    reading_count: row.try_get("reading_count").unwrap_or(0),
+                    stability: row.try_get("stability").ok(),
+                    difficulty: row.try_get("difficulty").ok(),
+                    reps: row.try_get("reps").ok(),
+                    total_time_spent: row.try_get("total_time_spent").ok(),
                 }))
             }
             None => Ok(None),
@@ -187,6 +194,13 @@ impl Repository {
                 is_archived: row.get("is_archived"),
                 is_favorite: row.get("is_favorite"),
                 metadata,
+                // Scheduling fields - use try_get for compatibility with existing databases
+                next_reading_date: row.try_get("next_reading_date").ok(),
+                reading_count: row.try_get("reading_count").unwrap_or(0),
+                stability: row.try_get("stability").ok(),
+                difficulty: row.try_get("difficulty").ok(),
+                reps: row.try_get("reps").ok(),
+                total_time_spent: row.try_get("total_time_spent").ok(),
             });
         }
 
@@ -224,6 +238,42 @@ impl Repository {
         self.get_document(id).await?.ok_or_else(|| {
             crate::error::IncrementumError::NotFound(format!("Document {}", id))
         })
+    }
+
+    pub async fn update_document_content(
+        &self,
+        id: &str,
+        content: &str,
+        content_hash: Option<String>,
+        total_pages: Option<i32>,
+        metadata: Option<DocumentMetadata>,
+    ) -> Result<()> {
+        let metadata_json = metadata
+            .as_ref()
+            .map(|m| serde_json::to_string(m))
+            .transpose()?;
+
+        sqlx::query(
+            r#"
+            UPDATE documents SET
+                content = ?1,
+                content_hash = ?2,
+                total_pages = ?3,
+                metadata = ?4,
+                date_modified = ?5
+            WHERE id = ?6
+            "#,
+        )
+        .bind(content)
+        .bind(content_hash)
+        .bind(total_pages)
+        .bind(metadata_json)
+        .bind(Utc::now())
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn update_document_priority(
