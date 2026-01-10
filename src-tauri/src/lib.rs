@@ -92,14 +92,19 @@ pub fn run() {
                 let state = AppState::new();
                 *state.db.lock().unwrap() = Some(db);
 
+                // Clone the pool for creating repositories before state is moved
+                let pool = state.db.lock().unwrap().as_ref().unwrap().pool().clone();
+
                 // Create repository for use in commands
-                let repo = database::Repository::new(
-                    state.db.lock().unwrap().as_ref().unwrap().pool().clone()
-                );
+                let repo = database::Repository::new(pool.clone());
 
                 app.manage(state);
                 app.manage(repo);
                 app.manage(AIState::default());
+
+                // Initialize browser sync server if auto-start is enabled
+                let repo_arc = std::sync::Arc::new(database::Repository::new(pool));
+                let _ = browser_sync_server::initialize_if_enabled(repo_arc).await;
 
                 tracing_subscriber::fmt::init();
 
@@ -224,6 +229,8 @@ pub fn run() {
             browser_sync_server::start_browser_sync_server,
             browser_sync_server::stop_browser_sync_server,
             browser_sync_server::get_browser_sync_server_status,
+            browser_sync_server::get_browser_sync_config,
+            browser_sync_server::set_browser_sync_config,
             // RSS commands
             commands::create_rss_feed,
             commands::get_rss_feeds,

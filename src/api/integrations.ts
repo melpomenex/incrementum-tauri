@@ -283,6 +283,15 @@ export interface BrowserSyncServerStatus {
 }
 
 /**
+ * Browser sync server configuration
+ */
+export interface BrowserSyncConfig {
+  host: string;
+  port: number;
+  autoStart: boolean;
+}
+
+/**
  * Start browser extension HTTP server
  */
 export async function startBrowserSyncServer(port: number = 8766): Promise<BrowserSyncServerStatus> {
@@ -301,6 +310,20 @@ export async function stopBrowserSyncServer(): Promise<BrowserSyncServerStatus> 
  */
 export async function getBrowserSyncServerStatus(port: number = 8766): Promise<BrowserSyncServerStatus> {
   return await invoke<BrowserSyncServerStatus>("get_browser_sync_server_status", { port });
+}
+
+/**
+ * Get browser sync server configuration
+ */
+export async function getBrowserSyncConfig(): Promise<BrowserSyncConfig> {
+  return await invoke<BrowserSyncConfig>("get_browser_sync_config");
+}
+
+/**
+ * Set browser sync server configuration
+ */
+export async function setBrowserSyncConfig(config: BrowserSyncConfig): Promise<void> {
+  await invoke("set_browser_sync_config", { config });
 }
 
 /**

@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { WebviewWindow } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   captureAppWindow,
   captureScreenByIndex,
@@ -80,7 +80,7 @@ async function resolveScreenInfo(screenIndex?: number): Promise<ScreenInfo | nul
 }
 
 async function openOverlay(screen: ScreenInfo): Promise<ScreenshotSelection | null> {
-  const existing = WebviewWindow.getByLabel(OVERLAY_LABEL);
+  const existing = await WebviewWindow.getByLabel(OVERLAY_LABEL);
   if (existing) {
     try {
       await existing.close();

@@ -46,6 +46,8 @@ pub struct ServerStatus {
 pub struct BrowserSyncConfig {
     pub host: String,
     pub port: u16,
+    #[serde(default)]
+    pub auto_start: bool,
 }
 
 impl Default for BrowserSyncConfig {
@@ -53,6 +55,7 @@ impl Default for BrowserSyncConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 8766,
+            auto_start: false,
         }
     }
 }
@@ -511,6 +514,7 @@ pub async fn start_browser_sync_server(
     let config = BrowserSyncConfig {
         host: "127.0.0.1".to_string(),
         port,
+        auto_start: false,
     };
 
     // Get the pool from the repository and create a new Arc<Repository>
@@ -541,6 +545,7 @@ pub async fn get_browser_sync_server_status(port: u16) -> Result<ServerStatus, A
     let config = BrowserSyncConfig {
         host: "127.0.0.1".to_string(),
         port,
+        auto_start: false,
     };
 
     Ok(get_status(config).await)
@@ -600,13 +605,4 @@ pub async fn initialize_if_enabled(repo: Arc<Repository>) -> Result<(), AppError
         let _ = start_server(config, repo).await;
     }
     Ok(())
-}
-
-/// BrowserSyncConfig with auto-start flag
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BrowserSyncConfig {
-    pub host: String,
-    pub port: u16,
-    #[serde(default)]
-    pub auto_start: bool,
 }

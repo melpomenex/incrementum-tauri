@@ -28,6 +28,8 @@ import {
   startBrowserSyncServer,
   stopBrowserSyncServer,
   getBrowserSyncServerStatus,
+  getBrowserSyncConfig,
+  setBrowserSyncConfig,
   type ObsidianConfig,
   type AnkiConfig,
 } from "../../api/integrations";
@@ -54,6 +56,7 @@ export function IntegrationSettings() {
 
   // Extension state
   const [extensionPort, setExtensionPort] = useState(8766);
+  const [extensionAutoStart, setExtensionAutoStart] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<{
     running: boolean;
     port: number;
@@ -86,6 +89,20 @@ export function IntegrationSettings() {
     }
 
     setExtensionPort(loaded.extensionPort);
+  }, []);
+
+  // Load browser sync config
+  useEffect(() => {
+    const loadBrowserSyncConfig = async () => {
+      try {
+        const config = await getBrowserSyncConfig();
+        setExtensionPort(config.port);
+        setExtensionAutoStart(config.autoStart);
+      } catch {
+        // Ignore errors
+      }
+    };
+    loadBrowserSyncConfig();
   }, []);
 
   // Load extension status
@@ -170,6 +187,21 @@ export function IntegrationSettings() {
       showResult(false, "Failed to toggle extension server");
     } finally {
       setIsOperating(false);
+    }
+  };
+
+  const handleExtensionConfigChange = async (port?: number, autoStart?: boolean) => {
+    try {
+      await setBrowserSyncConfig({
+        host: "127.0.0.1",
+        port: port ?? extensionPort,
+        autoStart: autoStart ?? extensionAutoStart,
+      });
+      if (autoStart !== undefined) {
+        setExtensionAutoStart(autoStart);
+      }
+    } catch {
+      // Ignore errors
     }
   };
 
@@ -505,6 +537,30 @@ export function IntegrationSettings() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Default: 8766 (change if port is in use)
                 </p>
+              </div>
+
+              {/* Auto-start toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-medium text-foreground">
+                    Auto-start on app launch
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Automatically start the server when Incrementum opens
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleExtensionConfigChange(undefined, !extensionAutoStart)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    extensionAutoStart ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      extensionAutoStart ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
               </div>
 
               {/* Status info */}

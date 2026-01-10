@@ -80,6 +80,9 @@ fsrs = "5"
 # Environment variables
 dotenvy = "0.15"
 
+# Config directories
+dirs = "5.0"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
