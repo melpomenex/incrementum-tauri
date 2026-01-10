@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 interface ExtractState {
   extracts: any[];
@@ -10,23 +10,13 @@ interface ExtractState {
   deleteExtract: (id: string) => Promise<void>;
 }
 
-// Check if we're running in Tauri
-const isTauri = () => {
-  return typeof window !== "undefined" && window.__TAURI_INTERNALS__;
-};
-
 export const useExtractStore = create<ExtractState>((set, get) => ({
   extracts: [],
   isLoading: false,
   loadExtracts: async (documentId) => {
-    if (!isTauri()) {
-      console.warn("Not running in Tauri environment - using mock data");
-      set({ extracts: [], isLoading: false });
-      return;
-    }
     set({ isLoading: true });
     try {
-      const extracts = await invoke("get_extracts", { documentId: documentId || null });
+      const extracts = await invokeCommand("get_extracts", { documentId: documentId || null });
       set({ extracts, isLoading: false });
     } catch (error) {
       console.error("Failed to load extracts:", error);
@@ -34,33 +24,24 @@ export const useExtractStore = create<ExtractState>((set, get) => ({
     }
   },
   createExtract: async (data) => {
-    if (!isTauri()) {
-      throw new Error("Not running in Tauri environment - cannot create extract");
-    }
     try {
-      await invoke("create_extract", { extract: data });
+      await invokeCommand("create_extract", { extract: data });
     } catch (error) {
       console.error("Failed to create extract:", error);
       throw error;
     }
   },
   updateExtract: async (id, data) => {
-    if (!isTauri()) {
-      throw new Error("Not running in Tauri environment - cannot update extract");
-    }
     try {
-      await invoke("update_extract", { id, extract: data });
+      await invokeCommand("update_extract", { id, extract: data });
     } catch (error) {
       console.error("Failed to update extract:", error);
       throw error;
     }
   },
   deleteExtract: async (id) => {
-    if (!isTauri()) {
-      throw new Error("Not running in Tauri environment - cannot delete extract");
-    }
     try {
-      await invoke("delete_extract", { id });
+      await invokeCommand("delete_extract", { id });
     } catch (error) {
       console.error("Failed to delete extract:", error);
       throw error;

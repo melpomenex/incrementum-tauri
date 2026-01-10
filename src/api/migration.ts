@@ -3,7 +3,7 @@
  * Reads data from the original C++ Incrementum SQLite database
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 /**
  * C++ Database schema version
@@ -131,7 +131,7 @@ export interface CPPMigrationData {
  */
 export async function readCPPDatabase(dbPath: string): Promise<CPPMigrationData> {
   try {
-    return await invoke<CPPMigrationData>("read_cpp_database", { dbPath });
+    return await invokeCommand<CPPMigrationData>("read_cpp_database", { dbPath });
   } catch (error) {
     console.error("Failed to read C++ database:", error);
     throw new Error(`Failed to read C++ database: ${error instanceof Error ? error.message : String(error)}`);
@@ -150,7 +150,7 @@ export async function getCPPDatabaseInfo(dbPath: string): Promise<{
   fileSize: number;
 }> {
   try {
-    return await invoke("get_cpp_database_info", { dbPath });
+    return await invokeCommand("get_cpp_database_info", { dbPath });
   } catch (error) {
     console.error("Failed to get C++ database info:", error);
     throw new Error(`Failed to get database info: ${error instanceof Error ? error.message : String(error)}`);
@@ -166,7 +166,7 @@ export async function validateCPPDatabase(dbPath: string): Promise<{
   warnings: string[];
 }> {
   try {
-    return await invoke("validate_cpp_database", { dbPath });
+    return await invokeCommand("validate_cpp_database", { dbPath });
   } catch (error) {
     return {
       valid: false,
@@ -205,7 +205,7 @@ export async function migrateCPPData(
   errors: string[];
 }> {
   try {
-    const result = await invoke<{
+    const result = await invokeCommand<{
       success: boolean;
       imported: {
         documents: number;
@@ -241,7 +241,7 @@ export async function migrateCPPData(
  */
 export async function createMigrationBackup(dbPath: string): Promise<string> {
   try {
-    return await invoke<string>("create_migration_backup", { dbPath });
+    return await invokeCommand<string>("create_migration_backup", { dbPath });
   } catch (error) {
     console.error("Failed to create backup:", error);
     throw new Error(`Failed to create backup: ${error instanceof Error ? error.message : String(error)}`);
@@ -253,7 +253,7 @@ export async function createMigrationBackup(dbPath: string): Promise<string> {
  */
 export async function rollbackMigration(backupPath: string): Promise<boolean> {
   try {
-    return await invoke<boolean>("rollback_migration", { backupPath });
+    return await invokeCommand<boolean>("rollback_migration", { backupPath });
   } catch (error) {
     console.error("Rollback failed:", error);
     throw new Error(`Rollback failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -269,7 +269,7 @@ export async function getMigrationStatus(): Promise<{
   cppDbPath?: string;
 }> {
   try {
-    return await invoke("get_migration_status");
+    return await invokeCommand("get_migration_status");
   } catch (error) {
     console.error("Failed to get migration status:", error);
     return {
@@ -283,7 +283,7 @@ export async function getMigrationStatus(): Promise<{
  */
 export async function clearMigrationFlag(): Promise<void> {
   try {
-    await invoke("clear_migration_flag");
+    await invokeCommand("clear_migration_flag");
   } catch (error) {
     console.error("Failed to clear migration flag:", error);
     throw new Error(`Failed to clear migration flag: ${error instanceof Error ? error.message : String(error)}`);

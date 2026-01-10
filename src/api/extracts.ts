@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 export interface Extract {
   id: string;
@@ -41,21 +41,21 @@ export interface UpdateExtractInput {
  * Get all extracts for a document
  */
 export async function getExtracts(documentId: string): Promise<Extract[]> {
-  return await invoke<Extract[]>("get_extracts", { documentId });
+  return await invokeCommand<Extract[]>("get_extracts", { documentId });
 }
 
 /**
  * Get a single extract by ID
  */
 export async function getExtract(id: string): Promise<Extract | null> {
-  return await invoke<Extract>("get_extract", { id });
+  return await invokeCommand<Extract>("get_extract", { id });
 }
 
 /**
  * Create a new extract
  */
 export async function createExtract(input: CreateExtractInput): Promise<Extract> {
-  return await invoke<Extract>("create_extract", {
+  return await invokeCommand<Extract>("create_extract", {
     documentId: input.document_id,
     content: input.content,
     note: input.note,
@@ -70,7 +70,7 @@ export async function createExtract(input: CreateExtractInput): Promise<Extract>
  * Update an existing extract
  */
 export async function updateExtract(input: UpdateExtractInput): Promise<Extract> {
-  return await invoke<Extract>("update_extract", {
+  return await invokeCommand<Extract>("update_extract", {
     id: input.id,
     content: input.content,
     note: input.note,
@@ -84,5 +84,5 @@ export async function updateExtract(input: UpdateExtractInput): Promise<Extract>
  * Delete an extract
  */
 export async function deleteExtract(id: string): Promise<void> {
-  await invoke("delete_extract", { id });
+  await invokeCommand("delete_extract", { id });
 }

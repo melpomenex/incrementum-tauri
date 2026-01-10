@@ -4,7 +4,7 @@
  */
 
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function AuthCallback() {
@@ -47,7 +47,7 @@ export default function AuthCallback() {
         }
 
         // Call the OAuth callback command
-        const result = await invoke("oauth_callback", {
+        const result = await invokeCommand("oauth_callback", {
           providerType,
           code,
           state,

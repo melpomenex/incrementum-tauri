@@ -3,7 +3,7 @@
  * Frontend API for OCR Tauri commands
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 /**
  * OCR configuration
@@ -93,54 +93,54 @@ export interface KeyPhraseResponse {
  * Initialize OCR with configuration
  */
 export async function initOCR(config: OCRConfig): Promise<void> {
-  return invoke("init_ocr", { config });
+  return invokeCommand("init_ocr", { config });
 }
 
 /**
  * Perform OCR on an image file
  */
 export async function ocrImageFile(request: OCRImageRequest): Promise<OCRResponse> {
-  return invoke("ocr_image_file", { request });
+  return invokeCommand("ocr_image_file", { request });
 }
 
 /**
  * Perform OCR on image bytes (base64)
  */
 export async function ocrImageBytes(request: OCRBytesRequest): Promise<OCRResponse> {
-  return invoke("ocr_image_bytes", { request });
+  return invokeCommand("ocr_image_bytes", { request });
 }
 
 /**
  * Extract key phrases from text
  */
 export async function extractKeyPhrases(request: KeyPhraseRequest): Promise<KeyPhraseResponse> {
-  return invoke("extract_key_phrases", { request });
+  return invokeCommand("extract_key_phrases", { request });
 }
 
 /**
  * Get available OCR providers
  */
 export async function getAvailableOCRProviders(): Promise<string[]> {
-  return invoke("get_available_ocr_providers");
+  return invokeCommand("get_available_ocr_providers");
 }
 
 /**
  * Check if a provider is available
  */
 export async function isProviderAvailable(provider: string): Promise<boolean> {
-  return invoke("is_provider_available", { provider });
+  return invokeCommand("is_provider_available", { provider });
 }
 
 /**
  * Get current OCR configuration
  */
 export async function getOCRConfig(): Promise<OCRConfig> {
-  return invoke("get_ocr_config");
+  return invokeCommand("get_ocr_config");
 }
 
 /**
  * Update OCR configuration
  */
 export async function updateOCRConfig(config: OCRConfig): Promise<void> {
-  return invoke("update_ocr_config", { config });
+  return invokeCommand("update_ocr_config", { config });
 }

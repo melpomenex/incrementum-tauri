@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 export interface LearningItem {
   id: string;
@@ -33,21 +33,21 @@ export interface CreateLearningItemInput {
  * Get learning items that are due for review
  */
 export async function getDueItems(): Promise<LearningItem[]> {
-  return await invoke<LearningItem[]>("get_due_items");
+  return await invokeCommand<LearningItem[]>("get_due_items");
 }
 
 /**
  * Get all learning items for a document
  */
 export async function getLearningItems(documentId: string): Promise<LearningItem[]> {
-  return await invoke<LearningItem[]>("get_learning_items", { documentId });
+  return await invokeCommand<LearningItem[]>("get_learning_items", { documentId });
 }
 
 /**
  * Create a new learning item
  */
 export async function createLearningItem(input: CreateLearningItemInput): Promise<LearningItem> {
-  return await invoke<LearningItem>("create_learning_item", {
+  return await invokeCommand<LearningItem>("create_learning_item", {
     itemType: input.item_type,
     question: input.question,
   });
@@ -58,7 +58,7 @@ export async function createLearningItem(input: CreateLearningItemInput): Promis
  * This automatically creates cloze deletions and Q&A pairs from the extract content
  */
 export async function generateLearningItemsFromExtract(extractId: string): Promise<LearningItem[]> {
-  return await invoke<LearningItem[]>("generate_learning_items_from_extract", {
+  return await invokeCommand<LearningItem[]>("generate_learning_items_from_extract", {
     extractId,
   });
 }

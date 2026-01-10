@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 /**
  * AI Provider types
@@ -78,21 +78,21 @@ export type SimplificationLevel = "elementary" | "highschool" | "college" | "exp
  * Get AI configuration
  */
 export async function getAIConfig(): Promise<AIConfig | null> {
-  return await invoke<AIConfig | null>("get_ai_config");
+  return await invokeCommand<AIConfig | null>("get_ai_config");
 }
 
 /**
  * Set AI configuration
  */
 export async function setAIConfig(config: AIConfig): Promise<void> {
-  return await invoke("set_ai_config", { config });
+  return await invokeCommand("set_ai_config", { config });
 }
 
 /**
  * Set API key for a provider
  */
 export async function setApiKey(provider: string, apiKey: string): Promise<void> {
-  return await invoke("set_api_key", { provider, apiKey });
+  return await invokeCommand("set_api_key", { provider, apiKey });
 }
 
 /**
@@ -102,7 +102,7 @@ export async function generateFlashcardsFromExtract(
   extractId: string,
   options: FlashcardGenerationOptions
 ): Promise<GeneratedFlashcard[]> {
-  return await invoke<GeneratedFlashcard[]>("generate_flashcards_from_extract", {
+  return await invokeCommand<GeneratedFlashcard[]>("generate_flashcards_from_extract", {
     extractId,
     options,
   });
@@ -115,7 +115,7 @@ export async function generateFlashcardsFromContent(
   content: string,
   count: number
 ): Promise<GeneratedFlashcard[]> {
-  return await invoke<GeneratedFlashcard[]>("generate_flashcards_from_content", {
+  return await invokeCommand<GeneratedFlashcard[]>("generate_flashcards_from_content", {
     content,
     count,
   });
@@ -128,7 +128,7 @@ export async function answerQuestion(
   question: string,
   context: string
 ): Promise<string> {
-  return await invoke<string>("answer_question", { question, context });
+  return await invokeCommand<string>("answer_question", { question, context });
 }
 
 /**
@@ -138,7 +138,7 @@ export async function answerAboutExtract(
   extractId: string,
   question: string
 ): Promise<string> {
-  return await invoke<string>("answer_about_extract", { extractId, question });
+  return await invokeCommand<string>("answer_about_extract", { extractId, question });
 }
 
 /**
@@ -148,7 +148,7 @@ export async function summarizeContent(
   content: string,
   maxWords: number
 ): Promise<string> {
-  return await invoke<string>("summarize_content", { content, maxWords });
+  return await invokeCommand<string>("summarize_content", { content, maxWords });
 }
 
 /**
@@ -158,14 +158,14 @@ export async function extractKeyPoints(
   content: string,
   count: number
 ): Promise<string[]> {
-  return await invoke<string[]>("extract_key_points", { content, count });
+  return await invokeCommand<string[]>("extract_key_points", { content, count });
 }
 
 /**
  * Generate title for content
  */
 export async function generateTitle(content: string): Promise<string> {
-  return await invoke<string>("generate_title", { content });
+  return await invokeCommand<string>("generate_title", { content });
 }
 
 /**
@@ -175,7 +175,7 @@ export async function simplifyContent(
   content: string,
   level: SimplificationLevel
 ): Promise<string> {
-  return await invoke<string>("simplify_content", { content, level });
+  return await invokeCommand<string>("simplify_content", { content, level });
 }
 
 /**
@@ -185,19 +185,19 @@ export async function generateQuestions(
   content: string,
   count: number
 ): Promise<string[]> {
-  return await invoke<string[]>("generate_questions", { content, count });
+  return await invokeCommand<string[]>("generate_questions", { content, count });
 }
 
 /**
  * List available Ollama models
  */
 export async function listOllamaModels(baseUrl?: string): Promise<string[]> {
-  return await invoke<string[]>("list_ollama_models", { baseUrl });
+  return await invokeCommand<string[]>("list_ollama_models", { baseUrl });
 }
 
 /**
  * Test AI connection
  */
 export async function testAIConnection(providerType: LLMProviderType): Promise<string> {
-  return await invoke<string>("test_ai_connection", { providerType });
+  return await invokeCommand<string>("test_ai_connection", { providerType });
 }

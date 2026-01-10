@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 import type { QueueItem } from "../types/queue";
 
 export interface QueueStats {
@@ -73,7 +73,7 @@ function convertQueueItem(item: RustQueueItem): QueueItem {
  * Get all queue items
  */
 export async function getQueue(): Promise<QueueItem[]> {
-  const items = await invoke<RustQueueItem[]>("get_queue");
+  const items = await invokeCommand<RustQueueItem[]>("get_queue");
   return items.map(convertQueueItem);
 }
 
@@ -81,40 +81,40 @@ export async function getQueue(): Promise<QueueItem[]> {
  * Get queue statistics
  */
 export async function getQueueStats(): Promise<QueueStats> {
-  return await invoke<QueueStats>("get_queue_stats");
+  return await invokeCommand<QueueStats>("get_queue_stats");
 }
 
 /**
  * Postpone an item by N days
  */
 export async function postponeItem(itemId: string, days: number): Promise<void> {
-  await invoke("postpone_item", { itemId, days });
+  await invokeCommand("postpone_item", { itemId, days });
 }
 
 /**
  * Bulk suspend items
  */
 export async function bulkSuspendItems(itemIds: string[]): Promise<BulkOperationResult> {
-  return await invoke<BulkOperationResult>("bulk_suspend_items", { itemIds });
+  return await invokeCommand<BulkOperationResult>("bulk_suspend_items", { itemIds });
 }
 
 /**
  * Bulk unsuspend items
  */
 export async function bulkUnsuspendItems(itemIds: string[]): Promise<BulkOperationResult> {
-  return await invoke<BulkOperationResult>("bulk_unsuspend_items", { itemIds });
+  return await invokeCommand<BulkOperationResult>("bulk_unsuspend_items", { itemIds });
 }
 
 /**
  * Bulk delete items
  */
 export async function bulkDeleteItems(itemIds: string[]): Promise<BulkOperationResult> {
-  return await invoke<BulkOperationResult>("bulk_delete_items", { itemIds });
+  return await invokeCommand<BulkOperationResult>("bulk_delete_items", { itemIds });
 }
 
 /**
  * Export queue data
  */
 export async function exportQueue(): Promise<QueueExportItem[]> {
-  return await invoke<QueueExportItem[]>("export_queue");
+  return await invokeCommand<QueueExportItem[]>("export_queue");
 }

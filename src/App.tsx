@@ -4,7 +4,7 @@ import { useAnalyticsStore } from "./stores/analyticsStore";
 import { useDocumentStore } from "./stores/documentStore";
 import { useQueueStore } from "./stores/queueStore";
 import { useReviewStore } from "./stores/reviewStore";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "./lib/tauri";
 
 // Page components
 import { DocumentsPage } from "./pages/DocumentsPage";
@@ -71,10 +71,15 @@ function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const loadRecentActivity = async () => {
     try {
-      const activity = await invoke<any[]>("get_activity_data", { days: 7 });
-      setRecentActivity(activity.slice(-5).reverse());
+      const activity = await invokeCommand<any[]>("get_activity_data", { days: 7 });
+      if (activity && Array.isArray(activity)) {
+        setRecentActivity(activity.slice(-5).reverse());
+      } else {
+        setRecentActivity([]);
+      }
     } catch (error) {
       console.error("Failed to load recent activity:", error);
+      setRecentActivity([]);
     }
   };
 

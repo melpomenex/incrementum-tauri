@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 /**
  * SM-2 calculation result
@@ -120,7 +120,7 @@ export async function calculateSM2Next(
   itemId: string,
   rating: number
 ): Promise<SM2Calculation> {
-  return await invoke<SM2Calculation>("calculate_sm2_next", {
+  return await invokeCommand<SM2Calculation>("calculate_sm2_next", {
     itemId,
     rating,
   });
@@ -139,7 +139,7 @@ export async function rateDocument(
     rating,
     time_taken: timeTaken,
   };
-  return await invoke<DocumentRatingResponse>("rate_document", { request });
+  return await invokeCommand<DocumentRatingResponse>("rate_document", { request });
 }
 
 /**
@@ -148,35 +148,35 @@ export async function rateDocument(
 export async function scheduleDocuments(
   request: DocumentScheduleRequest
 ): Promise<string[]> {
-  return await invoke<string[]>("schedule_documents", { request });
+  return await invokeCommand<string[]>("schedule_documents", { request });
 }
 
 /**
  * Calculate priority scores for queue items
  */
 export async function calculatePriorityScores(): Promise<PriorityScoreItem[]> {
-  return await invoke<PriorityScoreItem[]>("calculate_priority_scores");
+  return await invokeCommand<PriorityScoreItem[]>("calculate_priority_scores");
 }
 
 /**
  * Compare algorithm performance
  */
 export async function compareAlgorithms(): Promise<AlgorithmComparison> {
-  return await invoke<AlgorithmComparison>("compare_algorithms_command");
+  return await invokeCommand<AlgorithmComparison>("compare_algorithms_command");
 }
 
 /**
  * Get algorithm parameters for an item
  */
 export async function getAlgorithmParams(itemId: string): Promise<AlgorithmParams> {
-  return await invoke<AlgorithmParams>("get_algorithm_params", { itemId });
+  return await invokeCommand<AlgorithmParams>("get_algorithm_params", { itemId });
 }
 
 /**
  * Get review statistics for all items
  */
 export async function getReviewStatistics(): Promise<ReviewStatistics> {
-  return await invoke<ReviewStatistics>("get_review_statistics");
+  return await invokeCommand<ReviewStatistics>("get_review_statistics");
 }
 
 /**
@@ -185,7 +185,7 @@ export async function getReviewStatistics(): Promise<ReviewStatistics> {
 export async function optimizeAlgorithmParams(
   params: OptimizationParams
 ): Promise<OptimizationResult> {
-  return await invoke<OptimizationResult>("optimize_algorithm_params", {
+  return await invokeCommand<OptimizationResult>("optimize_algorithm_params", {
     initialParams: params,
   });
 }

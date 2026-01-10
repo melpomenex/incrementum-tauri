@@ -3,8 +3,7 @@
  * Supports OpenAI, Anthropic, and local Ollama models with streaming support
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { invokeCommand, listen, type UnlistenFn } from "../../lib/tauri";
 
 export type LLMProvider = "openai" | "anthropic" | "ollama" | "openrouter";
 
@@ -51,7 +50,7 @@ export interface StreamOptions {
  * Chat with LLM (non-streaming)
  */
 export async function chatWithLLM(request: LLMRequest): Promise<LLMResponse> {
-  return await invoke<LLMResponse>("llm_chat", {
+  return await invokeCommand<LLMResponse>("llm_chat", {
     provider: request.provider,
     model: request.model,
     messages: request.messages,
@@ -73,7 +72,7 @@ export async function chatWithContext(
   apiKey?: string,
   baseUrl?: string
 ): Promise<LLMResponse> {
-  return await invoke<LLMResponse>("llm_chat_with_context", {
+  return await invokeCommand<LLMResponse>("llm_chat_with_context", {
     provider,
     model,
     messages,
@@ -124,7 +123,7 @@ export async function streamChatWithLLM(
     unlisteners.push(errorUnlisten);
 
     // Start the streaming
-    await invoke("llm_stream_chat", {
+    await invokeCommand("llm_stream_chat", {
       provider: request.provider,
       model: request.model,
       messages: request.messages,
@@ -149,7 +148,7 @@ export async function getAvailableModels(
   apiKey?: string,
   baseUrl?: string
 ): Promise<string[]> {
-  return await invoke<string[]>("llm_get_models", {
+  return await invokeCommand<string[]>("llm_get_models", {
     provider,
     apiKey,
     baseUrl,
@@ -164,7 +163,7 @@ export async function testLLMConnection(
   apiKey: string,
   baseUrl?: string
 ): Promise<boolean> {
-  return await invoke<boolean>("llm_test_connection", {
+  return await invokeCommand<boolean>("llm_test_connection", {
     provider,
     apiKey,
     baseUrl,

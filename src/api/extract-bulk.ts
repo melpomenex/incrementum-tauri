@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 export interface BulkOperationResult {
   succeeded: string[];
@@ -10,12 +10,12 @@ export interface BulkOperationResult {
  * Delete multiple extracts at once
  */
 export async function bulkDeleteExtracts(extractIds: string[]): Promise<BulkOperationResult> {
-  return await invoke<BulkOperationResult>("bulk_delete_extracts", { extractIds });
+  return await invokeCommand<BulkOperationResult>("bulk_delete_extracts", { extractIds });
 }
 
 /**
  * Generate flashcards from multiple extracts at once
  */
 export async function bulkGenerateCards(extractIds: string[]): Promise<BulkOperationResult> {
-  return await invoke<BulkOperationResult>("bulk_generate_cards", { extractIds });
+  return await invokeCommand<BulkOperationResult>("bulk_generate_cards", { extractIds });
 }

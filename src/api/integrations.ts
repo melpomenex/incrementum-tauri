@@ -3,7 +3,7 @@
  * Supports: Obsidian, Anki, Browser Extension
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 // ============================================================================
 // OBSIDIAN INTEGRATION
@@ -26,7 +26,7 @@ export async function exportToObsidian(
   documentId: string,
   config: ObsidianConfig
 ): Promise<string> {
-  return await invoke<string>("export_to_obsidian", { documentId, config });
+  return await invokeCommand<string>("export_to_obsidian", { documentId, config });
 }
 
 /**
@@ -36,7 +36,7 @@ export async function exportExtractToObsidian(
   extractId: string,
   config: ObsidianConfig
 ): Promise<string> {
-  return await invoke<string>("export_extract_to_obsidian", { extractId, config });
+  return await invokeCommand<string>("export_extract_to_obsidian", { extractId, config });
 }
 
 /**
@@ -47,7 +47,7 @@ export async function exportFlashcardsToObsidian(
   config: ObsidianConfig,
   format: "basic" | "flashcard" | "dataview" = "flashcard"
 ): Promise<string> {
-  return await invoke<string>("export_flashcards_to_obsidian", { cardIds, config, format });
+  return await invokeCommand<string>("export_flashcards_to_obsidian", { cardIds, config, format });
 }
 
 /**
@@ -56,7 +56,7 @@ export async function exportFlashcardsToObsidian(
 export async function importFromObsidian(
   filePath: string
 ): Promise<{ documentId: string; extractIds: string[] }> {
-  return await invoke("import_from_obsidian", { filePath });
+  return await invokeCommand("import_from_obsidian", { filePath });
 }
 
 /**
@@ -65,7 +65,7 @@ export async function importFromObsidian(
 export async function syncToObsidian(
   config: ObsidianConfig
 ): Promise<{ documents: number; extracts: number; flashcards: number }> {
-  return await invoke("sync_to_obsidian", { config });
+  return await invokeCommand("sync_to_obsidian", { config });
 }
 
 // ============================================================================
@@ -215,7 +215,7 @@ export async function syncFlashcardToAnki(
   flashcardId: string,
   config: AnkiConfig
 ): Promise<number> {
-  return await invoke<number>("sync_flashcard_to_anki", { flashcardId, config });
+  return await invokeCommand<number>("sync_flashcard_to_anki", { flashcardId, config });
 }
 
 /**
@@ -225,7 +225,7 @@ export async function syncFlashcardsToAnki(
   flashcardIds: string[],
   config: AnkiConfig
 ): Promise<{ added: number; failed: number }> {
-  return await invoke("sync_flashcards_to_anki", { flashcardIds, config });
+  return await invokeCommand("sync_flashcards_to_anki", { flashcardIds, config });
 }
 
 /**
@@ -295,35 +295,35 @@ export interface BrowserSyncConfig {
  * Start browser extension HTTP server
  */
 export async function startBrowserSyncServer(port: number = 8766): Promise<BrowserSyncServerStatus> {
-  return await invoke<BrowserSyncServerStatus>("start_browser_sync_server", { port });
+  return await invokeCommand<BrowserSyncServerStatus>("start_browser_sync_server", { port });
 }
 
 /**
  * Stop browser extension server
  */
 export async function stopBrowserSyncServer(): Promise<BrowserSyncServerStatus> {
-  return await invoke<BrowserSyncServerStatus>("stop_browser_sync_server");
+  return await invokeCommand<BrowserSyncServerStatus>("stop_browser_sync_server");
 }
 
 /**
  * Get browser sync server status
  */
 export async function getBrowserSyncServerStatus(port: number = 8766): Promise<BrowserSyncServerStatus> {
-  return await invoke<BrowserSyncServerStatus>("get_browser_sync_server_status", { port });
+  return await invokeCommand<BrowserSyncServerStatus>("get_browser_sync_server_status", { port });
 }
 
 /**
  * Get browser sync server configuration
  */
 export async function getBrowserSyncConfig(): Promise<BrowserSyncConfig> {
-  return await invoke<BrowserSyncConfig>("get_browser_sync_config");
+  return await invokeCommand<BrowserSyncConfig>("get_browser_sync_config");
 }
 
 /**
  * Set browser sync server configuration
  */
 export async function setBrowserSyncConfig(config: BrowserSyncConfig): Promise<void> {
-  await invoke("set_browser_sync_config", { config });
+  await invokeCommand("set_browser_sync_config", { config });
 }
 
 /**
@@ -393,7 +393,7 @@ export async function getExtensionServerStatus(): Promise<{
   port: number;
   connections: number;
 }> {
-  return await invoke("get_extension_server_status");
+  return await invokeCommand("get_extension_server_status");
 }
 
 /**
@@ -402,7 +402,7 @@ export async function getExtensionServerStatus(): Promise<{
 export async function sendToExtension(
   message: ExtensionMessage
 ): Promise<ExtensionMessageResponse> {
-  return await invoke("send_to_extension", { message });
+  return await invokeCommand("send_to_extension", { message });
 }
 
 /**
@@ -424,7 +424,7 @@ export async function processExtensionPage(page: SavedPage): Promise<{
   documentId: string;
   extractIds: string[];
 }> {
-  return await invoke("process_extension_page", { page });
+  return await invokeCommand("process_extension_page", { page });
 }
 
 // ============================================================================

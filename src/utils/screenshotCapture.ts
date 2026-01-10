@@ -2,7 +2,7 @@
  * Screenshot capture utilities
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 import { v4 as uuidv4 } from "uuid";
 
 export interface ScreenInfo {
@@ -20,7 +20,7 @@ export interface ScreenInfo {
  */
 export async function getScreenInfo(): Promise<ScreenInfo[]> {
   try {
-    const screens = await invoke<ScreenInfo[]>("get_screen_info");
+    const screens = await invokeCommand<ScreenInfo[]>("get_screen_info");
     return screens;
   } catch (error) {
     console.error("Failed to get screen info:", error);
@@ -33,7 +33,7 @@ export async function getScreenInfo(): Promise<ScreenInfo[]> {
  */
 export async function captureScreenshot(): Promise<string> {
   try {
-    const base64Image = await invoke<string>("capture_screenshot");
+    const base64Image = await invokeCommand<string>("capture_screenshot");
     return base64Image;
   } catch (error) {
     console.error("Failed to capture screenshot:", error);
@@ -46,7 +46,7 @@ export async function captureScreenshot(): Promise<string> {
  */
 export async function captureScreenByIndex(index: number): Promise<string> {
   try {
-    const base64Image = await invoke<string>("capture_screen_by_index", { index });
+    const base64Image = await invokeCommand<string>("capture_screen_by_index", { index });
     return base64Image;
   } catch (error) {
     console.error("Failed to capture screenshot:", error);
@@ -59,7 +59,7 @@ export async function captureScreenByIndex(index: number): Promise<string> {
  */
 export async function captureAppWindow(): Promise<string> {
   try {
-    const base64Image = await invoke<string>("capture_app_window");
+    const base64Image = await invokeCommand<string>("capture_app_window");
     return base64Image;
   } catch (error) {
     console.error("Failed to capture app window:", error);
@@ -100,7 +100,7 @@ export async function saveScreenshotAsDocument(
       },
     };
 
-    const savedDoc = await invoke("save_document", { document: documentData });
+    const savedDoc = await invokeCommand("save_document", { document: documentData });
     return savedDoc;
   } catch (error) {
     console.error("Failed to save screenshot as document:", error);

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { Document, Extract } from "../types";
 import * as documentsApi from "../api/documents";
+import { isTauri } from "../lib/tauri";
 
 interface DocumentState {
   // Data
@@ -175,6 +176,20 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   openFilePickerAndImport: async () => {
     const filePaths = await documentsApi.openFilePicker({ multiple: true });
     if (!filePaths || filePaths.length === 0) {
+      // Check if running in browser (not Tauri)
+      if (!isTauri()) {
+        set({
+          error: "Document import is limited in browser mode. A mock document has been created for UI testing. Run 'npm run tauri dev' for full functionality.",
+        });
+        // In browser mode, the mock will create a document via import_documents returning mock data
+        const mockDocs = await documentsApi.importDocuments(["mock.pdf"]);
+        if (mockDocs && mockDocs.length > 0) {
+          set((state) => ({
+            documents: [...state.documents, ...mockDocs],
+          }));
+          return mockDocs;
+        }
+      }
       return [];
     }
     return get().importFromFiles(filePaths);

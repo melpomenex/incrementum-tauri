@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 export interface DashboardStats {
   total_cards: number;
@@ -38,26 +38,26 @@ export interface CategoryStats {
  * Get dashboard statistics
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
-  return await invoke<DashboardStats>("get_dashboard_stats");
+  return await invokeCommand<DashboardStats>("get_dashboard_stats");
 }
 
 /**
  * Get memory statistics
  */
 export async function getMemoryStats(): Promise<MemoryStats> {
-  return await invoke<MemoryStats>("get_memory_stats");
+  return await invokeCommand<MemoryStats>("get_memory_stats");
 }
 
 /**
  * Get activity data for the last N days
  */
 export async function getActivityData(days: number = 30): Promise<ActivityDay[]> {
-  return await invoke<ActivityDay[]>("get_activity_data", { days });
+  return await invokeCommand<ActivityDay[]>("get_activity_data", { days });
 }
 
 /**
  * Get category statistics
  */
 export async function getCategoryStats(): Promise<CategoryStats[]> {
-  return await invoke<CategoryStats[]>("get_category_stats");
+  return await invokeCommand<CategoryStats[]>("get_category_stats");
 }

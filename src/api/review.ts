@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 export interface PreviewIntervals {
   again: number;
@@ -15,7 +15,7 @@ export interface ReviewStreak {
 }
 
 export async function startReview(): Promise<string> {
-  return await invoke<string>("start_review");
+  return await invokeCommand<string>("start_review");
 }
 
 export async function submitReview(
@@ -25,7 +25,7 @@ export async function submitReview(
   sessionId?: string
 ): Promise<LearningItem> {
   const normalizedSessionId = sessionId?.trim() ? sessionId : undefined;
-  return await invoke<LearningItem>("submit_review", {
+  return await invokeCommand<LearningItem>("submit_review", {
     item_id: itemId,
     itemId,
     rating,
@@ -37,20 +37,20 @@ export async function submitReview(
 }
 
 export async function getDueItems(): Promise<LearningItem[]> {
-  return await invoke<LearningItem[]>("get_due_items");
+  return await invokeCommand<LearningItem[]>("get_due_items");
 }
 
 export async function previewReviewIntervals(
   itemId: string
 ): Promise<PreviewIntervals> {
-  return await invoke<PreviewIntervals>("preview_review_intervals", {
+  return await invokeCommand<PreviewIntervals>("preview_review_intervals", {
     item_id: itemId,
     itemId,
   });
 }
 
 export async function getReviewStreak(): Promise<ReviewStreak> {
-  return await invoke<ReviewStreak>("get_review_streak");
+  return await invokeCommand<ReviewStreak>("get_review_streak");
 }
 
 export interface LearningItem {

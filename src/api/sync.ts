@@ -2,7 +2,7 @@
  * Cloud synchronization API
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 /**
  * Sync status
@@ -95,14 +95,14 @@ export enum ConflictResolution {
  * Trigger sync now
  */
 export async function syncNow(apiKey: string, endpoint: string): Promise<SyncResult> {
-  return await invoke<SyncResult>("sync_now", { apiKey, endpoint });
+  return await invokeCommand<SyncResult>("sync_now", { apiKey, endpoint });
 }
 
 /**
  * Get current sync status
  */
 export async function getSyncStatus(): Promise<SyncStatus> {
-  return await invoke<SyncStatus>("get_sync_status");
+  return await invokeCommand<SyncStatus>("get_sync_status");
 }
 
 /**
@@ -112,14 +112,14 @@ export async function resolveSyncConflict(
   conflict: SyncConflict,
   resolution: ConflictResolution
 ): Promise<void> {
-  return await invoke("resolve_sync_conflict", { conflict, resolution });
+  return await invokeCommand("resolve_sync_conflict", { conflict, resolution });
 }
 
 /**
  * Get sync log
  */
 export async function getSyncLog(): Promise<SyncLogEntry[]> {
-  return await invoke<SyncLogEntry[]>("get_sync_log");
+  return await invokeCommand<SyncLogEntry[]>("get_sync_log");
 }
 
 /**

@@ -3,7 +3,7 @@
  * Handles automatic segmentation, text extraction, metadata enrichment, and thumbnail generation
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 export interface ProcessedDocument {
   content: string;
@@ -389,7 +389,7 @@ export async function createExtractsFromSegments(
 ): Promise<void> {
   for (const segment of segments) {
     try {
-      await invoke("create_extract", {
+      await invokeCommand("create_extract", {
         extract: {
           documentId,
           title: segment.title,
@@ -415,7 +415,7 @@ export async function batchProcessDocuments(
   for (const documentId of documentIds) {
     try {
       // Get document content
-      const document = await invoke("get_document", { id: documentId });
+      const document = await invokeCommand("get_document", { id: documentId });
       const processed = await processDocument(
         documentId,
         document.content || "",
