@@ -4,6 +4,7 @@ import {
   submitReview,
   previewReviewIntervals,
   getReviewStreak,
+  startReview,
   LearningItem,
   ReviewRating,
   PreviewIntervals,
@@ -70,6 +71,10 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const items = await getDueItems();
+
+      // Start a review session on the backend
+      const sessionId = items.length > 0 ? await startReview() : "";
+
       set({
         queue: items,
         currentIndex: 0,
@@ -78,7 +83,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         isLoading: false,
         reviewsCompleted: 0,
         correctCount: 0,
-        sessionId: crypto.randomUUID(),
+        sessionId,
         averageTimePerCard: 0,
       });
 
@@ -117,7 +122,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   },
 
   submitRating: async (rating: ReviewRating) => {
-    const { currentCard, reviewsCompleted, correctCount, sessionStartTime } = get();
+    const { currentCard, reviewsCompleted, correctCount, sessionStartTime, sessionId } = get();
     if (!currentCard) return;
 
     const timeTaken = Math.floor((Date.now() - sessionStartTime) / 1000); // seconds since session start
@@ -164,7 +169,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     }
 
     try {
-      await submitReview(currentCard.id, rating, timeTaken);
+      await submitReview(currentCard.id, rating, timeTaken, sessionId);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Failed to submit review",

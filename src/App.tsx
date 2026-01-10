@@ -16,13 +16,13 @@ import { AIWorkflowsPage } from "./pages/AIWorkflowsPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
 import { SearchPage } from "./pages/SearchPage";
+import { CommandCenter } from "./components/search/CommandCenter";
 
 function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [activeTab, setActiveTab] = useState("review");
   const { dashboardStats, loadAll } = useAnalyticsStore();
   const { documents, loadDocuments } = useDocumentStore();
-  const { queue } = useQueueStore();
   const { queue: reviewQueue } = useReviewStore();
 
   useEffect(() => {

@@ -7,12 +7,19 @@ interface EPUBViewerProps {
   fileName: string;
   documentId?: string;
   onLoad?: (toc: any[]) => void;
+  onSelectionChange?: (text: string) => void;
 }
 
 const FONT_SIZE_KEY = "epub-font-size";
 const DEFAULT_FONT_SIZE = 100;
 
-export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewerProps) {
+export function EPUBViewer({
+  fileData,
+  fileName,
+  documentId,
+  onLoad,
+  onSelectionChange,
+}: EPUBViewerProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -371,7 +378,7 @@ export function EPUBViewer({ fileData, fileName, documentId, onLoad }: EPUBViewe
           rendition.on("selected", (_cfiRange: any, contents: any) => {
             const selection = contents.window.getSelection();
             if (selection && selection.toString()) {
-              console.log("Selected text:", selection.toString());
+              onSelectionChange?.(selection.toString());
             }
           });
 

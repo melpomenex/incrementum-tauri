@@ -21,12 +21,14 @@ export async function startReview(): Promise<string> {
 export async function submitReview(
   itemId: string,
   rating: number,
-  timeTaken: number
+  timeTaken: number,
+  sessionId?: string
 ): Promise<LearningItem> {
   return await invoke<LearningItem>("submit_review", {
     itemId,
     rating,
     timeTaken,
+    sessionId,
   });
 }
 

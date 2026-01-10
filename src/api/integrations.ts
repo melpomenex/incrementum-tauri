@@ -274,6 +274,36 @@ export async function triggerAnkiSync(url: string = "http://localhost:8765"): Pr
 // ============================================================================
 
 /**
+ * Browser extension server status
+ */
+export interface BrowserSyncServerStatus {
+  running: boolean;
+  port: number;
+  connections: number;
+}
+
+/**
+ * Start browser extension HTTP server
+ */
+export async function startBrowserSyncServer(port: number = 8766): Promise<BrowserSyncServerStatus> {
+  return await invoke<BrowserSyncServerStatus>("start_browser_sync_server", { port });
+}
+
+/**
+ * Stop browser extension server
+ */
+export async function stopBrowserSyncServer(): Promise<BrowserSyncServerStatus> {
+  return await invoke<BrowserSyncServerStatus>("stop_browser_sync_server");
+}
+
+/**
+ * Get browser sync server status
+ */
+export async function getBrowserSyncServerStatus(port: number = 8766): Promise<BrowserSyncServerStatus> {
+  return await invoke<BrowserSyncServerStatus>("get_browser_sync_server_status", { port });
+}
+
+/**
  * Browser extension message types
  */
 export enum ExtensionMessageType {
@@ -306,20 +336,33 @@ export interface ExtensionMessageResponse {
 }
 
 /**
+ * @deprecated Use startBrowserSyncServer instead (HTTP-based, not WebSocket)
  * Start browser extension WebSocket server
  */
 export async function startExtensionServer(port: number = 8766): Promise<boolean> {
-  return await invoke<boolean>("start_extension_server", { port });
+  try {
+    const status = await startBrowserSyncServer(port);
+    return status.running;
+  } catch {
+    return false;
+  }
 }
 
 /**
+ * @deprecated Use stopBrowserSyncServer instead
  * Stop browser extension server
  */
 export async function stopExtensionServer(): Promise<boolean> {
-  return await invoke<boolean>("stop_extension_server");
+  try {
+    const status = await stopBrowserSyncServer();
+    return !status.running;
+  } catch {
+    return false;
+  }
 }
 
 /**
+ * @deprecated Use getBrowserSyncServerStatus instead
  * Get extension server status
  */
 export async function getExtensionServerStatus(): Promise<{

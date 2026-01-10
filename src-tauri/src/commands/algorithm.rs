@@ -41,6 +41,24 @@ pub struct DocumentRatingResponse {
     pub scheduling_reason: String,
 }
 
+/// Extract rating request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtractRatingRequest {
+    pub extract_id: String,
+    pub rating: i32, // 1-4 scale (ReviewRating)
+    pub time_taken: Option<i32>, // seconds
+}
+
+/// Extract rating response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtractRatingResponse {
+    pub next_review_date: String,
+    pub stability: f64,
+    pub difficulty: f64,
+    pub interval_days: i64,
+    pub scheduling_reason: String,
+}
+
 /// Algorithm type selection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlgorithmType {
@@ -108,11 +126,11 @@ pub async fn rate_document(
     let review_rating = ReviewRating::from(request.rating);
 
     // Schedule the document using FSRS
-    // Use current stability/difficulty or defaults (Stability=0, Difficulty=5 for new)
-    let result = scheduler.schedule_document_fsrs(
+    // Use current stability/difficulty or defaults (None = new document)
+    let result = scheduler.schedule_document(
         review_rating,
-        document.stability.unwrap_or(0.0),
-        document.difficulty.unwrap_or(5.0),
+        document.stability,
+        document.difficulty,
         elapsed_days
     );
 
@@ -130,6 +148,70 @@ pub async fn rate_document(
     ).await?;
 
     Ok(DocumentRatingResponse {
+        next_review_date: result.next_review.to_rfc3339(),
+        stability: result.stability,
+        difficulty: result.difficulty,
+        interval_days: result.interval_days,
+        scheduling_reason: result.scheduling_reason,
+    })
+}
+
+/// Rate an extract and schedule its next review
+///
+/// This implements FSRS-based scheduling for extracts.
+#[tauri::command]
+pub async fn rate_extract(
+    request: ExtractRatingRequest,
+    repo: State<'_, Repository>,
+) -> Result<ExtractRatingResponse> {
+    // Get the extract
+    let extract = repo.get_extract(&request.extract_id).await?.ok_or_else(|| {
+        crate::error::IncrementumError::NotFound(format!("Extract {} not found", request.extract_id))
+    })?;
+
+    // Create document scheduler (FSRS works the same for extracts)
+    let scheduler = DocScheduler::default_params();
+    let now = Utc::now();
+
+    // Calculate elapsed days since last review
+    let elapsed_days = extract.last_review_date
+        .map(|lr| (now - lr).num_seconds() as f64 / 86400.0)
+        .unwrap_or_else(|| {
+            // For new extracts, use days since creation
+            (now - extract.date_created).num_seconds() as f64 / 86400.0
+        })
+        .max(0.0);
+
+    let review_rating = ReviewRating::from(request.rating);
+
+    // Get current stability and difficulty from memory state
+    let current_stability = extract.memory_state.as_ref().map(|ms| ms.stability);
+    let current_difficulty = extract.memory_state.as_ref().map(|ms| ms.difficulty);
+
+    // Schedule the extract using FSRS
+    let result = scheduler.schedule_document(
+        review_rating,
+        current_stability,
+        current_difficulty,
+        elapsed_days
+    );
+
+    // Update the extract with new scheduling data
+    let new_review_count = extract.review_count + 1;
+    let new_reps = extract.reps + 1;
+    let last_review = Some(now);
+
+    repo.update_extract_scheduling(
+        &extract.id,
+        Some(result.next_review),
+        Some(result.stability),
+        Some(result.difficulty),
+        Some(new_review_count),
+        Some(new_reps),
+        last_review,
+    ).await?;
+
+    Ok(ExtractRatingResponse {
         next_review_date: result.next_review.to_rfc3339(),
         stability: result.stability,
         difficulty: result.difficulty,

@@ -1,6 +1,7 @@
 import { useTabsStore } from "../stores";
 import { useDocumentStore } from "../stores";
 import { useUIStore } from "../stores";
+import { captureAndSaveScreenshot } from "../utils/screenshotCaptureFlow";
 import {
   ReviewTab,
   DashboardTab,
@@ -75,7 +76,7 @@ function ToolbarButton({ button }: ToolbarButtonProps) {
 
 export function Toolbar() {
   const { addTab, addTabInBackground } = useTabsStore();
-  const { openFilePickerAndImport } = useDocumentStore();
+  const { openFilePickerAndImport, loadDocuments } = useDocumentStore();
   const { setCommandPaletteOpen } = useUIStore();
 
   // Import File button
@@ -217,8 +218,14 @@ export function Toolbar() {
 
   // Screenshot button
   const handleScreenshot = () => {
-    console.log("Screenshot");
-    // TODO: Implement screenshot capture
+    void captureAndSaveScreenshot()
+      .then(async () => {
+        await loadDocuments();
+      })
+      .catch((error) => {
+        console.error("Failed to capture screenshot:", error);
+        alert("Failed to capture screenshot. Please try again.");
+      });
   };
 
   // Settings button
@@ -347,7 +354,7 @@ export function Toolbar() {
       id: "screenshot",
       icon: Camera,
       label: "Screenshot",
-      shortcut: "",
+      shortcut: "Ctrl+Shift+S",
       action: handleScreenshot,
       group: 3,
     },

@@ -4,6 +4,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+// Re-export the shared MemoryState type
+pub use super::learning_item::MemoryState;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Extract {
     pub id: String,
@@ -19,6 +22,16 @@ pub struct Extract {
     pub date_modified: DateTime<Utc>,
     pub tags: Vec<String>,
     pub category: Option<String>,
+    /// FSRS Memory State (stability and difficulty)
+    pub memory_state: Option<MemoryState>,
+    /// Next scheduled review date for this extract
+    pub next_review_date: Option<DateTime<Utc>>,
+    /// Last review date
+    pub last_review_date: Option<DateTime<Utc>>,
+    /// Number of times this extract has been reviewed
+    pub review_count: i32,
+    /// Total repetitions/reviews
+    pub reps: i32,
 }
 
 impl Extract {
@@ -37,6 +50,11 @@ impl Extract {
             date_modified: Utc::now(),
             tags: Vec::new(),
             category: None,
+            memory_state: None,
+            next_review_date: None,
+            last_review_date: None,
+            review_count: 0,
+            reps: 0,
         }
     }
 }

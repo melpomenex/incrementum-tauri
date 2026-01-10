@@ -227,6 +227,13 @@ export const DEFAULT_SHORTCUTS: ShortcutAction[] = [
 
   // General
   {
+    id: "gen.screenshot",
+    name: "Capture Screenshot",
+    description: "Capture a screenshot with selection",
+    category: ShortcutCategory.General,
+    defaultCombo: { key: "s", ctrl: true, shift: true, meta: true },
+  },
+  {
     id: "gen.settings",
     name: "Open Settings",
     description: "Open settings page",

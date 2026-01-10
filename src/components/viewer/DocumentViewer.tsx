@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useDocumentStore, useTabsStore, useSettingsStore } from "../../stores";
@@ -78,6 +78,16 @@ export function DocumentViewer({
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
   const lastSelectionRef = useRef("");
 
+  const updateSelection = useCallback((rawText: string | null | undefined) => {
+    const text = rawText?.trim() ?? "";
+    if (text && text.length > 0 && text.length < 1000) {
+      setSelectedText(text);
+      lastSelectionRef.current = text;
+    } else {
+      setSelectedText("");
+    }
+  }, []);
+
   // Timer for tracking reading time
   const startTimeRef = useRef(Date.now());
 
@@ -101,13 +111,7 @@ export function DocumentViewer({
   useEffect(() => {
     const handleSelection = () => {
       const selection = window.getSelection();
-      const text = selection?.toString().trim();
-      if (text && text.length > 0 && text.length < 1000) {
-        setSelectedText(text);
-        lastSelectionRef.current = text;
-      } else {
-        setSelectedText("");
-      }
+      updateSelection(selection?.toString());
     };
 
     document.addEventListener("mouseup", handleSelection);
@@ -117,7 +121,7 @@ export function DocumentViewer({
       document.removeEventListener("mouseup", handleSelection);
       document.removeEventListener("keyup", handleSelection);
     };
-  }, []);
+  }, [updateSelection]);
 
   useEffect(() => {
     onSelectionChange?.(selectedText);
@@ -652,6 +656,7 @@ export function DocumentViewer({
               fileName={currentDocument.title}
               documentId={currentDocument.id}
               onLoad={handleDocumentLoad}
+              onSelectionChange={updateSelection}
             />
           </div>
         ) : docType === "markdown" ? (

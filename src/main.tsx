@@ -11,6 +11,7 @@ import { DevPerformanceMonitor } from "./components/common/PerformanceMonitor";
 
 // Auth callback route
 import AuthCallback from "./routes/auth-callback";
+import ScreenshotOverlay from "./routes/screenshot-overlay";
 
 // Loading fallback component
 function PageLoader() {
@@ -101,6 +102,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             <Routes>
               {/* OAuth callback route - must be before catch-all */}
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/screenshot-overlay" element={<ScreenshotOverlay />} />
               {/* Catch-all route - MainLayout handles tab-based navigation internally */}
               <Route path="*" element={<MainLayout />} />
             </Routes>

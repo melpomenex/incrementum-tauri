@@ -9,6 +9,8 @@ export interface ScreenInfo {
   index: number;
   width: number;
   height: number;
+  x?: number;
+  y?: number;
   scale_factor: number;
   is_primary: boolean;
 }
@@ -49,6 +51,19 @@ export async function captureScreenByIndex(index: number): Promise<string> {
   } catch (error) {
     console.error("Failed to capture screenshot:", error);
     throw new Error(`Failed to capture screen ${index}`);
+  }
+}
+
+/**
+ * Capture a screenshot of the app window
+ */
+export async function captureAppWindow(): Promise<string> {
+  try {
+    const base64Image = await invoke<string>("capture_app_window");
+    return base64Image;
+  } catch (error) {
+    console.error("Failed to capture app window:", error);
+    throw new Error("Failed to capture app window");
   }
 }
 

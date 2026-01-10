@@ -156,6 +156,58 @@ impl Repository {
         }
     }
 
+    pub async fn find_document_by_url(&self, url: &str) -> Result<Option<Document>> {
+        let row = sqlx::query("SELECT * FROM documents WHERE file_path = ? LIMIT 1")
+            .bind(url)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        match row {
+            Some(row) => {
+                let file_type: String = row.get("file_type");
+                let tags_json: String = row.get("tags");
+                let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+                // Parse metadata if present
+                let metadata_json: Option<String> = row.try_get("metadata")?;
+                let metadata: Option<crate::models::DocumentMetadata> = metadata_json
+                    .and_then(|json| serde_json::from_str(&json).ok());
+
+                Ok(Some(Document {
+                    id: row.get("id"),
+                    title: row.get("title"),
+                    file_path: row.get("file_path"),
+                    file_type: Self::parse_file_type(&file_type),
+                    content: row.get("content"),
+                    content_hash: row.get("content_hash"),
+                    total_pages: row.get("total_pages"),
+                    current_page: row.get("current_page"),
+                    category: row.get("category"),
+                    tags,
+                    date_added: row.get("date_added"),
+                    date_modified: row.get("date_modified"),
+                    date_last_reviewed: row.get("date_last_reviewed"),
+                    extract_count: row.get("extract_count"),
+                    learning_item_count: row.get("learning_item_count"),
+                    priority_rating: row.get("priority_rating"),
+                    priority_slider: row.get("priority_slider"),
+                    priority_score: row.get("priority_score"),
+                    is_archived: row.get("is_archived"),
+                    is_favorite: row.get("is_favorite"),
+                    metadata,
+                    // Scheduling fields - use try_get for compatibility with existing databases
+                    next_reading_date: row.try_get("next_reading_date").ok(),
+                    reading_count: row.try_get("reading_count").unwrap_or(0),
+                    stability: row.try_get("stability").ok(),
+                    difficulty: row.try_get("difficulty").ok(),
+                    reps: row.try_get("reps").ok(),
+                    total_time_spent: row.try_get("total_time_spent").ok(),
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn list_documents(&self) -> Result<Vec<Document>> {
         let rows = sqlx::query("SELECT * FROM documents ORDER BY date_added DESC")
             .fetch_all(&self.pool)
@@ -353,6 +405,9 @@ impl Repository {
     // Extract operations
     pub async fn create_extract(&self, extract: &Extract) -> Result<Extract> {
         let tags_json = serde_json::to_string(&extract.tags)?;
+        let (stability, difficulty) = extract.memory_state.as_ref()
+            .map(|s| (Some(s.stability), Some(s.difficulty)))
+            .unwrap_or((None, None));
 
         sqlx::query(
             r#"
@@ -360,8 +415,9 @@ impl Repository {
                 id, document_id, content, page_title, page_number,
                 highlight_color, notes, progressive_disclosure_level,
                 max_disclosure_level, date_created, date_modified,
-                tags, category
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                tags, category, memory_state_stability, memory_state_difficulty,
+                next_review_date, last_review_date, review_count, reps
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
             "#,
         )
         .bind(&extract.id)
@@ -377,6 +433,12 @@ impl Repository {
         .bind(&extract.date_modified)
         .bind(&tags_json)
         .bind(&extract.category)
+        .bind(stability)
+        .bind(difficulty)
+        .bind(&extract.next_review_date)
+        .bind(&extract.last_review_date)
+        .bind(extract.review_count)
+        .bind(extract.reps)
         .execute(&self.pool)
         .await?;
 
@@ -393,6 +455,11 @@ impl Repository {
             Some(row) => {
                 let tags_json: String = row.try_get("tags")?;
                 let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+                let stability: Option<f64> = row.try_get("memory_state_stability").ok();
+                let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
+                let memory_state = Self::parse_memory_state(stability, difficulty);
+
                 Ok(Some(Extract {
                     id: row.try_get("id")?,
                     document_id: row.try_get("document_id")?,
@@ -407,6 +474,11 @@ impl Repository {
                     date_modified: row.try_get("date_modified")?,
                     tags,
                     category: row.try_get("category")?,
+                    memory_state,
+                    next_review_date: row.try_get("next_review_date").ok(),
+                    last_review_date: row.try_get("last_review_date").ok(),
+                    review_count: row.try_get("review_count").unwrap_or(0),
+                    reps: row.try_get("reps").unwrap_or(0),
                 }))
             }
             None => Ok(None),
@@ -423,6 +495,11 @@ impl Repository {
         for row in rows {
             let tags_json: String = row.try_get("tags")?;
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+            let stability: Option<f64> = row.try_get("memory_state_stability").ok();
+            let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
+            let memory_state = Self::parse_memory_state(stability, difficulty);
+
             extracts.push(Extract {
                 id: row.try_get("id")?,
                 document_id: row.try_get("document_id")?,
@@ -437,6 +514,11 @@ impl Repository {
                 date_modified: row.try_get("date_modified")?,
                 tags,
                 category: row.try_get("category")?,
+                memory_state,
+                next_review_date: row.try_get("next_review_date").ok(),
+                last_review_date: row.try_get("last_review_date").ok(),
+                review_count: row.try_get("review_count").unwrap_or(0),
+                reps: row.try_get("reps").unwrap_or(0),
             });
         }
 
@@ -445,13 +527,19 @@ impl Repository {
 
     pub async fn update_extract(&self, extract: &Extract) -> Result<Extract> {
         let tags_json = serde_json::to_string(&extract.tags)?;
+        let (stability, difficulty) = extract.memory_state.as_ref()
+            .map(|s| (Some(s.stability), Some(s.difficulty)))
+            .unwrap_or((None, None));
 
         sqlx::query(
             r#"
             UPDATE extracts SET
                 content = ?1, notes = ?2, highlight_color = ?3,
-                tags = ?4, category = ?5, date_modified = ?6
-            WHERE id = ?7
+                tags = ?4, category = ?5, date_modified = ?6,
+                memory_state_stability = ?7, memory_state_difficulty = ?8,
+                next_review_date = ?9, last_review_date = ?10,
+                review_count = ?11, reps = ?12
+            WHERE id = ?13
             "#,
         )
         .bind(&extract.content)
@@ -460,6 +548,12 @@ impl Repository {
         .bind(&tags_json)
         .bind(&extract.category)
         .bind(&extract.date_modified)
+        .bind(stability)
+        .bind(difficulty)
+        .bind(&extract.next_review_date)
+        .bind(&extract.last_review_date)
+        .bind(extract.review_count)
+        .bind(extract.reps)
         .bind(&extract.id)
         .execute(&self.pool)
         .await?;
@@ -472,6 +566,83 @@ impl Repository {
             .bind(id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    pub async fn get_due_extracts(&self, before: &chrono::DateTime<chrono::Utc>) -> Result<Vec<Extract>> {
+        let rows = sqlx::query("SELECT * FROM extracts WHERE next_review_date IS NOT NULL AND next_review_date <= ? ORDER BY next_review_date")
+            .bind(before)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut extracts = Vec::new();
+        for row in rows {
+            let tags_json: String = row.try_get("tags")?;
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+            let stability: Option<f64> = row.try_get("memory_state_stability").ok();
+            let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
+            let memory_state = Self::parse_memory_state(stability, difficulty);
+
+            extracts.push(Extract {
+                id: row.try_get("id")?,
+                document_id: row.try_get("document_id")?,
+                content: row.try_get("content")?,
+                page_title: row.try_get("page_title")?,
+                page_number: row.try_get("page_number")?,
+                highlight_color: row.try_get("highlight_color")?,
+                notes: row.try_get("notes")?,
+                progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,
+                max_disclosure_level: row.try_get("max_disclosure_level")?,
+                date_created: row.try_get("date_created")?,
+                date_modified: row.try_get("date_modified")?,
+                tags,
+                category: row.try_get("category")?,
+                memory_state,
+                next_review_date: row.try_get("next_review_date").ok(),
+                last_review_date: row.try_get("last_review_date").ok(),
+                review_count: row.try_get("review_count").unwrap_or(0),
+                reps: row.try_get("reps").unwrap_or(0),
+            });
+        }
+
+        Ok(extracts)
+    }
+
+    pub async fn update_extract_scheduling(
+        &self,
+        id: &str,
+        next_review_date: Option<chrono::DateTime<Utc>>,
+        stability: Option<f64>,
+        difficulty: Option<f64>,
+        review_count: Option<i32>,
+        reps: Option<i32>,
+        last_review_date: Option<chrono::DateTime<Utc>>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE extracts SET
+                next_review_date = ?1,
+                memory_state_stability = ?2,
+                memory_state_difficulty = ?3,
+                review_count = ?4,
+                reps = ?5,
+                last_review_date = ?6,
+                date_modified = ?7
+            WHERE id = ?8
+            "#,
+        )
+        .bind(next_review_date)
+        .bind(stability)
+        .bind(difficulty)
+        .bind(review_count)
+        .bind(reps)
+        .bind(last_review_date)
+        .bind(Utc::now())
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
@@ -692,4 +863,215 @@ impl Repository {
 
         Ok(items)
     }
+
+    // Review session operations
+
+    /// Create a new review session
+    pub async fn create_review_session(&self, id: &str) -> Result<()> {
+        let now = Utc::now();
+        sqlx::query(
+            r#"
+            INSERT INTO review_sessions (id, start_time, items_reviewed, correct_answers, total_time)
+            VALUES (?1, ?2, 0, 0, 0)
+            "#,
+        )
+        .bind(id)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update a review session (increment counters, optionally set end_time)
+    pub async fn update_review_session(
+        &self,
+        id: &str,
+        items_reviewed: i32,
+        correct_answers: i32,
+        total_time: i32,
+        end_session: bool,
+    ) -> Result<()> {
+        let end_time = if end_session { Some(Utc::now()) } else { None };
+
+        if end_session {
+            sqlx::query(
+                r#"
+                UPDATE review_sessions SET
+                    items_reviewed = items_reviewed + ?1,
+                    correct_answers = correct_answers + ?2,
+                    total_time = total_time + ?3,
+                    end_time = ?4
+                WHERE id = ?5
+                "#,
+            )
+            .bind(items_reviewed)
+            .bind(correct_answers)
+            .bind(total_time)
+            .bind(&end_time)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query(
+                r#"
+                UPDATE review_sessions SET
+                    items_reviewed = items_reviewed + ?1,
+                    correct_answers = correct_answers + ?2,
+                    total_time = total_time + ?3
+                WHERE id = ?4
+                "#,
+            )
+            .bind(items_reviewed)
+            .bind(correct_answers)
+            .bind(total_time)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Create a review result record for a single card review
+    pub async fn create_review_result(
+        &self,
+        id: &str,
+        session_id: Option<&str>,
+        item_id: &str,
+        rating: i32,
+        time_taken: i32,
+        new_due_date: &chrono::DateTime<chrono::Utc>,
+        new_interval: f64,
+        new_ease_factor: f64,
+    ) -> Result<()> {
+        let now = Utc::now();
+        sqlx::query(
+            r#"
+            INSERT INTO review_results (id, session_id, item_id, rating, time_taken, new_due_date, new_interval, new_ease_factor, timestamp)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "#,
+        )
+        .bind(id)
+        .bind(session_id)
+        .bind(item_id)
+        .bind(rating)
+        .bind(time_taken)
+        .bind(new_due_date)
+        .bind(new_interval)
+        .bind(new_ease_factor)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get or create study statistics for a specific date
+    pub async fn get_study_statistics(&self, date: &str) -> Result<Option<StudyStatsRow>> {
+        let row = sqlx::query_as::<_, StudyStatsRow>(
+            "SELECT * FROM study_statistics WHERE date = ?1"
+        )
+        .bind(date)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
+    /// Create study statistics for a specific date
+    pub async fn create_study_statistics(&self, date: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO study_statistics (id, date, cards_reviewed, correct_reviews, total_study_time, new_cards, learning_cards, review_cards)
+            VALUES (?1, ?2, 0, 0, 0, 0, 0, 0)
+            "#,
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(date)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update study statistics for a specific date
+    pub async fn update_study_statistics(
+        &self,
+        date: &str,
+        cards_reviewed: i32,
+        correct_reviews: i32,
+        study_time: i32,
+        new_cards: i32,
+        learning_cards: i32,
+        review_cards: i32,
+    ) -> Result<()> {
+        // First try to get existing stats
+        let existing = self.get_study_statistics(date).await?;
+
+        if existing.is_some() {
+            // Update existing record
+            sqlx::query(
+                r#"
+                UPDATE study_statistics SET
+                    cards_reviewed = cards_reviewed + ?1,
+                    correct_reviews = correct_reviews + ?2,
+                    total_study_time = total_study_time + ?3,
+                    new_cards = new_cards + ?4,
+                    learning_cards = learning_cards + ?5,
+                    review_cards = review_cards + ?6
+                WHERE date = ?7
+                "#,
+            )
+            .bind(cards_reviewed)
+            .bind(correct_reviews)
+            .bind(study_time)
+            .bind(new_cards)
+            .bind(learning_cards)
+            .bind(review_cards)
+            .bind(date)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            // Create new record
+            self.create_study_statistics(date).await?;
+            // Then update it
+            sqlx::query(
+                r#"
+                UPDATE study_statistics SET
+                    cards_reviewed = cards_reviewed + ?1,
+                    correct_reviews = correct_reviews + ?2,
+                    total_study_time = total_study_time + ?3,
+                    new_cards = new_cards + ?4,
+                    learning_cards = learning_cards + ?5,
+                    review_cards = review_cards + ?6
+                WHERE date = ?7
+                "#,
+            )
+            .bind(cards_reviewed)
+            .bind(correct_reviews)
+            .bind(study_time)
+            .bind(new_cards)
+            .bind(learning_cards)
+            .bind(review_cards)
+            .bind(date)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+}
+
+// Helper struct for study statistics rows
+#[derive(sqlx::FromRow)]
+struct StudyStatsRow {
+    id: String,
+    date: String,
+    cards_reviewed: i32,
+    correct_reviews: i32,
+    total_study_time: i32,
+    new_cards: i32,
+    learning_cards: i32,
+    review_cards: i32,
 }

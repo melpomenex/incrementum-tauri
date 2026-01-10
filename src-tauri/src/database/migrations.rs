@@ -405,6 +405,25 @@ pub const MIGRATIONS: &[Migration] = &[
         UPDATE learning_items SET interval = 0.0 WHERE interval IS NULL;
         "#,
     ),
+
+    // Migration 011: Add FSRS scheduling to extracts
+    Migration::new(
+        "011_add_extract_fsrs_scheduling",
+        r#"
+        -- FSRS memory state for extracts
+        ALTER TABLE extracts ADD COLUMN memory_state_stability REAL;
+        ALTER TABLE extracts ADD COLUMN memory_state_difficulty REAL;
+
+        -- Scheduling fields for extracts
+        ALTER TABLE extracts ADD COLUMN next_review_date TEXT;
+        ALTER TABLE extracts ADD COLUMN last_review_date TEXT;
+        ALTER TABLE extracts ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE extracts ADD COLUMN reps INTEGER NOT NULL DEFAULT 0;
+
+        -- Create index for due extracts
+        CREATE INDEX IF NOT EXISTS idx_extracts_next_review ON extracts(next_review_date);
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

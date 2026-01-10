@@ -20,6 +20,8 @@ mod cloud;
 mod cloud_sync;
 mod backup;
 mod scheduler;
+mod browser_sync_server;
+mod screenshot;
 
 use database::Database;
 use std::sync::{Arc, Mutex};
@@ -163,6 +165,7 @@ pub fn run() {
             // Algorithm commands
             commands::calculate_sm2_next,
             commands::rate_document,
+            commands::rate_extract,
             commands::calculate_priority_scores,
             commands::compare_algorithms_command,
             commands::get_algorithm_params,
@@ -217,6 +220,10 @@ pub fn run() {
             integrations::get_extension_server_status,
             integrations::send_to_extension,
             integrations::process_extension_page,
+            // Browser sync server commands (HTTP for extension)
+            browser_sync_server::start_browser_sync_server,
+            browser_sync_server::stop_browser_sync_server,
+            browser_sync_server::get_browser_sync_server_status,
             // RSS commands
             commands::create_rss_feed,
             commands::get_rss_feeds,
@@ -303,6 +310,11 @@ pub fn run() {
             commands::is_provider_available,
             commands::get_ocr_config,
             commands::update_ocr_config,
+            // Screenshot commands
+            screenshot::capture_screenshot,
+            screenshot::capture_screen_by_index,
+            screenshot::capture_app_window,
+            screenshot::get_screen_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -25,12 +25,12 @@ import {
   syncFlashcardsToAnki,
   exportToObsidian,
   syncToObsidian,
-  startExtensionServer,
-  stopExtensionServer,
-  getExtensionServerStatus,
+  startBrowserSyncServer,
+  stopBrowserSyncServer,
+  getBrowserSyncServerStatus,
   type ObsidianConfig,
   type AnkiConfig,
-} from "../../api/integr";
+} from "../../api/integrations";
 
 type IntegrationType = "obsidian" | "anki" | "extension";
 
@@ -97,7 +97,7 @@ export function IntegrationSettings() {
 
   const loadExtensionStatus = async () => {
     try {
-      const status = await getExtensionServerStatus();
+      const status = await getBrowserSyncServerStatus(extensionPort);
       setExtensionStatus(status);
     } catch {
       // Ignore errors
@@ -159,10 +159,10 @@ export function IntegrationSettings() {
     setIsOperating(true);
     try {
       if (extensionStatus.running) {
-        await stopExtensionServer();
+        await stopBrowserSyncServer();
         showResult(true, "Extension server stopped");
       } else {
-        await startExtensionServer(extensionPort);
+        await startBrowserSyncServer(extensionPort);
         showResult(true, "Extension server started");
       }
       loadExtensionStatus();
@@ -494,7 +494,7 @@ export function IntegrationSettings() {
               {/* Port */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  WebSocket Port
+                  HTTP Server Port
                 </label>
                 <input
                   type="number"
@@ -502,6 +502,9 @@ export function IntegrationSettings() {
                   onChange={(e) => setExtensionPort(parseInt(e.target.value) || 8766)}
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Default: 8766 (change if port is in use)
+                </p>
               </div>
 
               {/* Status info */}
@@ -542,7 +545,8 @@ export function IntegrationSettings() {
           <div className="p-4 bg-muted/30 rounded-lg">
             <p className="text-sm text-muted-foreground">
               The browser extension server allows the Incrementum web clipper extension to communicate
-              with the desktop application. Start the server to enable web clipping functionality.
+              with the desktop application via HTTP. Start the server to enable web clipping functionality.
+              Configure the extension to connect to http://127.0.0.1:{extensionPort}.
             </p>
           </div>
         </div>

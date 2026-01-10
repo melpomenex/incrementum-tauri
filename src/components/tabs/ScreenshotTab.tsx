@@ -1,23 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useDocumentStore } from "../../stores";
-import { Camera, Download, Trash2, Calendar, Monitor, Check } from "lucide-react";
-import { downloadScreenshot, getScreenInfo } from "../../utils/screenshotCapture";
+import { Camera, Download, Trash2, Calendar, Check } from "lucide-react";
+import { downloadScreenshot } from "../../utils/screenshotCapture";
+import { captureScreenshotWithOverlay } from "../../utils/screenshotCaptureFlow";
 import { invoke } from "@tauri-apps/api/core";
-
-interface ScreenInfo {
-  index: number;
-  width: number;
-  height: number;
-  scale_factor: number;
-  is_primary: boolean;
-}
 
 export function ScreenshotTab() {
   const { documents, loadDocuments, deleteDocument } = useDocumentStore();
   const [selectedScreenshot, setSelectedScreenshot] = useState<any | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [showScreenSelector, setShowScreenSelector] = useState(false);
-  const [screens, setScreens] = useState<ScreenInfo[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Filter documents to show only screenshots
@@ -29,22 +20,16 @@ export function ScreenshotTab() {
     loadDocuments();
   }, [loadDocuments]);
 
-  const handleCapture = async (screenIndex?: number) => {
+  const handleCapture = async () => {
     try {
       setIsCapturing(true);
       setPreviewImage(null);
-      setShowScreenSelector(false);
-
-      // Capture screenshot using Tauri command
-      let base64Image: string;
-      if (screenIndex !== undefined) {
-        base64Image = await invoke<string>("capture_screen_by_index", { index: screenIndex });
+      const base64Image = await captureScreenshotWithOverlay();
+      if (base64Image) {
+        setPreviewImage(`data:image/png;base64,${base64Image}`);
       } else {
-        base64Image = await invoke<string>("capture_screenshot");
+        setIsCapturing(false);
       }
-
-      // Show preview
-      setPreviewImage(`data:image/png;base64,${base64Image}`);
     } catch (error) {
       console.error("Failed to capture screenshot:", error);
       alert("Failed to capture screenshot. Please try again.");
@@ -104,24 +89,6 @@ export function ScreenshotTab() {
     setIsCapturing(false);
   };
 
-  const handleShowScreenSelector = async () => {
-    try {
-      const screenInfo = await getScreenInfo();
-      setScreens(screenInfo);
-
-      if (screenInfo.length > 1) {
-        setShowScreenSelector(true);
-      } else {
-        // Only one screen, capture immediately
-        await handleCapture(0);
-      }
-    } catch (error) {
-      console.error("Failed to get screen info:", error);
-      // Fallback to primary screen capture
-      await handleCapture();
-    }
-  };
-
   const handleDownload = (screenshot: any) => {
     try {
       if (screenshot.content) {
@@ -169,7 +136,7 @@ export function ScreenshotTab() {
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-foreground">Screenshots</h2>
           <button
-            onClick={handleShowScreenSelector}
+            onClick={handleCapture}
             disabled={isCapturing || previewImage !== null}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
@@ -181,41 +148,6 @@ export function ScreenshotTab() {
           Capture and manage screenshots. Screenshots are automatically saved to your document library.
         </p>
       </div>
-
-      {/* Screen Selector Modal */}
-      {showScreenSelector && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-lg shadow-lg max-w-md w-full p-6">
-            <h3 className="text-xl font-bold text-foreground mb-4">Select Screen to Capture</h3>
-            <div className="space-y-2">
-              {screens.map((screen) => (
-                <button
-                  key={screen.index}
-                  onClick={() => handleCapture(screen.index)}
-                  className="w-full p-4 bg-card border border-border rounded-lg hover:bg-muted transition-colors text-left flex items-center gap-3"
-                >
-                  <Monitor className="w-8 h-8 text-primary" />
-                  <div className="flex-1">
-                    <div className="font-medium text-foreground">
-                      Screen {screen.index + 1}
-                      {screen.is_primary && <span className="ml-2 text-xs bg-primary text-primary-foreground px-2 py-1 rounded">Primary</span>}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {screen.width}x{screen.height} @ {Math.round(screen.scale_factor * 100)}%
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowScreenSelector(false)}
-              className="mt-4 w-full px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Preview Modal */}
       {previewImage && (

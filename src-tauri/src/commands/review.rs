@@ -123,8 +123,9 @@ pub async fn start_review(
     // Create a session ID
     let session_id = uuid::Uuid::new_v4().to_string();
 
-    // TODO: Create a review session in the database
-    // For now, we just return the session ID
+    // Create the review session in the database
+    repo.create_review_session(&session_id).await?;
+
     Ok(session_id)
 }
 
@@ -133,16 +134,18 @@ pub async fn submit_review(
     item_id: String,
     rating: i32,
     time_taken: i32,
+    session_id: Option<String>,
     repo: State<'_, Repository>,
 ) -> Result<LearningItem> {
-    apply_fsrs_review(&*repo, &item_id, rating, time_taken).await
+    apply_fsrs_review(&*repo, &item_id, rating, time_taken, session_id.as_deref()).await
 }
 
 pub async fn apply_fsrs_review(
     repo: &Repository,
     item_id: &str,
     rating: i32,
-    _time_taken: i32,
+    time_taken: i32,
+    session_id: Option<&str>,
 ) -> Result<LearningItem> {
     // Get the current item
     let mut item = repo.get_learning_item(item_id).await?
@@ -226,6 +229,54 @@ pub async fn apply_fsrs_review(
 
     // Save the updated item
     repo.update_learning_item(&item).await?;
+
+    // Track review statistics
+    let was_correct = rating >= 3; // Good/Easy are correct
+
+    // Create review result record
+    let review_result_id = uuid::Uuid::new_v4().to_string();
+    repo.create_review_result(
+        &review_result_id,
+        session_id,
+        item_id,
+        rating,
+        time_taken,
+        &item.due_date,
+        item.interval,
+        item.ease_factor,
+    ).await?;
+
+    // Update study statistics for today
+    let today = now.format("%Y-%m-%d").to_string();
+    let old_state = item.state.clone(); // Clone state to avoid partial move
+
+    // Determine card type for statistics
+    let (new_cards, learning_cards, review_cards) = match old_state {
+        ItemState::New => (1, 0, 0),
+        ItemState::Learning | ItemState::Relearning => (0, 1, 0),
+        ItemState::Review => (0, 0, 1),
+    };
+
+    repo.update_study_statistics(
+        &today,
+        1,              // cards_reviewed
+        if was_correct { 1 } else { 0 },  // correct_reviews
+        time_taken,     // study_time in seconds
+        new_cards,
+        learning_cards,
+        review_cards,
+    ).await?;
+
+    // Update review session if provided
+    if let Some(sid) = session_id {
+        repo.update_review_session(
+            sid,
+            1, // items_reviewed
+            if was_correct { 1 } else { 0 }, // correct_answers
+            time_taken,
+            false, // don't end the session yet
+        ).await?;
+    }
 
     Ok(item)
 }

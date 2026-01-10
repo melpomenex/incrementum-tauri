@@ -528,6 +528,14 @@ fn parse_extract_row(row: &sqlx::sqlite::SqliteRow) -> Result<Extract> {
     let tags_json: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
     let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
+    // Parse FSRS memory state
+    let stability: Option<f64> = row.try_get("memory_state_stability").ok();
+    let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
+    let memory_state = match (stability, difficulty) {
+        (Some(stability), Some(difficulty)) => Some(MemoryState { stability, difficulty }),
+        _ => None,
+    };
+
     Ok(Extract {
         id: row.try_get("id")?,
         document_id: row.try_get("document_id")?,
@@ -542,6 +550,19 @@ fn parse_extract_row(row: &sqlx::sqlite::SqliteRow) -> Result<Extract> {
         date_modified: row.try_get("date_modified")?,
         tags,
         category: row.try_get::<Option<String>, _>("category").unwrap_or(None),
+        memory_state,
+        next_review_date: row.try_get::<Option<String>, _>("next_review_date")
+            .ok()
+            .flatten()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc)),
+        last_review_date: row.try_get::<Option<String>, _>("last_review_date")
+            .ok()
+            .flatten()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc)),
+        review_count: row.try_get::<i64, _>("review_count").unwrap_or(0) as i32,
+        reps: row.try_get::<i64, _>("reps").unwrap_or(0) as i32,
     })
 }
 

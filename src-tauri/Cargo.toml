@@ -20,7 +20,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"], default-features = false }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "derive"], default-features = false }
 tokio = { version = "1", features = ["full"] }
 
 # Time handling
@@ -58,6 +58,11 @@ hostname = "0.4"
 tokio-tungstenite = "0.23"
 futures-util = "0.3"
 
+# HTTP server for browser extension
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "limit"] }
+
 # File processing
 lopdf = { version = "0.34", features = ["tokio"] }
 pdf-extract = "0.7"
@@ -66,6 +71,8 @@ walkdir = "2"
 regex = "1"
 zip = "0.6"
 rusqlite = { version = "0.31", features = ["bundled"] }
+xcap = "0.0.9"
+image = "0.24"
 
 # Spaced Repetition
 fsrs = "5"

@@ -175,14 +175,42 @@ impl MCPToolRegistry {
 
         self.register_tool(ToolDefinition {
             name: "submit_review".to_string(),
-            description: "Submit a review result".to_string(),
+            description: "Submit a review result for learning items using FSRS".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "item_id": {"type": "string"},
-                    "rating": {"type": "number", "minimum": 1, "maximum": 4}
+                    "rating": {"type": "number", "minimum": 1, "maximum": 4, "description": "FSRS rating: 1=Again, 2=Hard, 3=Good, 4=Easy"}
                 },
                 "required": ["item_id", "rating"]
+            }),
+        });
+
+        self.register_tool(ToolDefinition {
+            name: "rate_document".to_string(),
+            description: "Rate a document and schedule its next review using FSRS".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"},
+                    "rating": {"type": "number", "minimum": 1, "maximum": 4, "description": "FSRS rating: 1=Again, 2=Hard, 3=Good, 4=Easy"},
+                    "time_taken": {"type": "number", "description": "Time spent in seconds (optional)"}
+                },
+                "required": ["document_id", "rating"]
+            }),
+        });
+
+        self.register_tool(ToolDefinition {
+            name: "rate_extract".to_string(),
+            description: "Rate an extract and schedule its next review using FSRS".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "extract_id": {"type": "string"},
+                    "rating": {"type": "number", "minimum": 1, "maximum": 4, "description": "FSRS rating: 1=Again, 2=Hard, 3=Good, 4=Easy"},
+                    "time_taken": {"type": "number", "description": "Time spent in seconds (optional)"}
+                },
+                "required": ["extract_id", "rating"]
             }),
         });
 
@@ -275,6 +303,8 @@ impl MCPToolRegistry {
             "get_document_extracts" => self.execute_get_document_extracts(arguments).await,
             "get_review_queue" => self.execute_get_review_queue(arguments).await,
             "submit_review" => self.execute_submit_review(arguments).await,
+            "rate_document" => self.execute_rate_document(arguments).await,
+            "rate_extract" => self.execute_rate_extract(arguments).await,
             "get_statistics" => self.execute_get_statistics(arguments).await,
             "add_pdf_selection" => self.execute_add_pdf_selection(arguments).await,
             "batch_create_cards" => self.execute_batch_create_cards(arguments).await,
@@ -741,13 +771,213 @@ impl MCPToolRegistry {
         let item_id = args["item_id"].as_str().ok_or("item_id is required")?;
         let rating = args["rating"].as_u64().ok_or("rating is required")?;
 
-        match apply_fsrs_review(self.repository.as_ref(), item_id, rating as i32, 0).await {
+        match apply_fsrs_review(self.repository.as_ref(), item_id, rating as i32, 0, None).await {
             Ok(_) => Ok(ToolCallResult {
                 content: vec![ToolContent {
                     r#type: "text".to_string(),
                     text: json!({
                         "success": true,
                         "message": "Review submitted successfully"
+                    }).to_string(),
+                }],
+                is_error: Some(false),
+            }),
+            Err(e) => Ok(ToolCallResult {
+                content: vec![ToolContent {
+                    r#type: "text".to_string(),
+                    text: json!({
+                        "success": false,
+                        "error": e.to_string()
+                    }).to_string(),
+                }],
+                is_error: Some(true),
+            }),
+        }
+    }
+
+    async fn execute_rate_document(&self, args: serde_json::Value) -> Result<ToolCallResult, String> {
+        use crate::algorithms::DocumentScheduler;
+        use crate::models::ReviewRating;
+
+        let document_id = args["document_id"].as_str().ok_or("document_id is required")?;
+        let rating = args["rating"].as_u64().ok_or("rating is required")?;
+        let time_taken = args["time_taken"].as_i64().map(|t| t as i32);
+
+        // Get the document
+        let document = match self.repository.get_document(document_id).await {
+            Ok(Some(d)) => d,
+            Ok(None) => {
+                return Ok(ToolCallResult {
+                    content: vec![ToolContent {
+                        r#type: "text".to_string(),
+                        text: json!({
+                            "success": false,
+                            "error": "Document not found"
+                        }).to_string(),
+                    }],
+                    is_error: Some(true),
+                });
+            }
+            Err(e) => {
+                return Ok(ToolCallResult {
+                    content: vec![ToolContent {
+                        r#type: "text".to_string(),
+                        text: json!({
+                            "success": false,
+                            "error": e.to_string()
+                        }).to_string(),
+                    }],
+                    is_error: Some(true),
+                });
+            }
+        };
+
+        let scheduler = DocumentScheduler::default_params();
+        let now = Utc::now();
+
+        // Calculate elapsed days since last review
+        let elapsed_days = document.date_last_reviewed
+            .map(|lr| (now - lr).num_seconds() as f64 / 86400.0)
+            .unwrap_or_else(|| {
+                (now - document.date_added).num_seconds() as f64 / 86400.0
+            })
+            .max(0.0);
+
+        let review_rating = ReviewRating::from(rating as i32);
+
+        // Schedule the document using FSRS
+        let result = scheduler.schedule_document(
+            review_rating,
+            document.stability,
+            document.difficulty,
+            elapsed_days
+        );
+
+        // Update the document with new scheduling data
+        let new_reps = document.reps.unwrap_or(0) + 1;
+        let new_time_spent = document.total_time_spent.unwrap_or(0) + time_taken.unwrap_or(0);
+
+        match self.repository.update_document_scheduling(
+            &document.id,
+            Some(result.next_review),
+            Some(result.stability),
+            Some(result.difficulty),
+            Some(new_reps),
+            Some(new_time_spent),
+        ).await {
+            Ok(_) => Ok(ToolCallResult {
+                content: vec![ToolContent {
+                    r#type: "text".to_string(),
+                    text: json!({
+                        "success": true,
+                        "message": "Document rated successfully",
+                        "next_review_date": result.next_review.to_rfc3339(),
+                        "stability": result.stability,
+                        "difficulty": result.difficulty,
+                        "interval_days": result.interval_days
+                    }).to_string(),
+                }],
+                is_error: Some(false),
+            }),
+            Err(e) => Ok(ToolCallResult {
+                content: vec![ToolContent {
+                    r#type: "text".to_string(),
+                    text: json!({
+                        "success": false,
+                        "error": e.to_string()
+                    }).to_string(),
+                }],
+                is_error: Some(true),
+            }),
+        }
+    }
+
+    async fn execute_rate_extract(&self, args: serde_json::Value) -> Result<ToolCallResult, String> {
+        use crate::algorithms::DocumentScheduler;
+        use crate::models::ReviewRating;
+
+        let extract_id = args["extract_id"].as_str().ok_or("extract_id is required")?;
+        let rating = args["rating"].as_u64().ok_or("rating is required")?;
+        let time_taken = args["time_taken"].as_i64().map(|t| t as i32);
+
+        // Get the extract
+        let extract = match self.repository.get_extract(extract_id).await {
+            Ok(Some(e)) => e,
+            Ok(None) => {
+                return Ok(ToolCallResult {
+                    content: vec![ToolContent {
+                        r#type: "text".to_string(),
+                        text: json!({
+                            "success": false,
+                            "error": "Extract not found"
+                        }).to_string(),
+                    }],
+                    is_error: Some(true),
+                });
+            }
+            Err(e) => {
+                return Ok(ToolCallResult {
+                    content: vec![ToolContent {
+                        r#type: "text".to_string(),
+                        text: json!({
+                            "success": false,
+                            "error": e.to_string()
+                        }).to_string(),
+                    }],
+                    is_error: Some(true),
+                });
+            }
+        };
+
+        let scheduler = DocumentScheduler::default_params();
+        let now = Utc::now();
+
+        // Calculate elapsed days since last review
+        let elapsed_days = extract.last_review_date
+            .map(|lr| (now - lr).num_seconds() as f64 / 86400.0)
+            .unwrap_or_else(|| {
+                (now - extract.date_created).num_seconds() as f64 / 86400.0
+            })
+            .max(0.0);
+
+        let review_rating = ReviewRating::from(rating as i32);
+
+        // Get current stability and difficulty from memory state
+        let current_stability = extract.memory_state.as_ref().map(|ms| ms.stability);
+        let current_difficulty = extract.memory_state.as_ref().map(|ms| ms.difficulty);
+
+        // Schedule the extract using FSRS
+        let result = scheduler.schedule_document(
+            review_rating,
+            current_stability,
+            current_difficulty,
+            elapsed_days
+        );
+
+        // Update the extract with new scheduling data
+        let new_review_count = extract.review_count + 1;
+        let new_reps = extract.reps + 1;
+        let last_review = Some(now);
+
+        match self.repository.update_extract_scheduling(
+            &extract.id,
+            Some(result.next_review),
+            Some(result.stability),
+            Some(result.difficulty),
+            Some(new_review_count),
+            Some(new_reps),
+            last_review,
+        ).await {
+            Ok(_) => Ok(ToolCallResult {
+                content: vec![ToolContent {
+                    r#type: "text".to_string(),
+                    text: json!({
+                        "success": true,
+                        "message": "Extract rated successfully",
+                        "next_review_date": result.next_review.to_rfc3339(),
+                        "stability": result.stability,
+                        "difficulty": result.difficulty,
+                        "interval_days": result.interval_days
                     }).to_string(),
                 }],
                 is_error: Some(false),
