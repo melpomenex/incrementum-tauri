@@ -1,12 +1,18 @@
 import { useEffect, useState, useCallback } from "react";
+import { Youtube, X, Link2 } from "lucide-react";
 import { useTabsStore } from "../../stores";
 import { useDocumentStore } from "../../stores";
 import { DocumentViewer } from "./TabRegistry";
+import { importYouTubeVideo } from "../../api/documents";
 
 export function DocumentsTab() {
   const { addTab } = useTabsStore();
   const { documents, isLoading, isImporting, importProgress, error, loadDocuments, openFilePickerAndImport, importFromFiles } = useDocumentStore();
   const [isDragging, setIsDragging] = useState(false);
+  const [showYouTubeImport, setShowYouTubeImport] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeError, setYoutubeError] = useState<string | null>(null);
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
 
   useEffect(() => {
     loadDocuments();
@@ -64,12 +70,44 @@ export function DocumentsTab() {
   const handleOpenDocument = (doc: any) => {
     addTab({
       title: doc.title,
-      icon: doc.fileType === "pdf" ? "📕" : doc.fileType === "epub" ? "📖" : "📄",
+      icon: doc.fileType === "pdf" ? "📕" : doc.fileType === "epub" ? "📖" : doc.fileType === "youtube" ? "📺" : "📄",
       type: "document-viewer",
       content: DocumentViewer,
       closable: true,
       data: { documentId: doc.id },
     });
+  };
+
+  const handleYouTubeImport = async () => {
+    if (!youtubeUrl.trim()) {
+      setYoutubeError("Please enter a YouTube URL");
+      return;
+    }
+
+    setYoutubeLoading(true);
+    setYoutubeError(null);
+
+    try {
+      const document = await importYouTubeVideo(youtubeUrl.trim());
+      // Reload documents to show the newly imported video
+      await loadDocuments();
+      setShowYouTubeImport(false);
+      setYoutubeUrl("");
+
+      // Automatically open the imported document
+      addTab({
+        title: document.title,
+        icon: "📺",
+        type: "document-viewer",
+        content: DocumentViewer,
+        closable: true,
+        data: { documentId: document.id },
+      });
+    } catch (err) {
+      setYoutubeError(err instanceof Error ? err.message : "Failed to import YouTube video");
+    } finally {
+      setYoutubeLoading(false);
+    }
   };
 
   return (
@@ -86,14 +124,96 @@ export function DocumentsTab() {
             Browse and manage your documents
           </p>
         </div>
-        <button
-          onClick={handleImport}
-          disabled={isImporting}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isImporting ? "Importing..." : "Import Document"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowYouTubeImport(true)}
+            className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors flex items-center gap-2"
+            title="Import YouTube video"
+          >
+            <Youtube className="w-4 h-4" />
+            Import YouTube
+          </button>
+          <button
+            onClick={handleImport}
+            disabled={isImporting}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isImporting ? "Importing..." : "Import Document"}
+          </button>
+        </div>
       </div>
+
+      {/* YouTube Import Dialog */}
+      {showYouTubeImport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Youtube className="w-5 h-5 text-red-500" />
+                <h2 className="text-lg font-semibold text-foreground">Import YouTube Video</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowYouTubeImport(false);
+                  setYoutubeUrl("");
+                  setYoutubeError(null);
+                }}
+                className="p-1 text-muted-foreground hover:text-foreground rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  YouTube URL
+                </label>
+                <input
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={youtubeLoading}
+                />
+              </div>
+
+              {youtubeError && (
+                <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-lg text-sm">
+                  {youtubeError}
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground">
+                Note: yt-dlp must be installed for YouTube import to work
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowYouTubeImport(false);
+                    setYoutubeUrl("");
+                    setYoutubeError(null);
+                  }}
+                  disabled={youtubeLoading}
+                  className="px-4 py-2 text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleYouTubeImport}
+                  disabled={youtubeLoading}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+                >
+                  {youtubeLoading ? "Importing..." : "Import"}
+                  <Link2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">

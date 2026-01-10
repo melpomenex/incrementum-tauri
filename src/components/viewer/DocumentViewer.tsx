@@ -5,6 +5,7 @@ import { useDocumentStore, useTabsStore } from "../../stores";
 import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { EPUBViewer } from "./EPUBViewer";
+import { YouTubeViewer } from "./YouTubeViewer";
 import { ExtractsList } from "../extracts/ExtractsList";
 import { LearningCardsList } from "../learning/LearningCardsList";
 import { CreateExtractDialog } from "../extracts/CreateExtractDialog";
@@ -17,7 +18,34 @@ import type { ReviewRating } from "../../api/review";
 
 type ViewMode = "document" | "extracts" | "cards";
 
-type DocumentType = "pdf" | "epub" | "markdown" | "html";
+type DocumentType = "pdf" | "epub" | "markdown" | "html" | "youtube";
+
+/**
+ * Extract YouTube video ID from various URL formats
+ */
+function extractYouTubeId(urlOrId: string): string {
+  if (!urlOrId) return "";
+
+  // If it's already just an ID (11 chars), return as is
+  if (/^[a-zA-Z0-9_-]{11}$/.test(urlOrId)) {
+    return urlOrId;
+  }
+
+  // Extract from various URL formats
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = urlOrId.match(pattern);
+    if (match) return match[1];
+  }
+
+  return urlOrId; // Return as-is if no pattern matches
+}
 
 interface DocumentViewerProps {
   documentId: string;
@@ -274,6 +302,12 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
     if (ext === 'epub') return 'epub';
     if (ext === 'md' || ext === 'markdown') return 'markdown';
     if (ext === 'html' || ext === 'htm') return 'html';
+    // Check if filePath is a YouTube URL or ID
+    if (currentDocument.filePath?.includes('youtube.com') ||
+        currentDocument.filePath?.includes('youtu.be') ||
+        currentDocument.fileType === 'youtube') {
+      return 'youtube';
+    }
     return 'other';
   };
 
@@ -567,6 +601,15 @@ export function DocumentViewer({ documentId, disableHoverRating = false }: Docum
             <div
               className="prose prose-sm max-w-none dark:prose-invert"
               dangerouslySetInnerHTML={{ __html: currentDocument.content || "" }}
+            />
+          </div>
+        ) : docType === "youtube" ? (
+          <div className="h-full">
+            <YouTubeViewer
+              videoId={extractYouTubeId(currentDocument.filePath)}
+              documentId={currentDocument.id}
+              title={currentDocument.title}
+              onLoad={handleDocumentLoad}
             />
           </div>
         ) : (

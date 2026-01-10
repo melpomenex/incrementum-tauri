@@ -132,3 +132,10 @@ export interface FetchedUrlContent {
 export async function fetchUrlContent(url: string): Promise<FetchedUrlContent> {
   return await invoke<FetchedUrlContent>("fetch_url_content", { url });
 }
+
+/**
+ * Import a YouTube video as a document
+ */
+export async function importYouTubeVideo(url: string): Promise<Document> {
+  return await invoke<Document>("import_youtube_video", { url });
+}

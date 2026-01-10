@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use tauri::State;
 
 use crate::database::Repository;
+use crate::models::{Document, DocumentMetadata, FileType};
 
 /// YouTube video metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -268,22 +269,273 @@ pub fn download_video(
 
 /// Extract transcript using yt-dlp
 pub fn extract_transcript(url: &str, language: Option<&str>) -> Result<Vec<TranscriptSegment>, String> {
-    let mut cmd = Command::new("yt-dlp");
-    cmd.args(["--write-subs", "--sub-lang", language.unwrap_or("en"), "--skip-download", "-o", "%(id)s", url]);
+    // Create temp directory for subtitle download
+    let temp_dir = std::env::temp_dir();
+    let lang = language.unwrap_or("en");
 
-    let output = cmd.output()
+    // Download subtitles using yt-dlp in JSON format for easier parsing
+    let output = Command::new("yt-dlp")
+        .args([
+            "--write-subs",
+            "--sub-lang", lang,
+            "--sub-format", "json3",  // Request JSON format if available
+            "--skip-download",
+            "-o", "%(id)s.%(ext)s",
+            "--print", "%(subtitles.%(lang)s.0)",  // Print subtitle filename
+            url,
+        ])
+        .current_dir(&temp_dir)
+        .output()
         .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
 
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
+        // If subtitles aren't available, return empty rather than error
+        if error.contains("Subtitles not available") || error.contains("video doesn't have subtitles") {
+            return Ok(vec![]);
+        }
         return Err(format!("Failed to extract transcript: {}", error));
     }
 
-    // Parse the downloaded subtitle file (VTT format)
-    // This is a simplified implementation
-    // In production, would parse the VTT/SRT file properly
+    // Try to parse as JSON3 format first (if available)
+    let json_output = Command::new("yt-dlp")
+        .args([
+            "--write-subs",
+            "--sub-lang", lang,
+            "--sub-format", "vtt",  // Fall back to VTT
+            "--skip-download",
+            "-o", "%(id)s",
+            url,
+        ])
+        .current_dir(&temp_dir)
+        .output()
+        .map_err(|e| format!("Failed to run yt-dlp for VTT: {}", e))?;
 
-    Ok(vec![])
+    // Find the downloaded subtitle file
+    let video_id = extract_video_id(url).unwrap_or_else(|| "video".to_string());
+    let subtitle_files = std::fs::read_dir(&temp_dir)
+        .map_err(|e| format!("Failed to read temp dir: {}", e))?;
+
+    let mut parsed_segments = vec![];
+
+    for entry in subtitle_files.flatten() {
+        let path = entry.path();
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if name.contains(&video_id) && (name.ends_with(".vtt") || name.ends_with(".srt") || name.contains(".lang-")) {
+                // Read and parse the subtitle file
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    if name.ends_with(".vtt") {
+                        parsed_segments = parse_vtt(&content);
+                    } else if name.ends_with(".srt") {
+                        parsed_segments = parse_srt(&content);
+                    }
+
+                    // Clean up the subtitle file
+                    let _ = std::fs::remove_file(&path);
+
+                    if !parsed_segments.is_empty() {
+                        return Ok(parsed_segments);
+                    }
+                }
+            }
+        }
+    }
+
+    // If no VTT/SRT parsing worked, try using yt-dlp's JSON output
+    let json_output = Command::new("yt-dlp")
+        .args([
+            "--skip-download",
+            "--write-subs",
+            "--sub-format", "best",
+            "--print", "{\"id\": \"%(id)s\", \"title\": \"%(title)s\", \"subtitles\": %(subtitles)s}",
+            url,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to get subtitles info: {}", e))?;
+
+    Ok(parsed_segments)
+}
+
+/// Parse WebVTT format
+fn parse_vtt(content: &str) -> Vec<TranscriptSegment> {
+    let mut segments = Vec::new();
+    let lines: Vec<&str> = content.lines().collect();
+
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        // Skip header and empty lines
+        if line.is_empty() || line == "WEBVTT" {
+            i += 1;
+            continue;
+        }
+
+        // Look for timestamp line: 00:00:00.000 --> 00:00:02.500
+        if let Some(timestamp_match) = parse_timestamp_line(line) {
+            let (start, end) = timestamp_match;
+
+            // Collect text until next timestamp or empty line
+            i += 1;
+            let mut text_lines = Vec::new();
+            while i < lines.len() && !lines[i].trim().is_empty() && !lines[i].contains("-->") {
+                let text_line = lines[i].trim();
+                if !text_line.starts_with("NOTE") && !text_line.starts_with("STYLE") {
+                    // Remove VTT formatting tags
+                    let clean = clean_vtt_text(text_line);
+                    if !clean.is_empty() {
+                        text_lines.push(clean);
+                    }
+                }
+                i += 1;
+            }
+
+            if !text_lines.is_empty() {
+                segments.push(TranscriptSegment {
+                    text: text_lines.join(" "),
+                    start,
+                    duration: end - start,
+                });
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    segments
+}
+
+/// Parse timestamp line from VTT
+fn parse_timestamp_line(line: &str) -> Option<(f64, f64)> {
+    let parts: Vec<&str> = line.split("-->").collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let start = parse_vtt_timestamp(parts[0].trim())?;
+    let end = parse_vtt_timestamp(parts[1].trim().split_whitespace().next().unwrap_or(parts[1].trim()))?;
+
+    Some((start, end))
+}
+
+/// Parse VTT timestamp (HH:MM:SS.mmm or MM:SS.mmm)
+fn parse_vtt_timestamp(ts: &str) -> Option<f64> {
+    let parts: Vec<&str> = ts.split(':').collect();
+    if parts.is_empty() || parts.len() > 3 {
+        return None;
+    }
+
+    let seconds_part = parts.last()?;
+    let seconds: f64 = seconds_part.parse().ok()?;
+
+    if parts.len() == 3 {
+        let hours: f64 = parts[0].parse().ok()?;
+        let minutes: f64 = parts[1].parse().ok()?;
+        Some(hours * 3600.0 + minutes * 60.0 + seconds)
+    } else if parts.len() == 2 {
+        let minutes: f64 = parts[0].parse().ok()?;
+        Some(minutes * 60.0 + seconds)
+    } else {
+        Some(seconds)
+    }
+}
+
+/// Clean VTT text - remove formatting tags
+fn clean_vtt_text(text: &str) -> String {
+    let mut cleaned = text.to_string();
+
+    // Remove XML-like tags by iterating through the string
+    let mut result = String::new();
+    let mut in_tag = false;
+    let mut tag_chars = Vec::new();
+
+    for ch in cleaned.chars() {
+        if ch == '<' {
+            in_tag = true;
+            tag_chars.clear();
+        } else if ch == '>' {
+            in_tag = false;
+            tag_chars.clear();
+        } else if in_tag {
+            tag_chars.push(ch);
+        } else {
+            result.push(ch);
+        }
+    }
+
+    // Clean up extra whitespace
+    result.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Parse SRT format
+fn parse_srt(content: &str) -> Vec<TranscriptSegment> {
+    let mut segments = Vec::new();
+    let blocks: Vec<&str> = content.split("\n\n").collect();
+
+    for block in blocks {
+        let lines: Vec<&str> = block.lines().collect();
+        if lines.len() < 3 {
+            continue;
+        }
+
+        // Skip index line (first line)
+        // Parse timestamp line (second line)
+        let ts_line = lines.get(1).unwrap_or(&"");
+        if let Some((start, end)) = parse_srt_timestamp_line(ts_line) {
+            // Collect remaining lines as text
+            let text: String = lines[2..].iter()
+                .map(|l| l.trim())
+                .filter(|l| !l.is_empty())
+                .map(|l| clean_vtt_text(l))
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            if !text.is_empty() {
+                segments.push(TranscriptSegment {
+                    text,
+                    start,
+                    duration: end - start,
+                });
+            }
+        }
+    }
+
+    segments
+}
+
+/// Parse SRT timestamp line: 00:00:00,000 --> 00:00:02,500
+fn parse_srt_timestamp_line(line: &str) -> Option<(f64, f64)> {
+    let parts: Vec<&str> = line.split("-->").collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let start = parse_srt_timestamp(parts[0].trim())?;
+    let end = parse_srt_timestamp(parts[1].trim())?;
+
+    Some((start, end))
+}
+
+/// Parse SRT timestamp (HH:MM:SS,mmm or MM:SS,mmm)
+fn parse_srt_timestamp(ts: &str) -> Option<f64> {
+    let ts_normalized = ts.replace(',', ".");
+    let parts: Vec<&str> = ts_normalized.split(':').collect();
+    if parts.is_empty() || parts.len() > 3 {
+        return None;
+    }
+
+    let seconds: f64 = parts.last()?.parse().ok()?;
+
+    if parts.len() == 3 {
+        let hours: f64 = parts[0].parse().ok()?;
+        let minutes: f64 = parts[1].parse().ok()?;
+        Some(hours * 3600.0 + minutes * 60.0 + seconds)
+    } else if parts.len() == 2 {
+        let minutes: f64 = parts[0].parse().ok()?;
+        Some(minutes * 60.0 + seconds)
+    } else {
+        Some(seconds)
+    }
 }
 
 /// Search YouTube (requires API key for full results)
@@ -390,12 +642,23 @@ pub async fn download_youtube_video(
     Ok(path.to_string_lossy().to_string())
 }
 
-/// Tauri command: Extract transcript
+/// Tauri command: Extract transcript (accepts videoId or URL)
 #[tauri::command]
 pub async fn get_youtube_transcript(
     url: String,
     language: Option<String>,
 ) -> Result<Vec<TranscriptSegment>, String> {
+    extract_transcript(&url, language.as_deref())
+}
+
+/// Tauri command: Extract transcript by videoId
+#[tauri::command]
+pub async fn get_youtube_transcript_by_id(
+    video_id: String,
+    language: Option<String>,
+) -> Result<Vec<TranscriptSegment>, String> {
+    // Construct YouTube URL from video ID
+    let url = format!("https://www.youtube.com/watch?v={}", video_id);
     extract_transcript(&url, language.as_deref())
 }
 
@@ -425,14 +688,39 @@ pub async fn extract_youtube_video_id(url: String) -> Result<Option<String>, Str
 pub async fn import_youtube_video(
     url: String,
     repo: State<'_, Repository>,
-) -> Result<String, String> {
+) -> Result<Document, String> {
     let info = extract_video_info(&url)?;
 
-    // Import as document
-    let document_id = uuid::Uuid::new_v4().to_string();
+    // Extract video ID for the file path
+    let video_id = &info.id;
 
     // Create document record for YouTube video
-    // This would integrate with the existing document system
+    let mut doc = Document::new(info.title.clone(), format!("https://www.youtube.com/watch?v={}", video_id), FileType::Youtube);
 
-    Ok(document_id)
+    // Set YouTube-specific fields
+    doc.category = Some("YouTube Videos".to_string());
+    doc.tags = vec!["youtube".to_string(), "video".to_string()];
+    doc.total_pages = Some(info.duration as i32);
+    doc.priority_score = 7.0; // YouTube videos get higher priority
+
+    // Set metadata with YouTube info
+    doc.metadata = Some(DocumentMetadata {
+        author: Some(info.channel),
+        subject: None,
+        keywords: if info.tags.is_empty() { None } else { Some(info.tags) },
+        created_at: Some(chrono::DateTime::parse_from_rfc3339(&info.upload_date)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now())),
+        modified_at: None,
+        file_size: None,
+        language: Some("en".to_string()),
+        page_count: None,
+        word_count: None,
+    });
+
+    // Save to database
+    let created = repo.create_document(&doc).await
+        .map_err(|e| e.to_string())?;
+
+    Ok(created)
 }

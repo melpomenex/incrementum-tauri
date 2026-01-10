@@ -181,6 +181,7 @@ pub fn run() {
             youtube::get_youtube_formats,
             youtube::download_youtube_video,
             youtube::get_youtube_transcript,
+            youtube::get_youtube_transcript_by_id,
             youtube::search_youtube_videos,
             youtube::get_youtube_playlist_info,
             youtube::extract_youtube_video_id,
