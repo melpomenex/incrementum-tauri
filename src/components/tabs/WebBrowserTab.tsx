@@ -366,18 +366,22 @@ export function WebBrowserTab() {
             return;
           }
 
-          const rect = webviewContainerRef.current.getBoundingClientRect();
-          const width = Math.max(0, Math.floor(rect.width));
-          const height = Math.max(0, Math.floor(rect.height));
-          const x = Math.floor(rect.left);
-          const y = Math.floor(rect.top);
-
-          // Log container and webview info for debugging
           const containerEl = webviewContainerRef.current;
-          console.log(`Webview bounds UPDATE: x=${x}, y=${y}, width=${width}, height=${height}`);
-          console.log(`  Container offset: left=${containerEl.offsetLeft}, top=${containerEl.offsetTop}, width=${containerEl.offsetWidth}, height=${containerEl.offsetHeight}`);
-          console.log(`  Window inner: width=${window.innerWidth}, height=${window.innerHeight}`);
-          console.log(`  Rect: left=${rect.left}, top=${rect.top}, width=${rect.width}, height=${rect.height}`);
+          const rect = containerEl.getBoundingClientRect();
+
+          // On Linux with WebKitGTK, the coordinate system origin (0,0) is at the 
+          // TOP of the main webview content area.
+          // x: use rect.left for horizontal positioning (sidebar offset)
+          // y: use 0 since that's the content area top
+          // height: calculate as visible height = window.innerHeight - rect.top
+          const x = Math.floor(rect.left);
+          const y = 0;
+          const width = Math.floor(rect.width);
+          // Height should be the distance from container top to window bottom
+          const height = Math.floor(window.innerHeight - rect.top);
+
+          console.log(`Webview bounds: x=${x}, y=${y}, width=${width}, height=${height}`);
+          console.log(`  Calculation: innerHeight=${window.innerHeight} - rect.top=${Math.floor(rect.top)} = ${height}`);
 
           // Only update if we have valid dimensions
           if (width > 0 && height > 0) {
@@ -450,13 +454,17 @@ export function WebBrowserTab() {
           return;
         }
 
-        const rect = webviewContainerRef.current.getBoundingClientRect();
-        const width = Math.max(0, Math.floor(rect.width));
-        const height = Math.max(0, Math.floor(rect.height));
-        const x = Math.floor(rect.left);
-        const y = Math.floor(rect.top);
+        const containerEl = webviewContainerRef.current;
+        const rect = containerEl.getBoundingClientRect();
 
-        console.log(`Creating webview with bounds: x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
+        // On Linux with WebKitGTK, y=0 is the top of the main content area
+        const x = Math.floor(rect.left);
+        const y = 0;
+        const width = Math.floor(rect.width);
+        // Height = distance from container top to window bottom
+        const height = Math.floor(window.innerHeight - rect.top);
+
+        console.log(`Creating webview: x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
 
         const webview = new Webview(appWindow, "web-browser", {
           url: currentUrl,
@@ -472,25 +480,39 @@ export function WebBrowserTab() {
         }
 
         webviewRef.current = webview;
-        void webview.once("tauri://created", async () => {
+
+        // Handle webview created event
+        webview.once("tauri://created", async () => {
+          console.log("Webview created event received");
           if (!isCancelled) {
             // Update bounds multiple times to catch layout changes
             await updateWebviewBounds();
             setIsLoading(false);
+            console.log("Loading state cleared by tauri://created");
             // Additional bounds updates after layout settles
             setTimeout(() => void updateWebviewBounds(), 200);
             setTimeout(() => void updateWebviewBounds(), 500);
           }
-        });
+        }).catch((e) => console.warn("Failed to attach created listener:", e));
 
-        void webview.once("tauri://error", (event: any) => {
+        // Handle webview error event
+        webview.once("tauri://error", (event: unknown) => {
+          console.error("Webview error event received:", event);
           if (!isCancelled) {
-            console.error("Webview creation failed:", event);
             setIsLoading(false);
-            const errorMessage = event.payload?.message || event?.error?.message || String(event);
+            const errorMessage = (event as any)?.payload?.message || (event as any)?.error?.message || String(event);
             setWebviewError(`Failed to load the page in the native webview: ${errorMessage}`);
           }
-        });
+        }).catch((e) => console.warn("Failed to attach error listener:", e));
+
+        // Fallback: if events don't fire within 3 seconds, clear loading anyway
+        setTimeout(() => {
+          if (!isCancelled && webviewRef.current === webview) {
+            console.log("Fallback: clearing loading state after 3s timeout");
+            setIsLoading(false);
+            void updateWebviewBounds();
+          }
+        }, 3000);
       } catch (error) {
         console.error("Exception creating webview:", error);
         if (!isCancelled) {
