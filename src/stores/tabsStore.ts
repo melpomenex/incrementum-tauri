@@ -11,7 +11,8 @@ export type TabType =
   | "settings"
   | "knowledge-sphere"
   | "knowledge-network"
-  | "web-browser";
+  | "web-browser"
+  | "rss";
 
 export interface Tab {
   id: string;

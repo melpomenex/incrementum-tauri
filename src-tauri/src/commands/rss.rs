@@ -386,3 +386,71 @@ pub async fn cleanup_old_rss_articles(days: i32, repo: State<'_, Repository>) ->
 
     Ok(result.rows_affected() as i32)
 }
+
+/// Add RSS article to queue as a document
+#[tauri::command]
+pub async fn add_rss_article_to_queue(
+    article_id: String,
+    repo: State<'_, Repository>,
+) -> Result<String> {
+    use crate::models::{Document, FileType};
+
+    // Get the article
+    let article_row = sqlx::query("SELECT * FROM rss_articles WHERE id = ?")
+        .bind(&article_id)
+        .fetch_optional(repo.pool())
+        .await
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to fetch article: {}", e)))?;
+
+    let article_row = article_row.ok_or_else(|| {
+        crate::error::IncrementumError::NotFound("Article not found".to_string())
+    })?;
+
+    // Extract article data
+    let title: String = article_row.get("title");
+    let url: String = article_row.get("url");
+    let content: Option<String> = article_row.get("content");
+    let summary: Option<String> = article_row.get("summary");
+    let author: Option<String> = article_row.get("author");
+    let feed_id: String = article_row.get("feed_id");
+
+    // Get feed info for category
+    let feed_row = sqlx::query("SELECT category FROM rss_feeds WHERE id = ?")
+        .bind(&feed_id)
+        .fetch_optional(repo.pool())
+        .await
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to fetch feed: {}", e)))?;
+
+    let category: Option<String> = feed_row.and_then(|r| r.get("category"));
+
+    // Create document
+    let mut doc = Document::new(
+        title.clone(),
+        url.clone(),
+        FileType::Html,
+    );
+
+    // Set content (prefer full content, fallback to summary)
+    doc.content = content.or(summary);
+
+    // Set category from feed
+    doc.category = category;
+
+    // Set tags
+    doc.tags = vec!["rss".to_string()];
+    if let Some(ref auth) = author {
+        doc.tags.push(format!("author:{}", auth));
+    }
+
+    // Create the document in database
+    let created = repo.create_document(&doc).await?;
+
+    // Mark article as queued
+    sqlx::query("UPDATE rss_articles SET is_queued = 1 WHERE id = ?")
+        .bind(&article_id)
+        .execute(repo.pool())
+        .await
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to update article: {}", e)))?;
+
+    Ok(created.id)
+}
