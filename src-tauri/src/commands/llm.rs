@@ -254,7 +254,7 @@ pub async fn llm_stream_chat(
         return Err("API key is required".to_string());
     }
 
-    let result = match provider.as_str() {
+    match provider.as_str() {
         "openai" => {
             stream_openai(&app, &client, &model, messages, temperature, max_tokens, &api_key.unwrap(), &base_url).await?
         }
@@ -275,7 +275,7 @@ pub async fn llm_stream_chat(
         }
     };
 
-    Ok(result)
+    Ok(())
 }
 
 // Streaming implementations
@@ -304,7 +304,7 @@ async fn stream_openai(
     };
 
     let response = client
-        .post(&format!("{}/chat/completions", base_url))
+        .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&request)
         .send()
@@ -347,8 +347,7 @@ async fn stream_openai(
                 continue;
             }
 
-            if line.starts_with("data: ") {
-                let json_str = &line[6..];
+            if let Some(json_str) = line.strip_prefix("data: ") {
                 if let Ok(chunk_data) = serde_json::from_str::<OpenAIStreamChunk>(json_str) {
                     if let Some(choice) = chunk_data.choices.first() {
                         if let Some(content) = &choice.delta.content {
@@ -389,7 +388,7 @@ async fn stream_anthropic(
         .into_iter()
         .partition(|m| m.role == "system");
 
-    let system_content = system_message
+    let _system_content = system_message
         .first()
         .map(|m| m.content.clone())
         .unwrap_or_default();
@@ -412,7 +411,7 @@ async fn stream_anthropic(
     };
 
     let response = client
-        .post(&format!("{}/messages", base_url))
+        .post(format!("{}/messages", base_url))
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
@@ -518,7 +517,7 @@ async fn stream_ollama(
     };
 
     let response = client
-        .post(&format!("{}/chat/completions", base_url))
+        .post(format!("{}/chat/completions", base_url))
         .json(&request)
         .send()
         .await
@@ -688,7 +687,7 @@ async fn call_openai_with_key(
     };
 
     let response = client
-        .post(&format!("{}/chat/completions", base_url))
+        .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&request)
         .send()
@@ -736,7 +735,7 @@ async fn call_anthropic_with_key(
         .into_iter()
         .partition(|m| m.role == "system");
 
-    let system_content = system_message
+    let _system_content = system_message
         .first()
         .map(|m| m.content.clone())
         .unwrap_or_default();
@@ -759,7 +758,7 @@ async fn call_anthropic_with_key(
     };
 
     let response = client
-        .post(&format!("{}/messages", base_url))
+        .post(format!("{}/messages", base_url))
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
@@ -822,7 +821,7 @@ async fn call_ollama_with_url(
     };
 
     let response = client
-        .post(&format!("{}/chat/completions", base_url))
+        .post(format!("{}/chat/completions", base_url))
         .json(&request)
         .send()
         .await
@@ -882,7 +881,7 @@ async fn call_openrouter_with_key(
     eprintln!("OpenRouter request body: {}", serde_json::to_string(&request).unwrap_or_default());
 
     let response = client
-        .post(&format!("{}/chat/completions", base_url))
+        .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("HTTP-Referer", "https://incrementum.app")
         .header("X-Title", "Incrementum")
@@ -936,7 +935,7 @@ async fn test_openai_connection(
     };
 
     let response = client
-        .post(&format!("{}/chat/completions", base_url))
+        .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&request)
         .send()
@@ -964,7 +963,7 @@ async fn test_anthropic_connection(
     };
 
     let response = client
-        .post(&format!("{}/messages", base_url))
+        .post(format!("{}/messages", base_url))
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
@@ -981,7 +980,7 @@ async fn test_ollama_connection(
     base_url: &str,
 ) -> Result<bool, String> {
     let response = client
-        .get(&format!("{}/tags", base_url.replace("/v1", "")))
+        .get(format!("{}/tags", base_url.replace("/v1", "")))
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
@@ -996,7 +995,7 @@ async fn test_openrouter_connection(
 ) -> Result<bool, String> {
     // Verify the API key by checking models endpoint (lighter weight and reliable)
     let models_response = client
-        .get(&format!("{}/models", base_url))
+        .get(format!("{}/models", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("HTTP-Referer", "https://incrementum.app")
         .header("X-Title", "Incrementum")
@@ -1027,7 +1026,7 @@ async fn fetch_openrouter_models(
     }
 
     let response = client
-        .get(&format!("{}/models", base_url))
+        .get(format!("{}/models", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("HTTP-Referer", "https://incrementum.app")
         .header("X-Title", "Incrementum")
@@ -1154,7 +1153,7 @@ If the answer is not in the provided context, say so.",
         "web" => {
             let mut prompt = format!(
                 "The user is browsing the web page: {}.",
-                context.url.as_ref().map(|u| u.as_str()).unwrap_or("Unknown")
+                context.url.as_deref().unwrap_or("Unknown")
             );
 
             if let Some(selection) = context.selection.as_ref() {

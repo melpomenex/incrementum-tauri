@@ -7,7 +7,7 @@ use crate::models::Category;
 
 #[tauri::command]
 pub async fn get_categories(
-    repo: State<'_, Repository>,
+    _repo: State<'_, Repository>,
 ) -> Result<Vec<Category>> {
     // TODO: Implement category listing
     Ok(vec![])
@@ -16,7 +16,7 @@ pub async fn get_categories(
 #[tauri::command]
 pub async fn create_category(
     name: String,
-    repo: State<'_, Repository>,
+    _repo: State<'_, Repository>,
 ) -> Result<Category> {
     let category = Category::new(name);
     // TODO: Implement category creation

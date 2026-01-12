@@ -16,11 +16,9 @@ pub mod queue_selector;
 pub mod document_scheduler;
 
 // Re-exports
-pub use fsrs::{FSRSParams, FSRSScheduler, FSRSState};
-pub use supermemo::{SM2Algorithm, SM2State, SM5Algorithm, SM5State, SM8Algorithm, SM8State, SM15Algorithm, SM15State};
 pub use optimizer::calculate_review_statistics;
 pub use queue_selector::QueueSelector;
-pub use document_scheduler::{DocumentScheduler, DocumentSchedulerParams, DocumentScheduleResult};
+pub use document_scheduler::DocumentScheduler;
 
 #[cfg(test)]
 mod tests;
@@ -49,7 +47,7 @@ impl Default for SM2Params {
 impl SM2Params {
     /// Calculate next interval using SM-2 algorithm
     pub fn next_interval(&self, rating: ReviewRating) -> Self {
-        let rating_value = rating as i32;
+        let _rating_value = rating as i32;
 
         let mut new_params = self.clone();
 
@@ -76,14 +74,14 @@ impl SM2Params {
                 2 => new_params.interval = 6.0,
                 _ => {
                     // I(n) = I(n-1) * EF
-                    new_params.interval = new_params.interval * new_params.ease_factor;
+                    new_params.interval *= new_params.ease_factor;
                 }
             }
 
             // Update ease factor
             // EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
             let q = sm2_quality as f64;
-            new_params.ease_factor = new_params.ease_factor + (0.1 - (5.0 - q) * (0.08 + (5.0 - q) * 0.02));
+            new_params.ease_factor += 0.1 - (5.0 - q) * (0.08 + (5.0 - q) * 0.02);
 
             // Ensure ease factor doesn't go below 1.3
             if new_params.ease_factor < 1.3 {
@@ -118,13 +116,13 @@ impl FsrsScheduler {
         &self,
         current_stability: f64,
         current_difficulty: f64,
-        elapsed_days: u32,
+        _elapsed_days: u32,
         rating: ReviewRating,
     ) -> (f64, f64) {
         // This is a simplified version - the actual FSRS is used in submit_review
         // Return (new_stability, new_difficulty)
 
-        let rating_value = rating as i32;
+        let _rating_value = rating as i32;
 
         // Simplified FSRS-like calculation
         let new_stability = match rating {
@@ -210,7 +208,7 @@ pub struct AlgorithmComparison {
 pub fn compare_algorithms(items: &[LearningItem]) -> AlgorithmComparison {
     let total_reviews: i32 = items.iter().map(|i| i.review_count).sum();
     let avg_interval: f64 = if total_reviews > 0 {
-        items.iter().map(|i| i.interval as f64).sum::<f64>() / items.len() as f64
+        items.iter().map(|i| i.interval).sum::<f64>() / items.len() as f64
     } else {
         0.0
     };

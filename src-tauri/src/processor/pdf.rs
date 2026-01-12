@@ -16,8 +16,7 @@ pub async fn extract_pdf_content(file_path: &str) -> Result<ExtractedContent> {
             return Err(crate::error::IncrementumError::NotFound(format!(
                 "Failed to read PDF file: {}",
                 e
-            ))
-            .into())
+            )))
         }
     };
 
@@ -44,8 +43,7 @@ pub async fn extract_pdf_content(file_path: &str) -> Result<ExtractedContent> {
             return Err(crate::error::IncrementumError::NotFound(format!(
                 "Failed to parse PDF for metadata: {}",
                 e
-            ))
-            .into())
+            )))
         }
     };
 
@@ -108,8 +106,7 @@ pub async fn extract_pdf_page(file_path: &str, page_num: usize) -> Result<String
         return Err(crate::error::IncrementumError::NotFound(format!(
             "Page {} out of range (1-{})",
             page_num, page_count
-        ))
-        .into());
+        )));
     }
 
     // Get the page (0-indexed)

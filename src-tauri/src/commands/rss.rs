@@ -341,7 +341,7 @@ pub async fn toggle_rss_article_queued(id: String, repo: State<'_, Repository>) 
 
             Ok(new_status)
         }
-        None => Err(crate::error::IncrementumError::NotFound("Article not found".to_string()).into()),
+        None => Err(crate::error::IncrementumError::NotFound("Article not found".to_string())),
     }
 }
 
@@ -435,8 +435,7 @@ pub async fn fetch_rss_feed_url(feed_url: String) -> Result<ParsedFeed> {
     if !response.status().is_success() {
         return Err(crate::error::IncrementumError::Internal(format!(
             "Failed to fetch feed: HTTP {}", response.status()
-        ))
-        .into());
+        )));
     }
 
     let xml_bytes = response
@@ -453,7 +452,7 @@ pub async fn fetch_rss_feed_url(feed_url: String) -> Result<ParsedFeed> {
     // Generate feed ID from URL
     let digest = md5::compute(&feed_url);
     let id = format!("feed-{:02x}", digest.0[0]);
-    let now = Utc::now().to_rfc3339();
+    let _now = Utc::now().to_rfc3339();
 
     // Try to parse as RSS first
     if let Some(channel) = doc.descendants().find(|n| n.tag_name().name() == "channel") {
@@ -577,8 +576,7 @@ pub async fn fetch_rss_feed_url(feed_url: String) -> Result<ParsedFeed> {
 
     Err(crate::error::IncrementumError::Internal(
         "Could not parse feed: not a valid RSS or Atom feed".to_string(),
-    )
-    .into())
+    ))
 }
 
 fn parse_rss_item_node(item: &roxmltree::Node) -> Option<ParsedFeedItem> {

@@ -14,8 +14,7 @@ pub async fn extract_markdown_content(file_path: &str) -> Result<ExtractedConten
             return Err(crate::error::IncrementumError::NotFound(format!(
                 "Failed to read markdown file: {}",
                 e
-            ))
-            .into())
+            )))
         }
     };
 
@@ -57,9 +56,9 @@ fn extract_title_from_markdown(content: &str) -> Option<String> {
 
 fn clean_markdown_text(markdown: &str) -> String {
     let mut result = String::new();
-    let mut lines = markdown.lines();
+    let lines = markdown.lines();
 
-    while let Some(line) = lines.next() {
+    for line in lines {
         let trimmed = line.trim();
 
         // Skip code blocks

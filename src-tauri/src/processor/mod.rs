@@ -25,8 +25,7 @@ pub async fn extract_content(file_path: &str, file_type: FileType) -> Result<Ext
         return Err(crate::error::IncrementumError::NotFound(format!(
             "File not found: {}",
             file_path
-        ))
-        .into());
+        )));
     }
 
     match file_type {

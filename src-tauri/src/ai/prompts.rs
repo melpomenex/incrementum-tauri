@@ -2,7 +2,7 @@
 //!
 //! Provides structured prompt building for various AI tasks.
 
-use crate::ai::{Message, MessageRole};
+use crate::ai::Message;
 use serde::{Deserialize, Serialize};
 
 /// Prompt builder for constructing AI prompts
@@ -110,7 +110,7 @@ impl PromptBuilder {
 
     /// Create a prompt for generating flashcards from an extract
     pub fn flashcard_from_extract(extract_content: &str, context: Option<&str>) -> Self {
-        let mut builder = Self::new()
+        let builder = Self::new()
             .with_system(
                 "You are an expert at creating educational flashcards. \
                 Generate 1-3 high-quality flashcards from the given extract. \

@@ -3,7 +3,6 @@
 //! This module provides tools for optimizing scheduling algorithm parameters
 //! based on historical review data.
 
-use crate::algorithms::SM2Params;
 use crate::models::{LearningItem, ReviewRating};
 use chrono::{Utc, Duration};
 
@@ -85,7 +84,7 @@ impl ParameterOptimizer {
         let mut best_score = self.evaluate_params(&best_params, history);
         let mut converged = false;
 
-        for iteration in 0..self.max_iterations {
+        for _iteration in 0..self.max_iterations {
             // Generate neighboring parameters
             let neighbors = self.generate_neighbors(&best_params);
 
@@ -208,7 +207,7 @@ pub fn calculate_review_statistics(items: &[LearningItem]) -> ReviewStatistics {
     let total_lapses: i32 = items.iter().map(|i| i.lapses).sum();
 
     // Calculate average interval
-    let avg_interval: f64 = items.iter().map(|i| i.interval as f64).sum::<f64>() / items.len() as f64;
+    let avg_interval: f64 = items.iter().map(|i| i.interval).sum::<f64>() / items.len() as f64;
 
     // Calculate retention estimate (simplified)
     let retention_estimate = if total_reviews > 0 {

@@ -7,16 +7,14 @@
 //! - AI configuration management
 
 use crate::ai::{
-    flashcard_generator::{BatchFlashcardGenerator, FlashcardGenerationOptions, FlashcardGenerator},
-    prompts::PromptBuilder,
-    qa::{ChatSession, QuestionAnswerer},
+    flashcard_generator::{FlashcardGenerationOptions, FlashcardGenerator},
+    qa::QuestionAnswerer,
     summarizer::Summarizer,
     AIConfig, AIProvider, LLMProviderType, Message,
 };
 use crate::commands::Result;
 use crate::database::Repository;
 use crate::error::IncrementumError;
-use crate::models::Extract;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
@@ -107,7 +105,7 @@ pub async fn set_api_key(
 #[tauri::command]
 pub async fn generate_flashcards_from_extract(
     extract_id: String,
-    options: FlashcardGenerationOptions,
+    _options: FlashcardGenerationOptions,
     repo: State<'_, Repository>,
     ai_state: State<'_, AIState>,
 ) -> Result<Vec<TauriGeneratedFlashcard>> {
@@ -127,7 +125,7 @@ pub async fn generate_flashcards_from_extract(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
 
     // Generate flashcards
     let generator = FlashcardGenerator::new(provider);
@@ -153,7 +151,7 @@ pub async fn generate_flashcards_from_content(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let generator = FlashcardGenerator::new(provider);
 
     let options = FlashcardGenerationOptions {
@@ -181,7 +179,7 @@ pub async fn answer_question(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let qa = QuestionAnswerer::new(provider);
 
     let answer = qa.answer_with_context(&question, &context).await?;
@@ -209,7 +207,7 @@ pub async fn answer_about_extract(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let qa = QuestionAnswerer::new(provider);
 
     let answer = qa.answer_about_extract(&extract.content, &question).await?;
@@ -231,7 +229,7 @@ pub async fn summarize_content(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let summarizer = Summarizer::new(provider);
 
     let summary = summarizer.summarize(&content, max_words).await?;
@@ -253,7 +251,7 @@ pub async fn extract_key_points(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let summarizer = Summarizer::new(provider);
 
     let points = summarizer.extract_key_points(&content, count).await?;
@@ -274,7 +272,7 @@ pub async fn generate_title(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let summarizer = Summarizer::new(provider);
 
     let title = summarizer.generate_title(&content).await?;
@@ -296,7 +294,7 @@ pub async fn simplify_content(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let summarizer = Summarizer::new(provider);
 
     let simplification_level = match level.to_lowercase().as_str() {
@@ -331,7 +329,7 @@ pub async fn generate_questions(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
     let qa = QuestionAnswerer::new(provider);
 
     let questions = qa.generate_questions(&content, count).await?;
@@ -364,7 +362,7 @@ pub async fn test_ai_connection(
         &config.models,
         &config.local_settings,
     )
-    .map_err(|e| IncrementumError::Internal(e))?;
+    .map_err(IncrementumError::Internal)?;
 
     if !provider.is_available() {
         return Err(IncrementumError::Internal(format!(

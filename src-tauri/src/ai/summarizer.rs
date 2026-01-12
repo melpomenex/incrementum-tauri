@@ -136,7 +136,7 @@ impl Summarizer {
             )
             .add_user(preview);
 
-        let (messages, temp, max_tokens) = prompt.build();
+        let (messages, _temp, _max_tokens) = prompt.build();
 
         let request = ChatCompletionRequest {
             messages,
@@ -160,7 +160,7 @@ impl Summarizer {
             )
             .add_user(content);
 
-        let (messages, temp, max_tokens) = prompt.build();
+        let (messages, _temp, max_tokens) = prompt.build();
 
         let request = ChatCompletionRequest {
             messages,
@@ -184,13 +184,13 @@ impl Summarizer {
         };
 
         let prompt = PromptBuilder::new()
-            .with_system(&format!(
+            .with_system(format!(
                 "{} Maintain accuracy while making the content more accessible.",
                 instruction
             ))
             .add_user(content);
 
-        let (messages, temp, max_tokens) = prompt.build();
+        let (messages, _temp, max_tokens) = prompt.build();
 
         let request = ChatCompletionRequest {
             messages,

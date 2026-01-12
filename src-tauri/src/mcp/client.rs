@@ -75,7 +75,7 @@ impl MCPClient {
         let stdout = child.stdout.as_mut().ok_or("Failed to open stdout")?;
 
         let mut reader = BufReader::new(stdout);
-        let mut writer = stdin;
+        let writer = stdin;
 
         // Send initialize request
         let init_request = JsonRpcRequest {
@@ -104,7 +104,7 @@ impl MCPClient {
         reader.read_line(&mut line)
             .map_err(|e| format!("Failed to read initialize response: {}", e))?;
 
-        let response: JsonRpcResponse = serde_json::from_str(&line.trim())
+        let response: JsonRpcResponse = serde_json::from_str(line.trim())
             .map_err(|e| format!("Failed to parse initialize response: {}", e))?;
 
         if let Some(error) = response.error {
@@ -128,7 +128,7 @@ impl MCPClient {
             .map_err(|e| format!("Failed to send initialized notification: {}", e))?;
 
         // Discover tools
-        self.discover_tools_stdio(&mut reader, &mut writer).await?;
+        self.discover_tools_stdio(&mut reader, writer).await?;
 
         self.child = Some(child);
         Ok(())
@@ -170,7 +170,7 @@ impl MCPClient {
         reader.read_line(&mut line)
             .map_err(|e| format!("Failed to read tools/list response: {}", e))?;
 
-        let response: JsonRpcResponse = serde_json::from_str(&line.trim())
+        let response: JsonRpcResponse = serde_json::from_str(line.trim())
             .map_err(|e| format!("Failed to parse tools/list response: {}", e))?;
 
         if let Some(error) = response.error {
@@ -213,7 +213,7 @@ impl MCPClient {
         let stdout = child.stdout.as_mut().ok_or("Failed to open stdout")?;
 
         let mut reader = BufReader::new(stdout);
-        let mut writer = stdin;
+        let writer = stdin;
 
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -232,7 +232,7 @@ impl MCPClient {
         reader.read_line(&mut line)
             .map_err(|e| format!("Failed to read tools/call response: {}", e))?;
 
-        let response: JsonRpcResponse = serde_json::from_str(&line.trim())
+        let response: JsonRpcResponse = serde_json::from_str(line.trim())
             .map_err(|e| format!("Failed to parse tools/call response: {}", e))?;
 
         if let Some(error) = response.error {

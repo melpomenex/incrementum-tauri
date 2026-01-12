@@ -14,8 +14,7 @@ pub async fn extract_html_content(file_path: &str) -> Result<ExtractedContent> {
             return Err(crate::error::IncrementumError::NotFound(format!(
                 "Failed to read HTML file: {}",
                 e
-            ))
-            .into())
+            )))
         }
     };
 

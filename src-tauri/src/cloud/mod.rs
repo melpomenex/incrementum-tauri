@@ -12,7 +12,6 @@ pub mod dropbox;
 pub use provider::{
     AccountInfo,
     AuthResult,
-    AuthToken,
     BackupIncludes,
     BackupInfo,
     BackupOptions,
@@ -20,12 +19,8 @@ pub use provider::{
     CloudProviderType,
     ConflictResolution,
     FileInfo,
-    FileMetadata,
-    RestoreConflict,
     RestoreResult,
-    StorageQuota,
     SyncConflict,
-    SyncMode,
     SyncResult,
 };
 

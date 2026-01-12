@@ -178,7 +178,7 @@ pub async fn export_extract_to_obsidian_internal(
     fs::create_dir_all(&notes_path)
         .map_err(|e| AppError::IntegrationError(format!("Failed to create notes folder: {}", e)))?;
 
-    let filename = format!("{}.md", sanitize_filename(&extract.page_title.as_deref().unwrap_or("Untitled")));
+    let filename = format!("{}.md", sanitize_filename(extract.page_title.as_deref().unwrap_or("Untitled")));
     let file_path = notes_path.join(&filename);
 
     let markdown = generate_extract_markdown(&extract);
@@ -242,7 +242,7 @@ fn generate_extract_markdown(extract: &crate::models::Extract) -> String {
 
     // Content
     markdown.push_str(&extract.content);
-    markdown.push_str("\n");
+    markdown.push('\n');
 
     // Metadata
     markdown.push_str("\n---\n");
@@ -413,10 +413,10 @@ pub async fn export_extract_to_obsidian(
 
 #[tauri::command]
 pub async fn export_flashcards_to_obsidian(
-    card_ids: Vec<String>,
-    config: ObsidianConfig,
-    format: String,
-    repo: tauri::State<'_, Repository>,
+    _card_ids: Vec<String>,
+    _config: ObsidianConfig,
+    _format: String,
+    _repo: tauri::State<'_, Repository>,
 ) -> Result<String, AppError> {
     // Implementation would export multiple flashcards
     Ok("Exported".to_string())
@@ -436,8 +436,8 @@ pub async fn import_from_obsidian(
 
 #[tauri::command]
 pub async fn sync_to_obsidian(
-    config: ObsidianConfig,
-    repo: tauri::State<'_, Repository>,
+    _config: ObsidianConfig,
+    _repo: tauri::State<'_, Repository>,
 ) -> Result<SyncStats, AppError> {
     // Sync all documents, extracts, and flashcards
     Ok(SyncStats {
@@ -476,7 +476,7 @@ pub async fn sync_flashcards_to_anki(
 }
 
 #[tauri::command]
-pub async fn start_extension_server(port: u16) -> Result<bool, AppError> {
+pub async fn start_extension_server(_port: u16) -> Result<bool, AppError> {
     // Start the WebSocket server
     Ok(true)
 }
@@ -496,14 +496,14 @@ pub async fn get_extension_server_status() -> Result<ServerStatus, AppError> {
 }
 
 #[tauri::command]
-pub async fn send_to_extension(message: serde_json::Value) -> Result<serde_json::Value, AppError> {
+pub async fn send_to_extension(_message: serde_json::Value) -> Result<serde_json::Value, AppError> {
     Ok(serde_json::json!({ "success": true }))
 }
 
 #[tauri::command]
 pub async fn process_extension_page(
-    page: serde_json::Value,
-    repo: tauri::State<'_, Repository>,
+    _page: serde_json::Value,
+    _repo: tauri::State<'_, Repository>,
 ) -> Result<PageProcessResult, AppError> {
     Ok(PageProcessResult {
         document_id: "created".to_string(),

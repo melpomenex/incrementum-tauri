@@ -311,7 +311,7 @@ pub fn extract_transcript(url: &str, language: Option<&str>) -> Result<Vec<Trans
     }
 
     // Try to parse as JSON3 format first (if available)
-    let json_output = Command::new("yt-dlp")
+    let _json_output = Command::new("yt-dlp")
         .args([
             "--write-subs",
             "--sub-lang", lang,
@@ -355,7 +355,7 @@ pub fn extract_transcript(url: &str, language: Option<&str>) -> Result<Vec<Trans
     }
 
     // If no VTT/SRT parsing worked, try using yt-dlp's JSON output
-    let json_output = Command::new("yt-dlp")
+    let _json_output = Command::new("yt-dlp")
         .args([
             "--skip-download",
             "--write-subs",
@@ -426,7 +426,7 @@ fn parse_timestamp_line(line: &str) -> Option<(f64, f64)> {
     }
 
     let start = parse_vtt_timestamp(parts[0].trim())?;
-    let end = parse_vtt_timestamp(parts[1].trim().split_whitespace().next().unwrap_or(parts[1].trim()))?;
+    let end = parse_vtt_timestamp(parts[1].split_whitespace().next().unwrap_or(parts[1].trim()))?;
 
     Some((start, end))
 }
@@ -455,7 +455,7 @@ fn parse_vtt_timestamp(ts: &str) -> Option<f64> {
 
 /// Clean VTT text - remove formatting tags
 fn clean_vtt_text(text: &str) -> String {
-    let mut cleaned = text.to_string();
+    let cleaned = text.to_string();
 
     // Remove XML-like tags by iterating through the string
     let mut result = String::new();
@@ -499,7 +499,7 @@ fn parse_srt(content: &str) -> Vec<TranscriptSegment> {
             let text: String = lines[2..].iter()
                 .map(|l| l.trim())
                 .filter(|l| !l.is_empty())
-                .map(|l| clean_vtt_text(l))
+                .map(clean_vtt_text)
                 .collect::<Vec<_>>()
                 .join(" ");
 
@@ -552,7 +552,7 @@ fn parse_srt_timestamp(ts: &str) -> Option<f64> {
 }
 
 /// Search YouTube (requires API key for full results)
-pub fn search_youtube(query: &str, api_key: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
+pub fn search_youtube(query: &str, _api_key: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
     // yt-dlp can do basic search without API key
     let output = Command::new("yt-dlp")
         .args([

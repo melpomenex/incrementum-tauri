@@ -39,8 +39,6 @@ pub use review::*;
 pub use rss::*;
 pub use segmentation::*;
 pub use notifications::*;
-pub use mcp::*;
-pub use llm::*;
 pub use legacy_import::*;
 pub use ocr::*;
 pub use extract_review::*;

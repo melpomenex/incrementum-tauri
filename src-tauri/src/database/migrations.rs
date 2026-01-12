@@ -3,7 +3,7 @@
 //! Tracks and applies database migrations in order.
 
 use sqlx::{Pool, Sqlite};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::error::{IncrementumError, Result};
 
@@ -540,7 +540,7 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
         // Record migration
         let applied_at = chrono::Utc::now().to_rfc3339();
         sqlx::query("INSERT INTO _schema_migrations (name, applied_at) VALUES (?1, ?2)")
-            .bind(&migration.name)
+            .bind(migration.name)
             .bind(&applied_at)
             .execute(&mut *tx)
             .await

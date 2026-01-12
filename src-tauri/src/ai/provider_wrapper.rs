@@ -3,8 +3,7 @@
 //! This approach avoids the `async_trait` Send issues by using concrete types.
 
 use crate::ai::providers::{
-    AnthropicProvider, ChatCompletionRequest, ChatCompletionResponse, LLMProvider, LLMProviderType,
-    Message, MessageRole, OllamaProvider, OpenAIProvider, OpenRouterProvider,
+    AnthropicProvider, ChatCompletionRequest, ChatCompletionResponse, LLMProvider, LLMProviderType, OllamaProvider, OpenAIProvider, OpenRouterProvider,
 };
 use serde::{Deserialize, Serialize};
 

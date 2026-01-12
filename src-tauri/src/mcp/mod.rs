@@ -4,7 +4,6 @@ pub mod server;
 pub mod types;
 pub mod tools;
 
-pub use client::{MCPClient, MCPClientManager, MCPServerConnection, MCPTransport};
-pub use server::MCPServer;
+pub use client::{MCPClientManager, MCPServerConnection, MCPTransport};
 pub use types::*;
 pub use tools::*;

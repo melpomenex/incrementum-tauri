@@ -109,7 +109,7 @@ pub async fn postpone_item(
         .ok_or_else(|| crate::error::IncrementumError::NotFound(format!("Item {}", item_id)))?;
 
     // Reschedule by adding days to due date
-    item.due_date = item.due_date + Duration::days(days as i64);
+    item.due_date += Duration::days(days as i64);
     item.date_modified = Utc::now();
 
     repo.update_learning_item(&item).await?;

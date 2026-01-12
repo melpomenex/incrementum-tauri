@@ -4,7 +4,7 @@
 
 use crate::error::{IncrementumError, Result};
 use crate::ocr::OCRConfig;
-use crate::ocr::providers::{OCRProviderType, OCRResult};
+use crate::ocr::providers::OCRProviderType;
 use crate::ocr::processor::OCRProcessor;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -314,7 +314,7 @@ pub async fn is_provider_available(provider: String) -> Result<bool> {
         "google" => OCRProviderType::GoogleDocumentAI,
         "aws" => OCRProviderType::AWSTextract,
         "azure" => OCRProviderType::AzureVision,
-        _ => return Err(IncrementumError::Internal(format!("Unknown provider: {}", provider)).into()),
+        _ => return Err(IncrementumError::Internal(format!("Unknown provider: {}", provider))),
     };
 
     Ok(processor.is_provider_available(provider_type))

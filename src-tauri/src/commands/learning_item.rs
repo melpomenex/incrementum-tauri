@@ -4,7 +4,7 @@ use tauri::State;
 use crate::database::Repository;
 use crate::error::Result;
 use crate::generator::LearningItemGenerator;
-use crate::models::{LearningItem, ItemType, Extract};
+use crate::models::{LearningItem, ItemType};
 
 #[tauri::command]
 pub async fn get_due_items(

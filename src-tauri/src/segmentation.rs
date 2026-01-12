@@ -133,8 +133,7 @@ impl DocumentSegmenter {
             // and we have enough content, start a new segment
             if current_word_count > self.config.min_length
                 && current_word_count + para_word_count > self.config.target_length + self.config.overlap
-            {
-                if !current_segment.is_empty() {
+                && !current_segment.is_empty() {
                     segments.push(self.create_segment(
                         segment_index,
                         &current_segment,
@@ -157,7 +156,6 @@ impl DocumentSegmenter {
                         current_segment = String::new();
                     }
                 }
-            }
 
             current_segment.push_str(para);
             current_segment.push_str("\n\n");
@@ -167,7 +165,7 @@ impl DocumentSegmenter {
         if !current_segment.trim().is_empty() {
             segments.push(self.create_segment(
                 segment_index,
-                &current_segment.trim(),
+                current_segment.trim(),
                 current_start,
                 content.len(),
             ));
@@ -186,7 +184,7 @@ impl DocumentSegmenter {
         let mut segment_index = 0;
 
         for para in paragraphs {
-            let para_word_count = para.split_whitespace().count();
+            let _para_word_count = para.split_whitespace().count();
             let current_word_count = current_segment.split_whitespace().count();
 
             if current_word_count >= self.config.target_length {
@@ -212,7 +210,7 @@ impl DocumentSegmenter {
         if !current_segment.trim().is_empty() {
             segments.push(self.create_segment(
                 segment_index,
-                &current_segment.trim(),
+                current_segment.trim(),
                 current_start,
                 content.len(),
             ));
@@ -284,7 +282,7 @@ impl DocumentSegmenter {
         let mut segment_index = 0;
         let mut current_length = 0;
 
-        for (line_num, line) in lines.iter().enumerate() {
+        for line in lines.iter() {
             let is_header = header_pattern.is_match(line.trim());
             let line_words = line.split_whitespace().count();
 

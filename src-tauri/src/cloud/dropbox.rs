@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use reqwest::{Client, header};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use url::Url;
 
@@ -144,7 +144,7 @@ impl DropboxProvider {
         let mut hasher = Sha256::new();
         hasher.update(code_verifier.as_bytes());
         let hash = hasher.finalize();
-        let code_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&hash);
+        let code_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
 
         (state, code_verifier, code_challenge)
     }
@@ -233,7 +233,7 @@ impl DropboxProvider {
         let headers = self.get_auth_headers()?;
 
         let response = self.http_client
-            .post(&format!("{}/users/get_current_account", self.api_base_url()))
+            .post(format!("{}/users/get_current_account", self.api_base_url()))
             .headers(headers)
             .send()
             .await
@@ -251,7 +251,7 @@ impl DropboxProvider {
 
         // Get space quota
         let space_response = self.http_client
-            .post(&format!("{}/users/get_space_usage", self.api_base_url()))
+            .post(format!("{}/users/get_space_usage", self.api_base_url()))
             .headers(self.get_auth_headers()?)
             .send()
             .await;
@@ -400,7 +400,7 @@ impl CloudProvider for DropboxProvider {
             let upload_path = serde_json::json!({ "path": full_path }).to_string();
 
             let response = self.http_client
-                .post(&format!(
+                .post(format!(
                     "{}/files/upload",
                     self.content_base_url()
                 ))
@@ -442,7 +442,7 @@ impl CloudProvider for DropboxProvider {
         let arg = serde_json::json!({ "path": full_path }).to_string();
 
         let response = self.http_client
-            .post(&format!(
+            .post(format!(
                 "{}/files/download",
                 self.content_base_url()
             ))
@@ -484,7 +484,7 @@ impl CloudProvider for DropboxProvider {
         }).to_string();
 
         let response = self.http_client
-            .post(&format!("{}/files/list_folder", self.api_base_url()))
+            .post(format!("{}/files/list_folder", self.api_base_url()))
             .header("Dropbox-API-Arg", arg)
             .headers(self.get_auth_headers()?)
             .send()
@@ -511,7 +511,7 @@ impl CloudProvider for DropboxProvider {
                     name: name.clone(),
                     path: format!("{}/{}", path.trim_start_matches('/'), name),
                     size: entry.size.unwrap_or(0),
-                    modified_time: entry.client_modified.unwrap_or_else(|| Utc::now()),
+                    modified_time: entry.client_modified.unwrap_or_else(Utc::now),
                     is_folder: entry.tag == "folder",
                     mime_type: None,
                 }
@@ -526,7 +526,7 @@ impl CloudProvider for DropboxProvider {
         let arg = serde_json::json!({ "path": full_path }).to_string();
 
         let response = self.http_client
-            .post(&format!("{}/files/delete_v2", self.api_base_url()))
+            .post(format!("{}/files/delete_v2", self.api_base_url()))
             .header("Dropbox-API-Arg", arg)
             .headers(self.get_auth_headers()?)
             .send()
@@ -549,7 +549,7 @@ impl CloudProvider for DropboxProvider {
         }).to_string();
 
         let response = self.http_client
-            .post(&format!("{}/files/get_metadata", self.api_base_url()))
+            .post(format!("{}/files/get_metadata", self.api_base_url()))
             .header("Dropbox-API-Arg", arg)
             .headers(self.get_auth_headers()?)
             .send()
@@ -574,7 +574,7 @@ impl CloudProvider for DropboxProvider {
             created_time: dropbox_metadata.client_modified,
             modified_time: dropbox_metadata.server_modified
                 .or(dropbox_metadata.client_modified)
-                .unwrap_or_else(|| Utc::now()),
+                .unwrap_or_else(Utc::now),
             checksum: None,
         })
     }
@@ -587,7 +587,7 @@ impl CloudProvider for DropboxProvider {
         }).to_string();
 
         let response = self.http_client
-            .post(&format!("{}/files/create_folder_v2", self.api_base_url()))
+            .post(format!("{}/files/create_folder_v2", self.api_base_url()))
             .header("Dropbox-API-Arg", arg)
             .headers(self.get_auth_headers()?)
             .send()
@@ -600,7 +600,7 @@ impl CloudProvider for DropboxProvider {
         }
 
         let folder_name = if path.contains('/') {
-            path.rsplit('/').last().unwrap_or(path)
+            path.rsplit('/').next_back().unwrap_or(path)
         } else {
             path
         };
@@ -634,7 +634,7 @@ impl DropboxProvider {
         }).to_string();
 
         let start_response = self.http_client
-            .post(&format!("{}/files/upload_session/start", self.content_base_url()))
+            .post(format!("{}/files/upload_session/start", self.content_base_url()))
             .header("Dropbox-API-Arg", arg)
             .header("Content-Type", "application/octet-stream")
             .header("Authorization", format!("Bearer {}", self.auth_token.as_ref().unwrap().access_token))
@@ -659,7 +659,7 @@ impl DropboxProvider {
         let total_size = data.len() as u64;
         let mut uploaded = 0u64;
 
-        for (chunk_index, chunk) in data.chunks(CHUNK_SIZE).enumerate() {
+        for chunk in data.chunks(CHUNK_SIZE) {
             let chunk_start = uploaded;
             let chunk_end = uploaded + chunk.len() as u64 - 1;
 
@@ -668,14 +668,10 @@ impl DropboxProvider {
                 "offset": chunk_start
             }).to_string();
 
-            let close = if chunk_end + 1 >= total_size {
-                true
-            } else {
-                false
-            };
+            let close = chunk_end + 1 >= total_size;
 
             let chunk_response = self.http_client
-                .post(&format!(
+                .post(format!(
                     "{}/files/upload_session/append_v2{}",
                     self.content_base_url(),
                     if close { "/finish" } else { "" }
@@ -701,7 +697,7 @@ impl DropboxProvider {
         }
 
         // Get the final file ID
-        let metadata = self.get_metadata(&path.trim_start_matches("/Incrementum/")).await?;
+        let metadata = self.get_metadata(path.trim_start_matches("/Incrementum/")).await?;
         Ok(metadata.id)
     }
 }

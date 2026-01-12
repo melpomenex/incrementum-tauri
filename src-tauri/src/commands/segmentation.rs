@@ -4,7 +4,6 @@ use tauri::State;
 use crate::database::Repository;
 use crate::error::Result;
 use crate::segmentation::{DocumentSegmenter, SegmentConfig, SegmentationMethod, SegmentationResult};
-use serde::{Deserialize, Serialize};
 
 /// Segment a document into extracts
 #[tauri::command]
@@ -21,7 +20,7 @@ pub async fn segment_document(
 
     let content = doc.content.unwrap_or_default();
     if content.is_empty() {
-        return Err(crate::error::IncrementumError::Internal("Document has no content".to_string()).into());
+        return Err(crate::error::IncrementumError::Internal("Document has no content".to_string()));
     }
 
     // Parse method
@@ -59,7 +58,7 @@ pub async fn auto_segment_and_create_extracts(
 
     let content = doc.content.unwrap_or_default();
     if content.is_empty() {
-        return Err(crate::error::IncrementumError::Internal("Document has no content".to_string()).into());
+        return Err(crate::error::IncrementumError::Internal("Document has no content".to_string()));
     }
 
     // Use smart segmentation

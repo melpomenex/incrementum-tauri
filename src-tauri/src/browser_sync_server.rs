@@ -400,8 +400,8 @@ async fn handle_import_request(
         date_last_reviewed: None,
         extract_count: 0,
         learning_item_count: 0,
-        priority_rating: payload.priority.unwrap_or(0) as i32,
-        priority_slider: payload.priority.unwrap_or(0) as i32,
+        priority_rating: payload.priority.unwrap_or(0),
+        priority_slider: payload.priority.unwrap_or(0),
         priority_score: payload.priority.unwrap_or(0) as f64,
         is_archived: false,
         is_favorite: false,
@@ -434,7 +434,7 @@ async fn handle_extract_request(
     payload: &ExtensionRequest,
 ) -> Result<ExtensionResponse, AppError> {
     // Find or create document for this URL
-    let document_id = if let Some(Some(doc)) = state.repo.find_document_by_url(&payload.url).await.ok() {
+    let document_id = if let Ok(Some(doc)) = state.repo.find_document_by_url(&payload.url).await {
         doc.id
     } else {
         // Create a minimal document for this URL
@@ -454,8 +454,8 @@ async fn handle_extract_request(
             date_last_reviewed: None,
             extract_count: 0,
             learning_item_count: 0,
-            priority_rating: payload.priority.unwrap_or(0) as i32,
-            priority_slider: payload.priority.unwrap_or(0) as i32,
+            priority_rating: payload.priority.unwrap_or(0),
+            priority_slider: payload.priority.unwrap_or(0),
             priority_score: payload.priority.unwrap_or(0) as f64,
             is_archived: false,
             is_favorite: false,
@@ -654,7 +654,7 @@ async fn handle_ai_request(
 
     // Create AI provider
     let provider = match AIProvider::from_config(
-        config.default_provider.clone(),
+        config.default_provider,
         &config.api_keys,
         &config.models,
         &config.local_settings,
@@ -771,7 +771,7 @@ async fn handle_ai_request(
             
             // Create new provider for questions
             if let Ok(qa_provider) = AIProvider::from_config(
-                config.default_provider.clone(),
+                config.default_provider,
                 &config.api_keys,
                 &config.models,
                 &config.local_settings,
@@ -905,12 +905,12 @@ fn save_config(config: &BrowserSyncConfig) -> Result<(), AppError> {
     let path = get_config_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| AppError::Io(e))?;
+            .map_err(AppError::Io)?;
     }
     let json = serde_json::to_string_pretty(config)
-        .map_err(|e| AppError::Serialization(e))?;
+        .map_err(AppError::Serialization)?;
     std::fs::write(&path, json)
-        .map_err(|e| AppError::Io(e))?;
+        .map_err(AppError::Io)?;
     Ok(())
 }
 

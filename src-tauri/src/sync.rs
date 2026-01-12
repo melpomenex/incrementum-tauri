@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use sha2::{Sha256, Digest};
 use aes_gcm::{
@@ -13,7 +12,6 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 
-use crate::database::Database;
 use crate::error::AppError;
 
 /// Sync status
@@ -233,7 +231,7 @@ impl CloudSyncClient {
 
         // 5. Download remote changes
         let mut downloaded = 0;
-        for item in to_download {
+        for _item in to_download {
             downloaded += 1;
         }
 
@@ -365,7 +363,7 @@ impl CloudSyncClient {
     /// Resolve a sync conflict
     pub fn resolve_conflict(
         &mut self,
-        conflict: SyncConflict,
+        _conflict: SyncConflict,
         resolution: ConflictResolution,
     ) -> Result<(), AppError> {
         match resolution {
@@ -564,8 +562,8 @@ pub async fn get_sync_status() -> Result<SyncStatus, String> {
 
 #[tauri::command]
 pub async fn resolve_sync_conflict(
-    conflict: SyncConflict,
-    resolution: ConflictResolution,
+    _conflict: SyncConflict,
+    _resolution: ConflictResolution,
 ) -> Result<(), String> {
     // This would resolve the conflict
     Ok(())

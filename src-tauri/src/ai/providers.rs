@@ -6,7 +6,6 @@
 //! - OpenRouter (multi-provider)
 //! - Ollama (local models)
 
-use crate::ai::{AIConfig, APIKeys, LocalSettings, ModelPreferences};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 

@@ -2,13 +2,10 @@
 //!
 //! Tauri commands for backup scheduler management
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tauri::State;
 
-use crate::scheduler::{BackupScheduler, SchedulerConfig, BackupSchedule, SchedulerResult};
+use crate::scheduler::{BackupScheduler, SchedulerConfig, SchedulerResult};
 use crate::database::{Database, Repository};
-use crate::cloud::{CloudProvider, CloudProviderType, BackupOptions};
 
 // Global scheduler instance - use tokio Mutex for async safety
 static SCHEDULER: tokio::sync::Mutex<Option<BackupScheduler>> =
@@ -85,11 +82,11 @@ pub async fn scheduler_get_status() -> Result<SchedulerStatus, String> {
 /// Trigger a manual backup
 #[tauri::command]
 pub async fn scheduler_trigger_backup(
-    provider_type: String,
-    repo: State<'_, Repository>,
+    _provider_type: String,
+    _repo: State<'_, Repository>,
 ) -> Result<SchedulerResult, String> {
     let guard = SCHEDULER.lock().await;
-    let scheduler = guard.as_ref()
+    let _scheduler = guard.as_ref()
         .ok_or_else(|| "Scheduler not initialized".to_string())?;
 
     // TODO: Get authenticated provider

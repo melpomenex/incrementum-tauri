@@ -99,7 +99,7 @@ impl LearningItemGenerator {
             .unwrap_or(middle_idx);
 
         let hidden_word = words.get(cloze_idx)?;
-        let hint = self.generate_cloze_hint(sentence, cloze_idx);
+        let _hint = self.generate_cloze_hint(sentence, cloze_idx);
 
         // Build the clozed question
         let question = words.iter()

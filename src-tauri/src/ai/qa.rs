@@ -100,7 +100,7 @@ impl QuestionAnswerer {
         count: usize,
     ) -> Result<Vec<String>, String> {
         let prompt = PromptBuilder::new()
-            .with_system(&format!(
+            .with_system(format!(
                 "Generate {} thoughtful questions about the provided content. \
                 Questions should test understanding and critical thinking. \
                 Return as a JSON array of strings.",
@@ -108,7 +108,7 @@ impl QuestionAnswerer {
             ))
             .add_user(content);
 
-        let (messages, temp, max_tokens) = prompt.build();
+        let (messages, _temp, max_tokens) = prompt.build();
 
         let request = ChatCompletionRequest {
             messages,
@@ -199,7 +199,7 @@ impl ChatSession {
     }
 
     /// Get conversation history
-    pub fn history(&self) -> &[(Message)] {
+    pub fn history(&self) -> &[Message] {
         &self.messages
     }
 }

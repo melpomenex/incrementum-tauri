@@ -124,10 +124,7 @@ impl TesseractProvider {
 
         match output {
             Ok(output) if output.status.success() => Ok(()),
-            _ => Err(IncrementumError::Internal(format!(
-                "Tesseract not found. Please install it or provide the correct path."
-            ))
-            .into()),
+            _ => Err(IncrementumError::Internal("Tesseract not found. Please install it or provide the correct path.".to_string())),
         }
     }
 }
@@ -173,8 +170,7 @@ impl OCRProvider for TesseractProvider {
             return Err(IncrementumError::Internal(format!(
                 "Tesseract processing failed: {}",
                 stderr
-            ))
-            .into());
+            )));
         }
 
         let text = String::from_utf8_lossy(&output.stdout).to_string();
@@ -284,8 +280,7 @@ impl OCRProvider for GoogleDocumentAIProvider {
         // For now, return a placeholder error
         Err(IncrementumError::Internal(
             "Google Document AI integration requires additional dependencies. Please use Tesseract for now.".to_string()
-        )
-        .into())
+        ))
     }
 
     fn is_available(&self) -> bool {
@@ -345,8 +340,7 @@ impl OCRProvider for AWSTextractProvider {
         // For now, return a placeholder error
         Err(IncrementumError::Internal(
             "AWS Textract integration requires additional dependencies. Please use Tesseract for now.".to_string()
-        )
-        .into())
+        ))
     }
 
     fn is_available(&self) -> bool {
@@ -403,8 +397,7 @@ impl OCRProvider for AzureVisionProvider {
         // For now, return a placeholder error
         Err(IncrementumError::Internal(
             "Azure Computer Vision integration requires additional dependencies. Please use Tesseract for now.".to_string()
-        )
-        .into())
+        ))
     }
 
     fn is_available(&self) -> bool {
@@ -439,10 +432,7 @@ impl MarkerProvider {
 
         match output {
             Ok(output) if output.status.success() => Ok(()),
-            _ => Err(IncrementumError::Internal(format!(
-                "Marker not found. Please install it or provide the correct path."
-            ))
-            .into()),
+            _ => Err(IncrementumError::Internal("Marker not found. Please install it or provide the correct path.".to_string())),
         }
     }
 }
@@ -485,8 +475,7 @@ impl OCRProvider for MarkerProvider {
             return Err(IncrementumError::Internal(format!(
                 "Marker processing failed: {}",
                 stderr
-            ))
-            .into());
+            )));
         }
 
         let text = String::from_utf8_lossy(&output.stdout).to_string();
@@ -558,10 +547,7 @@ impl NougatProvider {
 
         match output {
             Ok(output) if output.status.success() => Ok(()),
-            _ => Err(IncrementumError::Internal(format!(
-                "Nougat not found. Please install it or provide the correct path."
-            ))
-            .into()),
+            _ => Err(IncrementumError::Internal("Nougat not found. Please install it or provide the correct path.".to_string())),
         }
     }
 }
@@ -600,8 +586,7 @@ impl OCRProvider for NougatProvider {
             return Err(IncrementumError::Internal(format!(
                 "Nougat processing failed: {}",
                 stderr
-            ))
-            .into());
+            )));
         }
 
         let text = String::from_utf8_lossy(&output.stdout).to_string();

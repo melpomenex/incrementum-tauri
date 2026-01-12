@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 
 use crate::backup::BackupManager;
 use crate::cloud::{BackupOptions, CloudProvider};
@@ -226,7 +226,7 @@ impl BackupScheduler {
                 // Perform backup
                 if config.enabled {
                     let manager = BackupManager::new(db.clone());
-                    if let Ok(manager) = manager {
+                    if let Ok(_manager) = manager {
                         // TODO: Get provider from somewhere
                         // For now, just log
                         tracing::info!("Scheduled backup triggered");

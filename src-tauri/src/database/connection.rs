@@ -1,6 +1,6 @@
 //! Database connection management
 
-use sqlx::{Pool, Sqlite, SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 use std::path::PathBuf;
 use std::str::FromStr;
 

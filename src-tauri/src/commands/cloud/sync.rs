@@ -2,11 +2,9 @@
 //!
 //! Tauri commands for cloud synchronization
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tauri::State;
 
-use crate::cloud::{SyncResult, ConflictResolution, SyncConflict};
+use crate::cloud::{SyncResult, ConflictResolution};
 use crate::database::{Database, Repository};
 use crate::cloud_sync::CloudSyncManager;
 
@@ -68,11 +66,11 @@ pub async fn cloud_sync_resolve_conflicts(
 #[tauri::command]
 pub async fn cloud_list_files(
     provider_type: String,
-    path: String,
+    _path: String,
 ) -> Result<Vec<crate::cloud::FileInfo>, String> {
-    use crate::cloud::{CloudProvider, CloudProviderType};
+    use crate::cloud::CloudProviderType;
 
-    let provider_type = CloudProviderType::from_str(&provider_type)
+    let _provider_type = CloudProviderType::from_str(&provider_type)
         .ok_or_else(|| format!("Unknown provider type: {}", provider_type))?;
 
     // TODO: Get authenticated provider instance
@@ -84,12 +82,12 @@ pub async fn cloud_list_files(
 #[tauri::command]
 pub async fn cloud_import_files(
     provider_type: String,
-    files: Vec<String>,
-    repo: State<'_, Repository>,
+    _files: Vec<String>,
+    _repo: State<'_, Repository>,
 ) -> Result<ImportResult, String> {
-    use crate::cloud::{CloudProvider, CloudProviderType};
+    use crate::cloud::CloudProviderType;
 
-    let provider_type = CloudProviderType::from_str(&provider_type)
+    let _provider_type = CloudProviderType::from_str(&provider_type)
         .ok_or_else(|| format!("Unknown provider type: {}", provider_type))?;
 
     // TODO: Implement file import

@@ -139,8 +139,7 @@ pub async fn extract_epub_chapter(file_path: &str, chapter_num: usize) -> Result
         return Err(crate::error::IncrementumError::NotFound(format!(
             "Chapter {} not found",
             chapter_num
-        ))
-        .into());
+        )));
     }
 
     let spine_item = doc.spine.get(chapter_num - 1).cloned().ok_or_else(|| {

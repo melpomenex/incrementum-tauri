@@ -1,7 +1,7 @@
 //! Review commands using FSRS algorithm
 
 use tauri::State;
-use chrono::{Utc, Duration, Datelike, Timelike};
+use chrono::{Utc, Duration};
 use crate::database::Repository;
 use crate::error::Result;
 use crate::models::{LearningItem, ReviewRating, MemoryState, ItemState};
@@ -150,7 +150,7 @@ pub async fn submit_review(
         "submit_review invoked"
     );
     apply_fsrs_review(
-        &*repo,
+        &repo,
         &item_id,
         rating,
         time_taken,

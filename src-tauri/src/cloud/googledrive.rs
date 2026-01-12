@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use reqwest::{Client, header};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use url::Url;
 
@@ -223,7 +223,7 @@ impl GoogleDriveProvider {
 
         // Get storage quota from Google Drive
         let quota_response = self.http_client
-            .get(&format!("{}/about", self.api_base_url()))
+            .get(format!("{}/about", self.api_base_url()))
             .query(&[("fields", "storageQuota")])
             .headers(self.get_auth_headers()?)
             .send()
@@ -267,7 +267,7 @@ impl GoogleDriveProvider {
 
         // Try to find existing Incrementum folder
         let response = self.http_client
-            .get(&format!("{}/files", self.api_base_url()))
+            .get(format!("{}/files", self.api_base_url()))
             .query(&[
                 ("q", "name='Incrementum' and mimeType='application/vnd.google-apps.folder' and trashed=false"),
                 ("spaces", "appDataFolder"),
@@ -296,7 +296,7 @@ impl GoogleDriveProvider {
         });
 
         let response = self.http_client
-            .post(&format!("{}/files", self.api_base_url()))
+            .post(format!("{}/files", self.api_base_url()))
             .query(&[("fields", "id")])
             .headers(headers)
             .json(&create_body)
@@ -430,7 +430,7 @@ impl CloudProvider for GoogleDriveProvider {
         let headers = self.get_auth_headers()?;
 
         let file_name = if path.contains('/') {
-            path.rsplit('/').last().unwrap_or(path)
+            path.rsplit('/').next_back().unwrap_or(path)
         } else {
             path
         };
@@ -443,7 +443,7 @@ impl CloudProvider for GoogleDriveProvider {
             }
 
             let upload_request = self.http_client
-                .post(&format!(
+                .post(format!(
                     "{}/upload/drive/v3/files?uploadType=multipart&fields=id",
                     self.api_base_url().replace("/v3", "")
                 ))
@@ -494,7 +494,7 @@ impl CloudProvider for GoogleDriveProvider {
 
         // Get download URL
         let response = self.http_client
-            .get(&format!("{}/files/{}?fields=webContentLink", self.api_base_url(), file_id))
+            .get(format!("{}/files/{}?fields=webContentLink", self.api_base_url(), file_id))
             .headers(headers.clone())
             .send()
             .await
@@ -546,7 +546,7 @@ impl CloudProvider for GoogleDriveProvider {
         );
 
         let response = self.http_client
-            .get(&format!("{}/files", self.api_base_url()))
+            .get(format!("{}/files", self.api_base_url()))
             .query(&[
                 ("q", &query),
                 ("fields", &String::from("files(id,name,size,modifiedTime,mimeType,kind)")),
@@ -575,7 +575,7 @@ impl CloudProvider for GoogleDriveProvider {
                 name: file.name.clone(),
                 path: format!("{}/{}", path.trim_start_matches('/'), file.name),
                 size: file.size.unwrap_or(0),
-                modified_time: file.modified_time.unwrap_or_else(|| Utc::now()),
+                modified_time: file.modified_time.unwrap_or_else(Utc::now),
                 is_folder: file.mime_type.as_deref() == Some("application/vnd.google-apps.folder"),
                 mime_type: file.mime_type,
             })
@@ -590,7 +590,7 @@ impl CloudProvider for GoogleDriveProvider {
         let headers = self.get_auth_headers()?;
 
         let response = self.http_client
-            .delete(&format!("{}/files/{}", self.api_base_url(), file_id))
+            .delete(format!("{}/files/{}", self.api_base_url(), file_id))
             .headers(headers)
             .send()
             .await
@@ -610,7 +610,7 @@ impl CloudProvider for GoogleDriveProvider {
         let headers = self.get_auth_headers()?;
 
         let response = self.http_client
-            .get(&format!(
+            .get(format!(
                 "{}/files/{}?fields=id,name,size,createdTime,modifiedTime,md5Checksum",
                 self.api_base_url(),
                 file_id
@@ -635,7 +635,7 @@ impl CloudProvider for GoogleDriveProvider {
             name: file.name,
             size: file.size.unwrap_or(0),
             created_time: file.created_time,
-            modified_time: file.modified_time.unwrap_or_else(|| Utc::now()),
+            modified_time: file.modified_time.unwrap_or_else(Utc::now),
             checksum: file.md5_checksum,
         })
     }
@@ -644,7 +644,7 @@ impl CloudProvider for GoogleDriveProvider {
         let headers = self.get_auth_headers()?;
 
         let folder_name = if path.contains('/') {
-            path.rsplit('/').last().unwrap_or(path)
+            path.rsplit('/').next_back().unwrap_or(path)
         } else {
             path
         };
@@ -656,7 +656,7 @@ impl CloudProvider for GoogleDriveProvider {
         });
 
         let response = self.http_client
-            .post(&format!("{}/files?fields=id", self.api_base_url()))
+            .post(format!("{}/files?fields=id", self.api_base_url()))
             .headers(headers)
             .json(&create_body)
             .send()
@@ -668,7 +668,7 @@ impl CloudProvider for GoogleDriveProvider {
             return Err(AppError::Internal(format!("Create folder failed: {}", error_text)));
         }
 
-        let folder: DriveFile = response
+        let _folder: DriveFile = response
             .json()
             .await
             .map_err(|e| AppError::Internal(format!("Failed to parse folder response: {}", e)))?;
@@ -701,7 +701,7 @@ impl GoogleDriveProvider {
         });
 
         let init_response = self.http_client
-            .post(&format!(
+            .post(format!(
                 "{}/upload/drive/v3/files?uploadType=resumable&fields=id",
                 self.api_base_url().replace("/v3", "")
             ))
@@ -801,7 +801,7 @@ impl GoogleDriveProvider {
             );
 
             let response = self.http_client
-                .get(&format!("{}/files", self.api_base_url()))
+                .get(format!("{}/files", self.api_base_url()))
                 .query(&[("q", &query), ("fields", &String::from("files(id)"))])
                 .headers(self.get_auth_headers()?)
                 .send()

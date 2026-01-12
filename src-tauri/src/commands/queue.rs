@@ -70,7 +70,7 @@ pub async fn get_queue(
         // - Items due soon get medium priority (5-7)
         // - Items due later get lower priority (1-4)
         let priority = if is_due {
-            10.0 - (item.interval as f64 / 10.0) // New items (interval 0) get priority 10
+            10.0 - (item.interval / 10.0) // New items (interval 0) get priority 10
         } else if days_until_due <= 1 {
             8.0
         } else if days_until_due <= 3 {
@@ -145,7 +145,7 @@ pub async fn get_queue(
         };
         
         // Extract content preview (first 100 chars)
-        let content_preview = if extract.content.len() > 100 {
+        let _content_preview = if extract.content.len() > 100 {
             format!("{}...", &extract.content[..100])
         } else {
             extract.content.clone()

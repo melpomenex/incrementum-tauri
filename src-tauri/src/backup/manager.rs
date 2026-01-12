@@ -2,17 +2,15 @@
 //!
 //! Handles creating and restoring backups from cloud storage
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path as StdPath, PathBuf};
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 use crate::cloud::{
-    CloudProvider, CloudProviderType,
+    CloudProvider,
     BackupOptions, BackupInfo, BackupIncludes,
-    RestoreResult, RestoreConflict,
+    RestoreResult,
 };
 use crate::database::Database;
 use crate::error::AppError;
@@ -84,7 +82,7 @@ impl BackupManager {
 
         // 3. Export settings
         if options.include_settings {
-            let settings_path = backup_dir.join("settings.json");
+            let _settings_path = backup_dir.join("settings.json");
             // TODO: Implement settings export
             // self.export_settings(&settings_path).await?;
             // file_count += 1;
@@ -233,7 +231,7 @@ impl BackupManager {
             .map_err(|e| AppError::Internal(format!("Failed to parse manifest: {}", e)))?;
 
         let mut restored_items = 0;
-        let mut conflicts = Vec::new();
+        let conflicts = Vec::new();
 
         // Check for conflicts and restore
         if manifest.includes.database {
@@ -420,12 +418,12 @@ impl BackupManager {
 
             if file_type.is_dir() {
                 // This is a document directory
-                let doc_id = entry.file_name();
+                let _doc_id = entry.file_name();
                 let metadata_path = entry.path().join("metadata.json");
 
                 if metadata_path.exists() {
                     // Read metadata
-                    let metadata_json = fs::read_to_string(&metadata_path)
+                    let _metadata_json = fs::read_to_string(&metadata_path)
                         .await
                         .map_err(|e| AppError::Internal(format!("Failed to read metadata: {}", e)))?;
 

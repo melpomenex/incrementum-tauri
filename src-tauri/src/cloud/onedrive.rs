@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use reqwest::{Client, header};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use url::Url;
 
@@ -220,14 +220,14 @@ impl OneDriveProvider {
 
         // Fetch storage quota
         let quota_response = self.http_client
-            .get(&format!("{}/root/special/appfolder", self.api_base_url()))
+            .get(format!("{}/root/special/appfolder", self.api_base_url()))
             .headers(self.get_auth_headers()?)
             .send()
             .await;
 
         let storage_quota = match quota_response {
             Ok(resp) if resp.status().is_success() => {
-                if let Ok(folder) = resp.json::<DriveItem>().await {
+                if let Ok(_folder) = resp.json::<DriveItem>().await {
                     Some(StorageQuota {
                         used: 0, // OneDrive doesn't provide per-folder quota
                         total: 0,
@@ -264,7 +264,7 @@ impl OneDriveProvider {
         });
 
         let response = self.http_client
-            .post(&format!("{}/root/children", self.api_base_url()))
+            .post(format!("{}/root/children", self.api_base_url()))
             .headers(headers)
             .json(&create_folder_body)
             .send()
@@ -402,7 +402,7 @@ impl CloudProvider for OneDriveProvider {
             }
 
             let response = self.http_client
-                .put(&format!("{}/{}:/content", self.api_base_url(), upload_path))
+                .put(format!("{}/{}:/content", self.api_base_url(), upload_path))
                 .headers(headers)
                 .body(data)
                 .send()
@@ -445,7 +445,7 @@ impl CloudProvider for OneDriveProvider {
 
         // Get download URL first
         let response = self.http_client
-            .get(&format!("{}/{}:/content", self.api_base_url(), download_path))
+            .get(format!("{}/{}:/content", self.api_base_url(), download_path))
             .headers(headers)
             .send()
             .await
@@ -482,7 +482,7 @@ impl CloudProvider for OneDriveProvider {
         };
 
         let response = self.http_client
-            .get(&format!("{}/{}", self.api_base_url(), list_path))
+            .get(format!("{}/{}", self.api_base_url(), list_path))
             .headers(headers)
             .send()
             .await
@@ -509,7 +509,7 @@ impl CloudProvider for OneDriveProvider {
                     name: name.clone(),
                     path: format!("{}/{}", path.trim_start_matches('/'), name),
                     size: item.size.unwrap_or(0),
-                    modified_time: item.last_modified_date_time.unwrap_or_else(|| Utc::now()),
+                    modified_time: item.last_modified_date_time.unwrap_or_else(Utc::now),
                     is_folder: item.folder.is_some(),
                     mime_type: item.file.and_then(|f| f.mime_type),
                 }
@@ -529,7 +529,7 @@ impl CloudProvider for OneDriveProvider {
         };
 
         let response = self.http_client
-            .delete(&format!("{}/{}", self.api_base_url(), delete_path))
+            .delete(format!("{}/{}", self.api_base_url(), delete_path))
             .headers(headers)
             .send()
             .await
@@ -553,7 +553,7 @@ impl CloudProvider for OneDriveProvider {
         };
 
         let response = self.http_client
-            .get(&format!("{}/{}", self.api_base_url(), metadata_path))
+            .get(format!("{}/{}", self.api_base_url(), metadata_path))
             .headers(headers)
             .send()
             .await
@@ -574,7 +574,7 @@ impl CloudProvider for OneDriveProvider {
             name: item.name,
             size: item.size.unwrap_or(0),
             created_time: item.created_date_time,
-            modified_time: item.last_modified_date_time.unwrap_or_else(|| Utc::now()),
+            modified_time: item.last_modified_date_time.unwrap_or_else(Utc::now),
             checksum: item.file.and_then(|f| f.hashes.and_then(|h| h.sha256_hash)),
         })
     }
@@ -608,7 +608,7 @@ impl CloudProvider for OneDriveProvider {
         });
 
         let response = self.http_client
-            .post(&format!("{}/children", base_path))
+            .post(format!("{}/children", base_path))
             .headers(headers)
             .json(&create_folder_body)
             .send()
@@ -646,13 +646,13 @@ impl OneDriveProvider {
         let headers = self.get_auth_headers()?;
         let upload_session_body = serde_json::json!({
             "item": {
-                "name": path.rsplit('/').last().unwrap_or("file"),
+                "name": path.rsplit('/').next_back().unwrap_or("file"),
                 "@microsoft.graph.conflictBehavior": "rename"
             }
         });
 
         let session_response = self.http_client
-            .post(&format!("{}/{}:/createUploadSession", self.api_base_url(), path))
+            .post(format!("{}/{}:/createUploadSession", self.api_base_url(), path))
             .headers(headers)
             .json(&upload_session_body)
             .send()
@@ -673,7 +673,7 @@ impl OneDriveProvider {
         let total_size = data.len() as u64;
         let mut uploaded = 0u64;
 
-        for (chunk_index, chunk) in data.chunks(CHUNK_SIZE).enumerate() {
+        for chunk in data.chunks(CHUNK_SIZE) {
             let chunk_start = uploaded;
             let chunk_end = uploaded + chunk.len() as u64 - 1;
 

@@ -2,7 +2,6 @@
 //!
 //! Handles two-way synchronization between local data and cloud storage
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,8 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::cloud::{
-    CloudProvider, CloudProviderType, SyncConflict, SyncResult, ConflictResolution,
-    FileInfo, FileMetadata,
+    CloudProvider, SyncConflict, SyncResult, ConflictResolution,
 };
 use crate::database::Database;
 use crate::error::AppError;
@@ -26,6 +24,7 @@ pub struct CloudSyncManager {
 
 /// Cloud sync state
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 struct CloudSyncState {
     last_sync: Option<DateTime<Utc>>,
     sync_version: u64,
@@ -33,16 +32,6 @@ struct CloudSyncState {
     pending_conflicts: Vec<SyncConflict>,
 }
 
-impl Default for CloudSyncState {
-    fn default() -> Self {
-        Self {
-            last_sync: None,
-            sync_version: 0,
-            last_synced_documents: HashMap::new(),
-            pending_conflicts: Vec::new(),
-        }
-    }
-}
 
 impl CloudSyncManager {
     /// Create a new cloud sync manager
@@ -233,8 +222,8 @@ impl CloudSyncManager {
                     conflicts.push(SyncConflict {
                         item_id: id.clone(),
                         item_type: "document".to_string(),
-                        local_modified: local.local_modified.unwrap_or_else(|| Utc::now()),
-                        remote_modified: remote.remote_modified.unwrap_or_else(|| Utc::now()),
+                        local_modified: local.local_modified.unwrap_or_else(Utc::now),
+                        remote_modified: remote.remote_modified.unwrap_or_else(Utc::now),
                     });
                 }
             }
@@ -254,7 +243,7 @@ impl CloudSyncManager {
         provider: &dyn CloudProvider,
         change: &SyncChange,
     ) -> Result<(), AppError> {
-        if let SyncData::Document { id, title, file_path, .. } = &change.data {
+        if let SyncData::Document { id, title: _, file_path, .. } = &change.data {
             // Read document file
             let file_data = if let Some(path) = file_path {
                 tokio::fs::read(path)
@@ -364,8 +353,8 @@ impl CloudSyncManager {
     /// Force upload local version
     async fn force_upload_local(
         &self,
-        provider: &dyn CloudProvider,
-        conflict: &SyncConflict,
+        _provider: &dyn CloudProvider,
+        _conflict: &SyncConflict,
     ) -> Result<(), AppError> {
         // TODO: Implement force upload
         Ok(())
@@ -374,15 +363,15 @@ impl CloudSyncManager {
     /// Force download remote version
     async fn force_download_remote(
         &self,
-        provider: &dyn CloudProvider,
-        conflict: &SyncConflict,
+        _provider: &dyn CloudProvider,
+        _conflict: &SyncConflict,
     ) -> Result<(), AppError> {
         // TODO: Implement force download
         Ok(())
     }
 
     /// Create duplicate when both versions should be kept
-    async fn create_duplicate(&self, conflict: &SyncConflict) -> Result<(), AppError> {
+    async fn create_duplicate(&self, _conflict: &SyncConflict) -> Result<(), AppError> {
         // TODO: Implement duplicate creation
         Ok(())
     }

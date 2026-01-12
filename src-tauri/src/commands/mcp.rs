@@ -5,7 +5,6 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Manager;
-use tokio::sync::RwLock;
 
 // Global MCP client manager
 lazy_static::lazy_static! {
@@ -118,7 +117,7 @@ pub async fn mcp_call_tool(
 #[tauri::command]
 pub async fn mcp_update_server(
     id: String,
-    updates: ServerConfigUpdate,
+    _updates: ServerConfigUpdate,
 ) -> Result<(), String> {
     // Remove the existing server
     MCP_MANAGER.remove_server(&id).await?;

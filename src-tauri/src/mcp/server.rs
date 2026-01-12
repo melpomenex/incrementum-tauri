@@ -53,7 +53,7 @@ impl MCPServer {
             // Parse and handle the request
             let request: JsonRpcRequest = match serde_json::from_str(&line) {
                 Ok(req) => req,
-                Err(e) => {
+                Err(_e) => {
                     let error_response = JsonRpcResponse {
                         jsonrpc: "2.0".to_string(),
                         id: serde_json::json!(null),
@@ -98,7 +98,7 @@ impl MCPServer {
     }
 
     /// Handle initialize request
-    fn handle_initialize(&self, params: Option<&serde_json::Value>) -> Result<serde_json::Value, JsonRpcError> {
+    fn handle_initialize(&self, _params: Option<&serde_json::Value>) -> Result<serde_json::Value, JsonRpcError> {
         Ok(json!({
             "protocolVersion": self.info.protocol_version,
             "capabilities": self.capabilities,

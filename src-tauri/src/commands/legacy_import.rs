@@ -210,7 +210,7 @@ async fn run_legacy_migrations(pool: &SqlitePool) -> Result<()> {
 
         let applied_at = Utc::now().to_rfc3339();
         sqlx::query("INSERT INTO _schema_migrations (name, applied_at) VALUES (?1, ?2)")
-            .bind(&migration.name)
+            .bind(migration.name)
             .bind(&applied_at)
             .execute(&mut *tx)
             .await?;
@@ -301,7 +301,7 @@ async fn merge_legacy_database(
         .map_err(|e| IncrementumError::Internal(format!("Failed to read legacy extracts: {}", e)))?;
 
     for row in legacy_extracts {
-        let legacy_id: String = row.try_get("id")?;
+        let _legacy_id: String = row.try_get("id")?;
         let legacy_document_id: String = row.try_get("document_id")?;
         let target_document_id = match doc_id_map.get(&legacy_document_id) {
             Some(id) => id.clone(),

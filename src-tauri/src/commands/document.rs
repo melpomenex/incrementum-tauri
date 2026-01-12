@@ -56,8 +56,7 @@ pub async fn import_document(
             return Err(crate::error::IncrementumError::NotFound(format!(
                 "Duplicate document detected: Already imported as '{}'",
                 duplicate.title
-            ))
-            .into());
+            )));
         }
     }
 
@@ -289,7 +288,7 @@ pub async fn fetch_url_content(url: String) -> Result<FetchedUrlContent> {
     // Extract filename from URL or generate one
     let file_name = url_parsed
         .path_segments()
-        .and_then(|segments| segments.last())
+        .and_then(|mut segments| segments.next_back())
         .unwrap_or("download")
         .to_string();
 
@@ -335,7 +334,7 @@ pub async fn fetch_url_content(url: String) -> Result<FetchedUrlContent> {
         return Err(crate::error::IncrementumError::Internal(format!(
             "HTTP error: {}",
             response.status()
-        )).into());
+        )));
     }
 
     // Get content type from response if unknown

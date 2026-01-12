@@ -159,13 +159,13 @@ impl NotificationManager {
     pub fn create_cards_due(count: usize, overdue: usize) -> Notification {
         let (title, body, priority) = if overdue > 0 {
             (
-                format!("Overdue Reviews!"),
+                "Overdue Reviews!".to_string(),
                 format!("You have {} overdue cards to review.", overdue),
                 NotificationPriority::High,
             )
         } else {
             (
-                format!("Reviews Due"),
+                "Reviews Due".to_string(),
                 format!("You have {} cards due for review.", count),
                 NotificationPriority::Normal,
             )

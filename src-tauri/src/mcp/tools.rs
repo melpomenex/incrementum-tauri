@@ -6,7 +6,6 @@ use std::sync::Arc;
 use crate::database::Repository;
 use crate::commands::review::apply_fsrs_review;
 use crate::models::{Document, Extract, LearningItem, FileType, ItemType};
-use uuid::Uuid;
 use chrono::Utc;
 
 pub struct MCPToolRegistry {
@@ -414,7 +413,7 @@ impl MCPToolRegistry {
                     .into_iter()
                     .filter(|d| {
                         d.title.to_lowercase().contains(&query.to_lowercase())
-                            || d.content.as_ref().map_or(false, |c| c.to_lowercase().contains(&query.to_lowercase()))
+                            || d.content.as_ref().is_some_and(|c| c.to_lowercase().contains(&query.to_lowercase()))
                     })
                     .take(args["limit"].as_u64().unwrap_or(10) as usize)
                     .collect();
@@ -898,7 +897,7 @@ impl MCPToolRegistry {
 
         let extract_id = args["extract_id"].as_str().ok_or("extract_id is required")?;
         let rating = args["rating"].as_u64().ok_or("rating is required")?;
-        let time_taken = args["time_taken"].as_i64().map(|t| t as i32);
+        let _time_taken = args["time_taken"].as_i64().map(|t| t as i32);
 
         // Get the extract
         let extract = match self.repository.get_extract(extract_id).await {

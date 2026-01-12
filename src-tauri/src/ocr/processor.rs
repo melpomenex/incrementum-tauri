@@ -29,21 +29,21 @@ impl OCRProcessor {
     }
 
     /// Process a PDF file with OCR (page by page)
-    pub async fn process_pdf(&self, pdf_path: &Path) -> Result<Vec<OCRResult>> {
+    pub async fn process_pdf(&self, _pdf_path: &Path) -> Result<Vec<OCRResult>> {
         // For now, this is a placeholder
         // In production, you'd:
         // 1. Extract images from PDF pages
         // 2. Run OCR on each image
         // 3. Combine results
 
-        let provider = create_provider(self.config.default_provider, &self.config)?;
+        let _provider = create_provider(self.config.default_provider, &self.config)?;
 
         // Simple implementation: just return empty results
         Ok(vec![])
     }
 
     /// Process a PDF page with OCR
-    pub async fn process_pdf_page(&self, pdf_path: &Path, page_num: usize) -> Result<OCRResult> {
+    pub async fn process_pdf_page(&self, _pdf_path: &Path, _page_num: usize) -> Result<OCRResult> {
         // For now, this is a placeholder
         // In production, you'd:
         // 1. Extract the specific page as an image
@@ -51,8 +51,7 @@ impl OCRProcessor {
 
         Err(crate::error::IncrementumError::Internal(
             "PDF page OCR not yet implemented".to_string(),
-        )
-        .into())
+        ))
     }
 
     /// Get available providers

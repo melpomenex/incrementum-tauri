@@ -3,7 +3,7 @@
 use sqlx::{Pool, Sqlite, Row};
 use chrono::Utc;
 use crate::error::Result;
-use crate::models::{Document, DocumentMetadata, Extract, LearningItem, Category, FileType, ItemType, ItemState};
+use crate::models::{Document, DocumentMetadata, Extract, LearningItem, FileType, ItemType, ItemState};
 
 pub struct Repository {
     pool: Pool<Sqlite>,
@@ -64,7 +64,7 @@ impl Repository {
     pub async fn create_document(&self, document: &Document) -> Result<Document> {
         let file_type_str = format!("{:?}", document.file_type).to_lowercase();
         let tags_json = serde_json::to_string(&document.tags)?;
-        let metadata_json = document.metadata.as_ref().map(|m| serde_json::to_string(m)).transpose()?;
+        let metadata_json = document.metadata.as_ref().map(serde_json::to_string).transpose()?;
 
         sqlx::query(
             r#"
@@ -87,9 +87,9 @@ impl Repository {
         .bind(document.current_page)
         .bind(&document.category)
         .bind(&tags_json)
-        .bind(&document.date_added)
-        .bind(&document.date_modified)
-        .bind(&document.date_last_reviewed)
+        .bind(document.date_added)
+        .bind(document.date_modified)
+        .bind(document.date_last_reviewed)
         .bind(document.extract_count)
         .bind(document.learning_item_count)
         .bind(document.priority_rating)
@@ -277,7 +277,7 @@ impl Repository {
         .bind(updates.current_page)
         .bind(&updates.category)
         .bind(&tags_json)
-        .bind(&updates.date_modified)
+        .bind(updates.date_modified)
         .bind(updates.priority_rating)
         .bind(updates.priority_slider)
         .bind(updates.priority_score)
@@ -302,7 +302,7 @@ impl Repository {
     ) -> Result<()> {
         let metadata_json = metadata
             .as_ref()
-            .map(|m| serde_json::to_string(m))
+            .map(serde_json::to_string)
             .transpose()?;
 
         sqlx::query(
@@ -429,14 +429,14 @@ impl Repository {
         .bind(&extract.notes)
         .bind(extract.progressive_disclosure_level)
         .bind(extract.max_disclosure_level)
-        .bind(&extract.date_created)
-        .bind(&extract.date_modified)
+        .bind(extract.date_created)
+        .bind(extract.date_modified)
         .bind(&tags_json)
         .bind(&extract.category)
         .bind(stability)
         .bind(difficulty)
-        .bind(&extract.next_review_date)
-        .bind(&extract.last_review_date)
+        .bind(extract.next_review_date)
+        .bind(extract.last_review_date)
         .bind(extract.review_count)
         .bind(extract.reps)
         .execute(&self.pool)
@@ -547,11 +547,11 @@ impl Repository {
         .bind(&extract.highlight_color)
         .bind(&tags_json)
         .bind(&extract.category)
-        .bind(&extract.date_modified)
+        .bind(extract.date_modified)
         .bind(stability)
         .bind(difficulty)
-        .bind(&extract.next_review_date)
-        .bind(&extract.last_review_date)
+        .bind(extract.next_review_date)
+        .bind(extract.last_review_date)
         .bind(extract.review_count)
         .bind(extract.reps)
         .bind(&extract.id)
@@ -717,10 +717,10 @@ impl Repository {
         .bind(item.difficulty)
         .bind(item.interval)
         .bind(item.ease_factor)
-        .bind(&item.due_date)
-        .bind(&item.date_created)
-        .bind(&item.date_modified)
-        .bind(&item.last_review_date)
+        .bind(item.due_date)
+        .bind(item.date_created)
+        .bind(item.date_modified)
+        .bind(item.last_review_date)
         .bind(item.review_count)
         .bind(item.lapses)
         .bind(&state_str)
@@ -825,9 +825,9 @@ impl Repository {
     }
 
     pub async fn update_learning_item(&self, item: &LearningItem) -> Result<LearningItem> {
-        let item_type_str = format!("{:?}", item.item_type).to_lowercase();
+        let _item_type_str = format!("{:?}", item.item_type).to_lowercase();
         let state_str = format!("{:?}", item.state).to_lowercase();
-        let tags_json = serde_json::to_string(&item.tags)?;
+        let _tags_json = serde_json::to_string(&item.tags)?;
 
         let (stability, difficulty) = item.memory_state.as_ref()
             .map(|s| (Some(s.stability), Some(s.difficulty)))
@@ -843,14 +843,14 @@ impl Repository {
             WHERE id = ?11
             "#,
         )
-        .bind(&item.due_date)
+        .bind(item.due_date)
         .bind(item.interval)
         .bind(item.ease_factor)
         .bind(&state_str)
         .bind(item.review_count)
         .bind(item.lapses)
-        .bind(&item.last_review_date)
-        .bind(&item.date_modified)
+        .bind(item.last_review_date)
+        .bind(item.date_modified)
         .bind(stability)
         .bind(difficulty)
         .bind(&item.id)
@@ -916,7 +916,7 @@ impl Repository {
             "#,
         )
         .bind(id)
-        .bind(&now)
+        .bind(now)
         .execute(&self.pool)
         .await?;
 
@@ -948,7 +948,7 @@ impl Repository {
             .bind(items_reviewed)
             .bind(correct_answers)
             .bind(total_time)
-            .bind(&end_time)
+            .bind(end_time)
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -1000,7 +1000,7 @@ impl Repository {
         .bind(new_due_date)
         .bind(new_interval)
         .bind(new_ease_factor)
-        .bind(&now)
+        .bind(now)
         .execute(&self.pool)
         .await?;
 
@@ -1165,8 +1165,8 @@ impl Repository {
         .bind(video_id)
         .bind(transcript)
         .bind(segments_json)
-        .bind(&now)
-        .bind(&now)
+        .bind(now)
+        .bind(now)
         .execute(&self.pool)
         .await?;
 

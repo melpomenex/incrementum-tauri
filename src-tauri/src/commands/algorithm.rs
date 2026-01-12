@@ -3,13 +3,13 @@
 use crate::algorithms::{
     calculate_priority_score, calculate_review_statistics, compare_algorithms,
     optimizer::{OptimizationParams, OptimizationResult, ParameterOptimizer},
-    DocumentScheduler as DocScheduler, DocumentScheduleResult, DocumentSchedulerParams,
+    DocumentScheduler as DocScheduler,
     AlgorithmComparison, SM2Params,
 };
 use crate::commands::review::RepositoryExt;
 use crate::error::Result;
 use crate::database::Repository;
-use crate::models::{ReviewRating, LearningItem};
+use crate::models::ReviewRating;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use chrono::Utc;
@@ -80,7 +80,7 @@ pub async fn calculate_sm2_next(
     // Get current SM-2 params (or use defaults)
     let current_params = SM2Params {
         ease_factor: item.ease_factor,
-        interval: item.interval as f64,
+        interval: item.interval,
         repetitions: item.review_count as u32,
     };
 
@@ -358,7 +358,7 @@ pub async fn optimize_algorithm_params(
     repo: State<'_, Repository>,
 ) -> Result<OptimizationResult> {
     // Get all learning items for optimization
-    let items = repo.get_all_learning_items().await?;
+    let _items = repo.get_all_learning_items().await?;
 
     // For now, we don't have full review history, so we'll use a simplified approach
     // Create pseudo-history from current item states

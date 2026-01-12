@@ -3,9 +3,9 @@
 //! Generates flashcards from documents, extracts, and other content using LLMs.
 
 use crate::ai::{
-    providers::{ChatCompletionRequest, LLMProviderType},
-    prompts::{parse_structured_response, PromptBuilder, StructuredGeneration},
-    AIProvider, Message,
+    providers::ChatCompletionRequest,
+    prompts::{parse_structured_response, PromptBuilder},
+    AIProvider,
 };
 use serde::{Deserialize, Serialize};
 

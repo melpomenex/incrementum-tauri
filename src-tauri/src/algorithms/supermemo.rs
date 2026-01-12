@@ -305,7 +305,7 @@ impl SM15Algorithm {
     }
 
     pub fn next_state(&self, state: &SM15State, rating: ReviewRating) -> SM15State {
-        let rating_value = match rating {
+        let _rating_value = match rating {
             ReviewRating::Again => 1,
             ReviewRating::Hard => 2,
             ReviewRating::Good => 3,

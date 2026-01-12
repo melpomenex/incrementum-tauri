@@ -2,7 +2,6 @@
 //!
 //! Commands for creating and restoring backups
 
-use std::sync::Arc;
 use tauri::State;
 
 use crate::backup::BackupManager;
@@ -79,7 +78,7 @@ pub async fn backup_restore(
 pub async fn backup_list(
     provider_type: String,
 ) -> Result<Vec<BackupInfo>, String> {
-    let provider: Box<dyn CloudProvider> = match CloudProviderType::from_str(&provider_type) {
+    let _provider: Box<dyn CloudProvider> = match CloudProviderType::from_str(&provider_type) {
         Some(CloudProviderType::OneDrive) => {
             Box::new(OneDriveProvider::new(OneDriveConfig::default()))
         }

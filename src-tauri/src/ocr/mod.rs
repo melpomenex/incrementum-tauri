@@ -9,8 +9,7 @@
 pub mod providers;
 pub mod processor;
 
-pub use providers::{OCRProvider, OCRProviderType, OCRResult, OCRError};
-pub use processor::OCRProcessor;
+pub use providers::OCRProviderType;
 
 use serde::{Deserialize, Serialize};
 

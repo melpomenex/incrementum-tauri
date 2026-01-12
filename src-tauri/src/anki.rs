@@ -9,7 +9,7 @@ use std::io::{Cursor, Read, Seek, Write};
 use std::fs::File;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zip::ZipArchive;
-use rusqlite::{Connection, Result as SqliteResult};
+use rusqlite::Connection;
 use serde_json::Value;
 use crate::error::{Result, IncrementumError};
 use crate::database::Repository;
@@ -201,7 +201,7 @@ fn extract_notes_from_deck(
 
         // Get model name
         let model_name = models
-            .get(&mid.to_string())
+            .get(mid.to_string())
             .and_then(|v| v.as_object())
             .and_then(|o| o.get("name"))
             .and_then(|v| v.as_str())
@@ -284,7 +284,7 @@ fn extract_cards_from_deck(conn: &Connection, deck_id: i64) -> Result<Vec<AnkiCa
 
 fn get_model_field_names(models: &Value, model_id: i64) -> Vec<String> {
     models
-        .get(&model_id.to_string())
+        .get(model_id.to_string())
         .and_then(|v| v.as_object())
         .and_then(|o| o.get("flds"))
         .and_then(|v| v.as_array())
@@ -333,7 +333,7 @@ fn build_learning_item(
         (ItemType::Cloze, cloze.clone(), None, Some(cloze))
     } else {
         let question_field = find_question_field(note)
-            .or_else(|| note.fields.get(0));
+            .or_else(|| note.fields.first());
         let answer_field = find_answer_field(note)
             .or_else(|| note.fields.get(1));
 

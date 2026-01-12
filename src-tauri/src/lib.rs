@@ -111,7 +111,7 @@ pub fn run() {
 
                 if let Some(window) = app.get_webview_window("main") {
                     if std::env::var("INCREMENTUM_OPEN_DEVTOOLS").is_ok() {
-                        let _ = window.open_devtools();
+                        window.open_devtools();
                     }
                     let _ = window.eval(
                         "console.log('Webview location:', window.location.href);",
