@@ -224,6 +224,7 @@ export function QueueScrollPage() {
   }, [currentIndex, isTransitioning, isRating]);
 
   // Mouse wheel scroll detection - only navigate when document can't scroll further
+  // For EPUB documents, disable auto-advance to allow user to read through the entire book
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       const now = Date.now();
@@ -231,6 +232,24 @@ export function QueueScrollPage() {
       // Debounce scroll events
       if (now - lastScrollTime.current < scrollCooldown) {
         return;
+      }
+
+      // Check if current item is an EPUB document
+      // EPUBs can be lengthy books, so we don't want to auto-advance when user reaches the end
+      // User should explicitly rate or navigate to show they've finished reading
+      let isEPUB = false;
+      if (currentItem?.type === "document" && currentItem.documentId) {
+        const doc = documents.find(d => d.id === currentItem.documentId);
+        if (doc) {
+          const fileType = doc.fileType || doc.filePath?.split('.').pop()?.toLowerCase();
+          isEPUB = fileType === "epub";
+        }
+      }
+
+      // For EPUB documents, don't auto-advance on scroll boundary
+      // User must explicitly rate or use keyboard navigation to move to next item
+      if (isEPUB) {
+        return; // Let the EPUB scroll normally, no auto-advance
       }
 
       // Find the scrollable content element
@@ -269,7 +288,7 @@ export function QueueScrollPage() {
       container.addEventListener("wheel", handleWheel, { passive: true });
       return () => container.removeEventListener("wheel", handleWheel);
     }
-  }, [goToNext, goToPrevious]);
+  }, [goToNext, goToPrevious, currentItem, documents]);
 
   // Keyboard navigation - use modifier keys to avoid conflict with document scrolling
   useEffect(() => {
@@ -661,7 +680,14 @@ export function QueueScrollPage() {
 
         {/* Help Text */}
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 text-white text-xs bg-black/40 backdrop-blur-sm px-3 py-1 rounded-lg pointer-events-none">
-          Scroll to edge to navigate • Alt+Arrows/Space to skip • H to toggle controls • Esc to exit
+          {currentItem?.type === "document" && (() => {
+            const doc = documents.find(d => d.id === currentItem.documentId);
+            const fileType = doc?.fileType || doc?.filePath?.split('.').pop()?.toLowerCase();
+            return fileType === "epub"
+              ? "EPUB: Rate or use Alt+Arrows to navigate • H to toggle controls • Esc to exit"
+              : "Scroll to edge to navigate • Alt+Arrows/Space to skip • H to toggle controls • Esc to exit";
+          })()}
+          {currentItem?.type !== "document" && "Scroll to edge to navigate • Alt+Arrows/Space to skip • H to toggle controls • Esc to exit"}
         </div>
       </div>
     </div>
