@@ -3,9 +3,11 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { DocumentViewer as BaseDocumentViewer } from "./DocumentViewer";
-import { AssistantPanel, type AssistantContext } from "../assistant/AssistantPanel";
+import { AssistantPanel, type AssistantContext, type AssistantPosition } from "../assistant/AssistantPanel";
 import { useDocumentStore } from "../../stores";
 import * as documentsApi from "../../api/documents";
+
+const ASSISTANT_POSITION_KEY = "assistant-panel-position";
 
 interface DocumentViewerWithAssistantProps {
   documentId: string;
@@ -16,6 +18,10 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
   const [selection, setSelection] = useState("");
   const currentDocument = useDocumentStore((state) => state.currentDocument);
   const [documentContent, setDocumentContent] = useState<string | undefined>(undefined);
+  const [assistantPosition, setAssistantPosition] = useState<AssistantPosition>(() => {
+    const saved = localStorage.getItem(ASSISTANT_POSITION_KEY);
+    return saved === "left" ? "left" : "right";
+  });
 
   useEffect(() => {
     let isActive = true;
@@ -51,23 +57,44 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
     [currentDocument?.content, documentContent, documentId, selection]
   );
 
+  const handlePositionChange = (newPosition: AssistantPosition) => {
+    setAssistantPosition(newPosition);
+    localStorage.setItem(ASSISTANT_POSITION_KEY, newPosition);
+  };
+
+  const assistantPanel = (
+    <AssistantPanel
+      context={assistantContext}
+      className="flex-shrink-0"
+      onInputHoverChange={setAssistantInputActive}
+      position={assistantPosition}
+      onPositionChange={handlePositionChange}
+    />
+  );
+
+  const documentViewer = (
+    <div className="flex-1 h-full overflow-hidden">
+      <BaseDocumentViewer
+        documentId={documentId}
+        disableHoverRating={assistantInputActive}
+        onSelectionChange={setSelection}
+      />
+    </div>
+  );
+
   return (
     <div className="flex h-full">
-      {/* Document Viewer */}
-      <div className="flex-1 h-full overflow-hidden">
-        <BaseDocumentViewer
-          documentId={documentId}
-          disableHoverRating={assistantInputActive}
-          onSelectionChange={setSelection}
-        />
-      </div>
-
-      {/* Assistant Panel */}
-      <AssistantPanel
-        context={assistantContext}
-        className="flex-shrink-0"
-        onInputHoverChange={setAssistantInputActive}
-      />
+      {assistantPosition === "left" ? (
+        <>
+          {assistantPanel}
+          {documentViewer}
+        </>
+      ) : (
+        <>
+          {documentViewer}
+          {assistantPanel}
+        </>
+      )}
     </div>
   );
 }
@@ -86,3 +113,4 @@ export function WebBrowserTab(_props: WebBrowserWithAssistantProps) {
     <BaseWebBrowserTab />
   );
 }
+

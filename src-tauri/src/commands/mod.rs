@@ -7,6 +7,7 @@ pub mod document;
 pub mod extract;
 pub mod extract_bulk;
 pub mod learning_item;
+pub mod extract_review;
 pub mod category;
 pub mod queue;
 pub mod queue_bulk;
@@ -42,6 +43,7 @@ pub use mcp::*;
 pub use llm::*;
 pub use legacy_import::*;
 pub use ocr::*;
+pub use extract_review::*;
 
 // Cloud commands
 pub use cloud::oauth::*;

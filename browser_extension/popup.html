@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            width: 350px;
+            min-height: 400px;
+            margin: 0;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            background: #f8f9fa;
+            color: #333;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status.connected .status-dot {
+            background: #28a745;
+        }
+
+        .status.disconnected .status-dot {
+            background: #dc3545;
+        }
+
+        .status.connecting .status-dot {
+            background: #ffc107;
+        }
+
+        .button {
+            width: 100%;
+            padding: 10px 16px;
+            margin: 6px 0;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .button.primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .button.primary:hover {
+            background: #0056b3;
+        }
+
+        .button.secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .button.secondary:hover {
+            background: #545b62;
+        }
+
+        .button.success {
+            background: #28a745;
+            color: white;
+        }
+
+        .button.success:hover {
+            background: #1e7e34;
+        }
+
+        .button.warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .button.warning:hover {
+            background: #e0a800;
+        }
+
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .section {
+            margin: 16px 0;
+            padding: 12px 0;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .extract-mode {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 6px;
+            margin: 8px 0;
+        }
+
+        .extract-mode.active {
+            background: #c8e6c9;
+            border: 1px solid #a5d6a7;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .stat-item {
+            padding: 6px 8px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .notification {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            left: 10px;
+            padding: 12px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            font-size: 13px;
+            z-index: 1000;
+        }
+
+        .notification.success {
+            border-color: #28a745;
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .notification.error {
+            border-color: #dc3545;
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧠 Incrementum</h1>
+    </div>
+
+    <div id="status" class="status connecting">
+        <div id="status-indicator" class="status-dot"></div>
+        <span id="status-text">Connecting...</span>
+    </div>
+
+    <div id="extract-mode-indicator" class="extract-mode hidden">
+        <span>📝 Extract Mode Active</span>
+    </div>
+
+    <button id="save-current-tab" class="button primary">
+        💾 Save Current Tab
+    </button>
+
+    <button id="save-all-tabs" class="button secondary">
+        📚 Save All Tabs
+    </button>
+
+    <button id="toggle-extract-mode" class="button success">
+        ✂️ Toggle Extract Mode
+    </button>
+
+    <button id="generate-summary" class="button warning">
+        🤖 Generate Summary
+    </button>
+
+    <div class="section">
+        <div class="section-title">Statistics</div>
+        <div class="stats">
+            <div class="stat-item">
+                <div id="extracts-count" class="stat-value">0</div>
+                <div class="stat-label">Extracts</div>
+            </div>
+            <div class="stat-item">
+                <div id="highlights-count" class="stat-value">0</div>
+                <div class="stat-label">Highlights</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <button id="quick-extract" class="button secondary">
+            📝 Quick Extract
+        </button>
+        <button id="toggle-highlights" class="button secondary">
+            🖍️ Toggle Highlights
+        </button>
+        <button id="test-connection" class="button secondary">
+            🔗 Test Connection
+        </button>
+        <a href="#" id="options-link" style="text-decoration: none; color: #007bff; font-size: 13px; display: block; margin-top: 10px; text-align: center;">
+            ⚙️ Settings
+        </a>
+    </div>
+
+    <div id="notification" class="notification hidden"></div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

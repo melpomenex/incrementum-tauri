@@ -71,8 +71,9 @@ walkdir = "2"
 regex = "1"
 zip = "0.6"
 rusqlite = { version = "0.31", features = ["bundled"] }
-xcap = "0.0.9"
 image = "0.24"
+# Screenshot capture - optional feature
+xcap = { version = "0.8", optional = true }
 
 # RSS parsing
 roxmltree = "0.20"
@@ -90,6 +91,7 @@ dirs = "5.0"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+screenshot = ["xcap"]
 
 # Disable LTO to avoid bitcode compatibility issues
 [profile.release]

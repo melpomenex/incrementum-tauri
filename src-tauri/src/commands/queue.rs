@@ -124,6 +124,51 @@ pub async fn get_queue(
         });
     }
 
+    // Get extracts for incremental reading processing
+    // Include both new extracts (never reviewed) and due extracts (scheduled for review)
+    let due_extracts = repo.get_due_extracts(&now).await?;
+    let new_extracts = repo.get_new_extracts().await?;
+    
+    // Combine into a single list, marking new ones
+    for extract in due_extracts.into_iter().chain(new_extracts.into_iter()) {
+        // Get parent document title
+        let document_title = repo.get_document(&extract.document_id).await?
+            .map(|d| d.title)
+            .unwrap_or_else(|| "Unknown Document".to_string());
+        
+        // New extracts (review_count == 0) get highest priority (9.0)
+        // Previously reviewed extracts get medium-high priority (7.0)
+        let priority = if extract.review_count == 0 {
+            9.0 // New extracts are urgent - need to be processed into flashcards
+        } else {
+            7.0 // Reviewed extracts returning for another pass
+        };
+        
+        // Extract content preview (first 100 chars)
+        let content_preview = if extract.content.len() > 100 {
+            format!("{}...", &extract.content[..100])
+        } else {
+            extract.content.clone()
+        };
+        
+        queue_items.push(QueueItem {
+            id: extract.id.clone(),
+            document_id: extract.document_id.clone(),
+            document_title: format!("{} - Extract", document_title),
+            extract_id: Some(extract.id.clone()),
+            learning_item_id: None,
+            item_type: "extract".to_string(),
+            priority_rating: None,
+            priority_slider: None,
+            priority,
+            due_date: extract.next_review_date.map(|d| d.to_rfc3339()),
+            estimated_time: 3, // Extracts take ~3 minutes to process
+            tags: extract.tags.clone(),
+            category: extract.category.clone(),
+            progress: 0, // Extracts don't track progress
+        });
+    }
+
     // Get documents for incremental reading
     let documents = repo.list_documents().await?;
     for document in documents {

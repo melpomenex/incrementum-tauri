@@ -1,37 +1,47 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink } from "lucide-react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Brain } from "lucide-react";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
 import { useDocumentStore } from "../stores/documentStore";
 import { DocumentViewer } from "../components/viewer/DocumentViewer";
+import { FlashcardScrollItem } from "../components/review/FlashcardScrollItem";
 import { rateDocument } from "../api/algorithm";
+import { getDueItems, type LearningItem } from "../api/learning-items";
+import { getDueExtracts, submitExtractReview } from "../api/extract-review";
+import type { Extract } from "../api/extracts";
+import { ExtractScrollItem } from "../components/review/ExtractScrollItem";
+import { ClozeCreatorPopup } from "../components/extracts/ClozeCreatorPopup";
+import { QACreatorPopup } from "../components/extracts/QACreatorPopup";
+import { submitReview } from "../api/review";
 import { getUnreadItems, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemRead } from "../api/rss";
 import { cn } from "../utils";
 import type { QueueItem } from "../types";
 
 /**
- * Unified scroll item type for both documents and RSS articles
+ * Unified scroll item type for documents, RSS articles, and flashcards
  */
 interface ScrollItem {
   id: string;
-  type: "document" | "rss";
+  type: "document" | "rss" | "flashcard" | "extract";
   documentId?: string;
   documentTitle: string;
   rssItem?: RSSFeedItem;
   rssFeed?: RSSFeed;
+  learningItem?: LearningItem;
+  extract?: Extract;
 }
 
 /**
- * QueueScrollPage - TikTok-style vertical scrolling through document queue and RSS articles
+ * QueueScrollPage - TikTok-style vertical scrolling through document queue, flashcards, and RSS articles
  *
  * Features:
- * - Full-screen immersive document reading
+ * - Full-screen immersive document reading and flashcard review
  * - Mouse wheel scroll navigation (scroll down = next, scroll up = previous)
- * - Smooth transitions between documents
- * - Inline rating controls for documents
+ * - Smooth transitions between items
+ * - Inline rating controls for documents and flashcards
  * - RSS article reading with mark as read
  * - Position indicator
- * - FSRS-based queue ordering for documents
+ * - FSRS-based queue ordering for all items
  */
 export function QueueScrollPage() {
   const { filteredItems: allQueueItems, loadQueue } = useQueueStore();
@@ -42,13 +52,22 @@ export function QueueScrollPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [scrollItems, setScrollItems] = useState<ScrollItem[]>([]);
+  const [dueFlashcards, setDueFlashcards] = useState<LearningItem[]>([]);
+  const [dueExtracts, setDueExtracts] = useState<Extract[]>([]);
+  const [isRating, setIsRating] = useState(false);
+
+  // Popup state
+  const [activeExtractForCloze, setActiveExtractForCloze] = useState<{ id: string, text: string, range: [number, number] } | null>(null);
+  const [activeExtractForQA, setActiveExtractForQA] = useState<string | null>(null);
+
   const lastScrollTime = useRef(0);
   const scrollCooldown = 500; // ms between scroll actions
   const startTimeRef = useRef(Date.now());
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Filter to only show documents (not learning items or extracts or YouTube videos)
-  const documentQueueItems = allQueueItems.filter((item) => {
+  // Filter documents (not learning items or extracts or YouTube videos)
+  // Memoize to prevent infinite loop since this is a dependency of the useEffect below
+  const documentQueueItems = useMemo(() => allQueueItems.filter((item) => {
     if (item.itemType !== "document") return false;
 
     // Filter out YouTube videos - they don't make sense in scroll mode
@@ -56,12 +75,28 @@ export function QueueScrollPage() {
     if (doc && doc.fileType === "youtube") return false;
 
     return true;
-  });
+  }), [allQueueItems, documents]);
 
-  // Load queue and documents on mount
+  // Load queue, documents, and due flashcards/extracts on mount
   useEffect(() => {
     loadQueue();
     loadDocuments();
+
+    // Load due learning items and extracts
+    const loadReviewItems = async () => {
+      try {
+        const [dueItems, extracts] = await Promise.all([
+          getDueItems(),
+          getDueExtracts()
+        ]);
+        setDueFlashcards(dueItems);
+        setDueExtracts(extracts);
+        console.log("QueueScrollPage: Loaded", dueItems.length, "flashcards,", extracts.length, "extracts");
+      } catch (error) {
+        console.error("Failed to load review items:", error);
+      }
+    };
+    loadReviewItems();
   }, [loadQueue, loadDocuments]);
 
   // Initialize renderedIndex on mount
@@ -69,8 +104,20 @@ export function QueueScrollPage() {
     setRenderedIndex(currentIndex);
   }, []);
 
-  // Update scroll items when queue changes
+  // Update scroll items when queue or flashcards change
+  // Interleave: Due flashcards first, then documents, then RSS
+  // Skip during rating to prevent race conditions
   useEffect(() => {
+    if (isRating) return;
+    // Create flashcard items from due learning items
+    const flashcardItems: ScrollItem[] = dueFlashcards.map((item) => ({
+      id: `flashcard-${item.id}`,
+      type: "flashcard" as const,
+      documentTitle: item.question.substring(0, 50) + (item.question.length > 50 ? "..." : ""),
+      learningItem: item,
+    }));
+
+    // Create document items
     const docItems: ScrollItem[] = documentQueueItems.map((item) => ({
       id: item.id,
       type: "document" as const,
@@ -88,8 +135,26 @@ export function QueueScrollPage() {
       rssFeed: feed,
     }));
 
-    setScrollItems([...docItems, ...rssItems]);
-  }, [documentQueueItems, documents]);
+    // Create extract items
+    const extractItems: ScrollItem[] = dueExtracts.map((extract) => {
+      // Find document title
+      const doc = documents.find(d => d.id === extract.document_id);
+      const title = doc ? doc.title : "Unknown Document";
+
+      return {
+        id: `extract-${extract.id}`,
+        type: "extract" as const,
+        documentTitle: title,
+        extract: extract,
+      };
+    });
+
+    // Interleave: flashcards and extracts first (most urgent), then documents, then RSS
+    // Ideally mix flashcards and extracts randomly or by priority
+    const reviewItems = [...flashcardItems, ...extractItems].sort(() => Math.random() - 0.5); // Simple shuffle for now
+
+    setScrollItems([...reviewItems, ...docItems, ...rssItems]);
+  }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating]);
 
   // Current item (for display during transition)
   const currentItem = scrollItems[currentIndex];
@@ -131,7 +196,7 @@ export function QueueScrollPage() {
 
   // Navigation functions
   const goToNext = useCallback(() => {
-    if (currentIndex < scrollItems.length - 1 && !isTransitioning) {
+    if (currentIndex < scrollItems.length - 1 && !isTransitioning && !isRating) {
       setIsTransitioning(true);
       const nextIndex = currentIndex + 1;
       setCurrentIndex(nextIndex);
@@ -142,10 +207,10 @@ export function QueueScrollPage() {
         setIsTransitioning(false);
       }, 300);
     }
-  }, [currentIndex, scrollItems.length, isTransitioning]);
+  }, [currentIndex, scrollItems.length, isTransitioning, isRating]);
 
   const goToPrevious = useCallback(() => {
-    if (currentIndex > 0 && !isTransitioning) {
+    if (currentIndex > 0 && !isTransitioning && !isRating) {
       setIsTransitioning(true);
       const prevIndex = currentIndex - 1;
       setCurrentIndex(prevIndex);
@@ -156,7 +221,7 @@ export function QueueScrollPage() {
         setIsTransitioning(false);
       }, 300);
     }
-  }, [currentIndex, isTransitioning]);
+  }, [currentIndex, isTransitioning, isRating]);
 
   // Mouse wheel scroll detection - only navigate when document can't scroll further
   useEffect(() => {
@@ -211,7 +276,7 @@ export function QueueScrollPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if typing in input
       if ((e.target as HTMLElement).tagName === "INPUT" ||
-          (e.target as HTMLElement).tagName === "TEXTAREA") {
+        (e.target as HTMLElement).tagName === "TEXTAREA") {
         return;
       }
 
@@ -239,7 +304,7 @@ export function QueueScrollPage() {
 
   // Auto-hide controls on mouse idle
   useEffect(() => {
-    let hideTimeout: NodeJS.Timeout;
+    let hideTimeout: ReturnType<typeof setTimeout>;
 
     const handleMouseMove = () => {
       setShowControls(true);
@@ -254,9 +319,12 @@ export function QueueScrollPage() {
     };
   }, []);
 
-  // Handle rating (for documents) or mark as read (for RSS)
+  // Handle rating (for documents, flashcards, or mark as read for RSS)
   const handleRating = async (rating: number) => {
-    if (!currentItem) return;
+    if (!currentItem || isRating) return;
+
+    setIsRating(true);
+    const ratedItemId = currentItem.id;
 
     try {
       const timeTaken = Math.round((Date.now() - startTimeRef.current) / 1000);
@@ -264,6 +332,14 @@ export function QueueScrollPage() {
       if (currentItem.type === "document") {
         console.log(`Rating document ${currentItem.documentId} as ${rating} (time: ${timeTaken}s)`);
         await rateDocument(currentItem.documentId!, rating, timeTaken);
+      } else if (currentItem.type === "flashcard" && currentItem.learningItem) {
+        // Rate flashcard using FSRS
+        console.log(`Rating flashcard ${currentItem.learningItem.id} as ${rating} (time: ${timeTaken}s)`);
+        await submitReview(currentItem.learningItem.id, rating, timeTaken);
+
+        // Remove the rated flashcard from both dueFlashcards and scrollItems
+        setDueFlashcards(prev => prev.filter(item => item.id !== currentItem.learningItem!.id));
+        setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
       } else if (currentItem.type === "rss" && currentItem.rssItem && currentItem.rssFeed) {
         // Mark RSS item as read
         markItemRead(currentItem.rssFeed.id, currentItem.rssItem.id, true);
@@ -278,15 +354,30 @@ export function QueueScrollPage() {
           rssFeed: feed,
         }));
         const docItems = scrollItems.filter(item => item.type === "document");
-        setScrollItems([...docItems, ...rssItems]);
+        const flashcardItems = scrollItems.filter(item => item.type === "flashcard");
+        const extractItems = scrollItems.filter(item => item.type === "extract");
+        setScrollItems([...flashcardItems, ...extractItems, ...docItems, ...rssItems]);
+      } else if (currentItem.type === "extract" && currentItem.extract) {
+        // Rate extract
+        console.log(`Rating extract ${currentItem.extract.id} as ${rating} (time: ${timeTaken}s)`);
+        await submitExtractReview(currentItem.extract.id, rating, timeTaken);
+
+        // Remove from both dueExtracts and scrollItems
+        setDueExtracts(prev => prev.filter(e => e.id !== currentItem.extract!.id));
+        setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
       }
 
-      // Auto-advance to next document after rating
+      // Auto-advance to next item after rating
+      // Note: After removing the current item, the next item shifts to currentIndex
+      // So we don't need to adjust currentIndex - goToNext will move to the next one
       setTimeout(() => {
         goToNext();
+        // Small delay to allow transition to complete before allowing new ratings
+        setTimeout(() => setIsRating(false), 200);
       }, 300);
     } catch (error) {
       console.error("Failed to handle rating:", error);
+      setIsRating(false);
     }
   };
 
@@ -322,7 +413,7 @@ export function QueueScrollPage() {
       ref={containerRef}
       className="h-screen w-screen overflow-hidden bg-background relative"
     >
-      {/* Content Viewer - Document or RSS Article */}
+      {/* Content Viewer - Document, Flashcard, or RSS Article */}
       <div
         className={cn(
           "h-full w-full transition-opacity duration-300",
@@ -334,6 +425,12 @@ export function QueueScrollPage() {
             key={renderedItem.documentId}
             documentId={renderedItem.documentId!}
             disableHoverRating={true}
+          />
+        ) : renderedItem?.type === "flashcard" && renderedItem.learningItem ? (
+          <FlashcardScrollItem
+            key={renderedItem.learningItem.id}
+            learningItem={renderedItem.learningItem}
+            onRate={handleRating}
           />
         ) : renderedItem?.type === "rss" ? (
           <div className="h-full w-full overflow-y-auto">
@@ -373,6 +470,15 @@ export function QueueScrollPage() {
               />
             </div>
           </div>
+        ) : renderedItem?.type === "extract" && renderedItem.extract ? (
+          <ExtractScrollItem
+            key={renderedItem.extract.id}
+            extract={renderedItem.extract}
+            documentTitle={renderedItem.documentTitle}
+            onRate={handleRating}
+            onCreateCloze={(text, range) => setActiveExtractForCloze({ id: renderedItem.extract!.id, text, range })}
+            onCreateQA={() => setActiveExtractForQA(renderedItem.extract!.id)}
+          />
         ) : (
           // Fallback for no item
           <div className="h-full flex items-center justify-center">
@@ -380,6 +486,31 @@ export function QueueScrollPage() {
           </div>
         )}
       </div>
+
+      {/* Popups */}
+      {activeExtractForCloze && (
+        <ClozeCreatorPopup
+          extractId={activeExtractForCloze.id}
+          selectedText={activeExtractForCloze.text}
+          selectionRange={activeExtractForCloze.range}
+          onCreated={(item) => {
+            setActiveExtractForCloze(null);
+            setDueFlashcards(prev => [item, ...prev]);
+          }}
+          onCancel={() => setActiveExtractForCloze(null)}
+        />
+      )}
+
+      {activeExtractForQA && (
+        <QACreatorPopup
+          extractId={activeExtractForQA}
+          onCreated={(item) => {
+            setActiveExtractForQA(null);
+            setDueFlashcards(prev => [item, ...prev]);
+          }}
+          onCancel={() => setActiveExtractForQA(null)}
+        />
+      )}
 
       {/* Overlay Controls */}
       <div
@@ -411,6 +542,12 @@ export function QueueScrollPage() {
                   {currentItem.documentTitle}
                 </span>
               )}
+              {currentItem.type === "flashcard" && (
+                <span className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 bg-purple-500/30 rounded text-xs">CARD</span>
+                  {currentItem.documentTitle}
+                </span>
+              )}
               {currentItem.type === "rss" && (
                 <span className="flex items-center gap-2">
                   <span className="px-1.5 py-0.5 bg-orange-500/30 rounded text-xs">RSS</span>
@@ -421,67 +558,69 @@ export function QueueScrollPage() {
           </div>
         </div>
 
-        {/* Side Rating Controls */}
-        <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
-          {currentItem.type === "document" ? (
-            <>
-              <button
-                onClick={() => handleRating(1)}
-                className="group p-3 rounded-full bg-red-500/80 backdrop-blur-sm hover:bg-red-500 hover:scale-110 transition-all shadow-lg"
-                title="Again - Forgot completely (1)"
-              >
-                <AlertCircle className="w-6 h-6 text-white" />
-                <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  Again (1)
-                </span>
-              </button>
+        {/* Side Rating Controls - Only for documents and RSS (flashcards have inline rating) */}
+        {currentItem.type !== "flashcard" && (
+          <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
+            {currentItem.type === "document" ? (
+              <>
+                <button
+                  onClick={() => handleRating(1)}
+                  className="group p-3 rounded-full bg-red-500/80 backdrop-blur-sm hover:bg-red-500 hover:scale-110 transition-all shadow-lg"
+                  title="Again - Forgot completely (1)"
+                >
+                  <AlertCircle className="w-6 h-6 text-white" />
+                  <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Again (1)
+                  </span>
+                </button>
 
-              <button
-                onClick={() => handleRating(2)}
-                className="group p-3 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg"
-                title="Hard - Difficult recall (2)"
-              >
-                <Star className="w-6 h-6 text-white" />
-                <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  Hard (2)
-                </span>
-              </button>
+                <button
+                  onClick={() => handleRating(2)}
+                  className="group p-3 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg"
+                  title="Hard - Difficult recall (2)"
+                >
+                  <Star className="w-6 h-6 text-white" />
+                  <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Hard (2)
+                  </span>
+                </button>
 
+                <button
+                  onClick={() => handleRating(3)}
+                  className="group p-3 rounded-full bg-blue-500/80 backdrop-blur-sm hover:bg-blue-500 hover:scale-110 transition-all shadow-lg"
+                  title="Good - Normal recall (3)"
+                >
+                  <CheckCircle className="w-6 h-6 text-white" />
+                  <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Good (3)
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => handleRating(4)}
+                  className="group p-3 rounded-full bg-green-500/80 backdrop-blur-sm hover:bg-green-500 hover:scale-110 transition-all shadow-lg"
+                  title="Easy - Perfect recall (4)"
+                >
+                  <Sparkles className="w-6 h-6 text-white" />
+                  <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Easy (4)
+                  </span>
+                </button>
+              </>
+            ) : (
               <button
                 onClick={() => handleRating(3)}
-                className="group p-3 rounded-full bg-blue-500/80 backdrop-blur-sm hover:bg-blue-500 hover:scale-110 transition-all shadow-lg"
-                title="Good - Normal recall (3)"
+                className="group p-4 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg"
+                title="Mark as Read"
               >
-                <CheckCircle className="w-6 h-6 text-white" />
+                <CheckCircle className="w-7 h-7 text-white" />
                 <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  Good (3)
+                  Mark as Read
                 </span>
               </button>
-
-              <button
-                onClick={() => handleRating(4)}
-                className="group p-3 rounded-full bg-green-500/80 backdrop-blur-sm hover:bg-green-500 hover:scale-110 transition-all shadow-lg"
-                title="Easy - Perfect recall (4)"
-              >
-                <Sparkles className="w-6 h-6 text-white" />
-                <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  Easy (4)
-                </span>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => handleRating(3)}
-              className="group p-4 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg"
-              title="Mark as Read"
-            >
-              <CheckCircle className="w-7 h-7 text-white" />
-              <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                Mark as Read
-              </span>
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Bottom Navigation Arrows */}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col gap-2 pointer-events-auto">

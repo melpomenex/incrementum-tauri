@@ -14,6 +14,14 @@ export interface Extract {
   date_modified: string;
   tags: string[];
   category?: string;
+  next_review_date?: string;
+  last_review_date?: string;
+  review_count: number;
+  reps: number;
+  memory_state?: {
+    stability: number;
+    difficulty: number;
+  };
 }
 
 export interface CreateExtractInput {

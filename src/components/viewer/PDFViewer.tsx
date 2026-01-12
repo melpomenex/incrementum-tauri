@@ -115,6 +115,35 @@ export function PDFViewer({
     };
   }, [pdf, pageNumber, scale, zoomMode]);
 
+  // ResizeObserver to handle container resize (e.g., when assistant panel is resized)
+  useEffect(() => {
+    if (!pdf || !scrollContainerRef.current) return;
+
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Debounce resize calls to avoid excessive re-renders
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(async () => {
+        if (pdf && (zoomMode === "fit-width" || zoomMode === "fit-page")) {
+          console.log("PDFViewer: Container resized, re-rendering page");
+          await renderPage(pdf, pageNumber);
+        }
+      }, 100);
+    });
+
+    resizeObserver.observe(scrollContainerRef.current);
+
+    return () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeObserver.disconnect();
+    };
+  }, [pdf, pageNumber, zoomMode]);
+
   const renderPage = async (pdfDoc: pdfjsLib.PDFDocumentProxy, pageNum: number) => {
     const page = await pdfDoc.getPage(pageNum);
     const canvas = canvasRef.current;
@@ -186,6 +215,9 @@ export function PDFViewer({
     textLayerDiv.style.width = `${viewport.width}px`;
     textLayerDiv.style.height = `${viewport.height}px`;
 
+    // Get the viewport scale
+    const scale = viewport.scale;
+
     // Render each text item
     textContent.items.forEach((item: any) => {
       if (item.str.trim() === "") return;
@@ -194,18 +226,30 @@ export function PDFViewer({
       textDiv.textContent = item.str;
       textDiv.className = "";
 
-      // Calculate transform matrix for positioning
-      const tx = item.transform[4]; // x offset
-      const ty = item.transform[5]; // y offset
+      // PDF transform matrix: [scaleX, skewX, skewY, scaleY, translateX, translateY]
+      // Extract values from the transform matrix
+      const tx = item.transform[4]; // x offset in PDF coordinates
+      const ty = item.transform[5]; // y offset in PDF coordinates (origin at bottom-left)
+
+      // Calculate font size from the transform matrix scale components
       const fontSize = Math.sqrt(
         item.transform[0] * item.transform[0] +
         item.transform[1] * item.transform[1]
       );
 
-      // Apply transforms
-      textDiv.style.left = `${tx}px`;
-      textDiv.style.top = `${ty - fontSize}px`;
-      textDiv.style.fontSize = `${fontSize}px`;
+      // Convert PDF coordinates (bottom-left origin) to CSS coordinates (top-left origin)
+      // PDF Y increases upward, CSS Y increases downward
+      // viewport.viewBox gives us [x, y, width, height] of the PDF page
+      const pdfHeight = viewport.viewBox[3]; // Height in PDF units
+
+      // Transform: CSS_Y = (PDF_Height - PDF_Y) * scale
+      const cssX = tx * scale;
+      const cssY = (pdfHeight - ty) * scale;
+
+      // Apply transforms with proper scaling
+      textDiv.style.left = `${cssX}px`;
+      textDiv.style.top = `${cssY}px`;
+      textDiv.style.fontSize = `${fontSize * scale}px`;
       textDiv.style.fontFamily = item.fontName || "sans-serif";
 
       // Handle text direction
@@ -218,6 +262,7 @@ export function PDFViewer({
 
     container.appendChild(textLayerDiv);
   };
+
 
   const handlePrevPage = () => {
     if (pageNumber > 1) {

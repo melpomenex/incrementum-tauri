@@ -1,11 +1,16 @@
 //! Screenshot capture functionality
 
+#[cfg(feature = "screenshot")]
 use crate::error::{IncrementumError, Result};
+#[cfg(feature = "screenshot")]
 use base64::{engine::general_purpose, Engine as _};
+#[cfg(feature = "screenshot")]
 use std::io::Cursor;
+#[cfg(feature = "screenshot")]
 use xcap::{Monitor, Window};
 
 /// Capture a screenshot of the primary screen
+#[cfg(feature = "screenshot")]
 #[tauri::command]
 pub async fn capture_screenshot() -> Result<String> {
     let monitors = Monitor::all()
@@ -23,6 +28,7 @@ pub async fn capture_screenshot() -> Result<String> {
 }
 
 /// Capture a screenshot of a specific screen by index
+#[cfg(feature = "screenshot")]
 #[tauri::command]
 pub async fn capture_screen_by_index(index: usize) -> Result<String> {
     let monitors = Monitor::all()
@@ -38,6 +44,7 @@ pub async fn capture_screen_by_index(index: usize) -> Result<String> {
 }
 
 /// Get information about all available screens
+#[cfg(feature = "screenshot")]
 #[tauri::command]
 pub fn get_screen_info() -> Vec<ScreenInfo> {
     let monitors = Monitor::all().unwrap_or_default();
@@ -58,6 +65,7 @@ pub fn get_screen_info() -> Vec<ScreenInfo> {
 }
 
 /// Capture a screenshot of the app window by title
+#[cfg(feature = "screenshot")]
 #[tauri::command]
 pub async fn capture_app_window() -> Result<String> {
     let windows = Window::all()
@@ -74,6 +82,7 @@ pub async fn capture_app_window() -> Result<String> {
     encode_image(image)
 }
 
+#[cfg(feature = "screenshot")]
 fn encode_image(image: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, Vec<u8>>) -> Result<String> {
     let mut buffer = Vec::new();
     // Convert xcap's image buffer to the project's image type
@@ -91,6 +100,7 @@ fn encode_image(image: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, Vec<u8>>)
     Ok(general_purpose::STANDARD.encode(buffer))
 }
 
+#[cfg(feature = "screenshot")]
 #[derive(Debug, serde::Serialize)]
 pub struct ScreenInfo {
     pub index: usize,

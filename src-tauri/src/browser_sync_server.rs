@@ -240,8 +240,8 @@ async fn handle_extension_request(
     // Route to appropriate handler based on type field
     let result = match payload.r#type.as_str() {
         "extract" => handle_extract_request(&state, &payload).await,
-        "video" => handle_video_request(&state, &payload).await,
-        _ => handle_page_request(&state, &payload).await,
+        "video" => handle_import_request(&state, &payload, FileType::Youtube).await,
+        _ => handle_import_request(&state, &payload, FileType::Other).await,
     };
 
     match result {
@@ -253,10 +253,11 @@ async fn handle_extension_request(
     }
 }
 
-/// Handle page save request
-async fn handle_page_request(
+/// Handle general document import request (page or video)
+async fn handle_import_request(
     state: &ServerState,
     payload: &ExtensionRequest,
+    file_type: FileType,
 ) -> Result<ExtensionResponse, AppError> {
     // Check if document with this URL already exists
     let existing = state
@@ -279,31 +280,38 @@ async fn handle_page_request(
     }
 
     // Fetch content if not provided
+    // For YouTube, we skip fetching raw HTML content as it's not useful for reading
     let content = if payload.text.is_empty() {
-        info!("No content provided, fetching from URL: {}", payload.url);
-        match fetch_page_content(&payload.url).await {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to fetch content from {}: {}", payload.url, e);
-                // Continue without content - will create document with URL and title only
-                String::new()
+        if matches!(file_type, FileType::Youtube) {
+            String::new()
+        } else {
+            info!("No content provided, fetching from URL: {}", payload.url);
+            match fetch_page_content(&payload.url).await {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("Failed to fetch content from {}: {}", payload.url, e);
+                    // Continue without content - will create document with URL and title only
+                    String::new()
+                }
             }
         }
     } else {
         payload.text.clone()
     };
 
+    let category = if matches!(file_type, FileType::Youtube) { Some("YouTube Videos".to_string()) } else { None };
+
     // Create document
     let document = Document {
         id: uuid::Uuid::new_v4().to_string(),
         title: payload.title.clone(),
         file_path: payload.url.clone(),
-        file_type: FileType::Other,
+        file_type,
         content: Some(content),
         content_hash: None,
         total_pages: None,
         current_page: None,
-        category: None,
+        category,
         tags: payload.tags.clone().unwrap_or_default(),
         date_added: chrono::Utc::now(),
         date_modified: chrono::Utc::now(),
@@ -420,17 +428,6 @@ async fn handle_extract_request(
         extract_id: Some(created.id),
         error: None,
     })
-}
-
-/// Handle video save request
-async fn handle_video_request(
-    state: &ServerState,
-    payload: &ExtensionRequest,
-) -> Result<ExtensionResponse, AppError> {
-    // For now, just create a URL document for all videos
-    // The full YouTube import with metadata can be done from the UI
-    // or enhanced later with yt-dlp integration
-    handle_page_request(state, payload).await
 }
 
 /// Fetch page content from URL

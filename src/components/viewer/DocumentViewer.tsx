@@ -304,10 +304,10 @@ export function DocumentViewer({
   };
 
   // Handle PDF/EPUB load
-  const handleDocumentLoad = (numPages: number, outline: any[] = []) => {
+  const handleDocumentLoad = useCallback((numPages: number, outline: any[] = []) => {
     // Update document with page count if needed
     console.log("Document loaded:", numPages, "pages", outline.length, "outline items");
-  };
+  }, []);
 
   // Handle extract creation
   const handleExtractCreated = () => {
@@ -778,7 +778,7 @@ export function DocumentViewer({
       />
 
       {/* Hover Rating Controls - for quick document rating */}
-      {viewMode === "document" && !disableHoverRating && (
+      {viewMode === "document" && !disableHoverRating && docType !== "youtube" && (
         <HoverRatingControls
           context="document"
           documentId={documentId}

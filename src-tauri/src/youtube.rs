@@ -672,7 +672,16 @@ pub async fn get_youtube_transcript(
         }
     }
 
-    let segments = extract_transcript(&url, language.as_deref())?;
+    let url_clone = url.clone();
+    let lang = language.clone();
+
+    // Use spawn_blocking to avoid blocking the async runtime
+    let segments = tokio::task::spawn_blocking(move || {
+        extract_transcript(&url_clone, lang.as_deref())
+    })
+    .await
+    .map_err(|e| format!("Failed to join transcript task: {}", e))??;
+
     if let Some(video_id) = extract_video_id(&url) {
         let transcript = build_transcript_text(&segments);
         let segments_json = serde_json::to_string(&segments)
@@ -702,7 +711,15 @@ pub async fn get_youtube_transcript_by_id(
 
     // Construct YouTube URL from video ID
     let url = format!("https://www.youtube.com/watch?v={}", video_id);
-    let segments = extract_transcript(&url, language.as_deref())?;
+    let lang = language.clone();
+
+    // Use spawn_blocking to avoid blocking the async runtime
+    let segments = tokio::task::spawn_blocking(move || {
+        extract_transcript(&url, lang.as_deref())
+    })
+    .await
+    .map_err(|e| format!("Failed to join transcript task: {}", e))??;
+
     let transcript = build_transcript_text(&segments);
     let segments_json = serde_json::to_string(&segments)
         .map_err(|e| format!("Failed to serialize transcript: {}", e))?;

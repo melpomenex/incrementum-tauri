@@ -16,6 +16,7 @@ import {
   BookOpen,
   GraduationCap,
   RefreshCw,
+  Plug,
 } from "lucide-react";
 import { KeyboardShortcutSettings } from "./KeyboardShortcutsSettings";
 import { AISettings as AIProviderSettings } from "./AIProviderSettings";
@@ -25,6 +26,7 @@ import { LearningSettings } from "./LearningSettings";
 import { DocumentsSettings } from "./DocumentsSettings";
 import { CloudStorageSettings } from "./CloudStorageSettings";
 import { ThemePicker } from "./ThemePicker";
+import { IntegrationSettings } from "./IntegrationSettings";
 
 /**
  * Settings tab
@@ -37,6 +39,7 @@ export enum SettingsTab {
   Shortcuts = "shortcuts",
   AI = "ai",
   Sync = "sync",
+  Integrations = "integrations",
   CloudStorage = "cloud-storage",
   ImportExport = "import-export",
   Notifications = "notifications",
@@ -54,6 +57,7 @@ export const SETTINGS_TABS = [
   { id: SettingsTab.Shortcuts, label: "Shortcuts", icon: Keyboard },
   { id: SettingsTab.AI, label: "AI", icon: Brain },
   { id: SettingsTab.Sync, label: "Sync", icon: RefreshCw },
+  { id: SettingsTab.Integrations, label: "Integrations", icon: Plug },
   { id: SettingsTab.CloudStorage, label: "Cloud Storage", icon: Cloud },
   { id: SettingsTab.ImportExport, label: "Import/Export", icon: FolderOpen },
   { id: SettingsTab.Notifications, label: "Notifications", icon: Bell },
@@ -160,6 +164,7 @@ export function SettingsPage() {
           {activeTab === SettingsTab.Shortcuts && <ShortcutSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.AI && <AISettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Sync && <SyncSettings onChange={() => setHasChanges(true)} />}
+          {activeTab === SettingsTab.Integrations && <IntegrationSettings />}
           {activeTab === SettingsTab.CloudStorage && <CloudStorageSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.ImportExport && <ImportExportSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Notifications && <NotificationSettings onChange={() => setHasChanges(true)} />}

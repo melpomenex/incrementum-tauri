@@ -10,6 +10,8 @@ import {
   Settings,
   X,
   Loader2,
+  PanelLeftClose,
+  PanelRightClose,
 } from "lucide-react";
 import { chatWithContext } from "../../api/llm";
 import { useSettingsStore } from "../../stores";
@@ -38,21 +40,40 @@ interface ToolCall {
   status: "pending" | "success" | "error";
 }
 
+export type AssistantPosition = "left" | "right";
+
 interface AssistantPanelProps {
   context?: AssistantContext;
   onToolCall?: (tool: string, params: Record<string, unknown>) => Promise<unknown>;
   className?: string;
   onInputHoverChange?: (isHovered: boolean) => void;
+  onWidthChange?: (width: number) => void;
+  position?: AssistantPosition;
+  onPositionChange?: (position: AssistantPosition) => void;
 }
+
+const ASSISTANT_POSITION_KEY = "assistant-panel-position";
+const ASSISTANT_WIDTH_KEY = "assistant-panel-width";
 
 export function AssistantPanel({
   context,
   onToolCall,
   className = "",
   onInputHoverChange,
+  onWidthChange,
+  position: externalPosition,
+  onPositionChange,
 }: AssistantPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [width, setWidth] = useState(400);
+  const [width, setWidth] = useState(() => {
+    const saved = localStorage.getItem(ASSISTANT_WIDTH_KEY);
+    return saved ? parseInt(saved) : 400;
+  });
+  const [position, setPosition] = useState<AssistantPosition>(() => {
+    if (externalPosition) return externalPosition;
+    const saved = localStorage.getItem(ASSISTANT_POSITION_KEY);
+    return saved === "left" ? "left" : "right";
+  });
   const [isResizing, setIsResizing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -478,8 +499,8 @@ I also have context of what you're currently viewing, so feel free to ask questi
       const errorMessage = error instanceof Error
         ? error.message
         : typeof error === 'string'
-        ? error
-        : JSON.stringify(error);
+          ? error
+          : JSON.stringify(error);
       return {
         content: `Error calling LLM: ${errorMessage}`,
       };
@@ -533,12 +554,36 @@ I also have context of what you're currently viewing, so feel free to ask questi
     setIsResizing(true);
   };
 
+  // Sync external position prop
+  useEffect(() => {
+    if (externalPosition && externalPosition !== position) {
+      setPosition(externalPosition);
+    }
+  }, [externalPosition]);
+
+  // Handle position toggle
+  const togglePosition = () => {
+    const newPosition = position === "left" ? "right" : "left";
+    setPosition(newPosition);
+    localStorage.setItem(ASSISTANT_POSITION_KEY, newPosition);
+    onPositionChange?.(newPosition);
+  };
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizing) {
-        const newWidth = window.innerWidth - e.clientX;
+        let newWidth: number;
+        if (position === "right") {
+          // Panel on right: width = screen width - mouse X
+          newWidth = window.innerWidth - e.clientX;
+        } else {
+          // Panel on left: width = mouse X
+          newWidth = e.clientX;
+        }
         if (newWidth >= 300 && newWidth <= 800) {
           setWidth(newWidth);
+          localStorage.setItem(ASSISTANT_WIDTH_KEY, newWidth.toString());
+          onWidthChange?.(newWidth);
         }
       }
     };
@@ -556,17 +601,21 @@ I also have context of what you're currently viewing, so feel free to ask questi
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing]);
+  }, [isResizing, position, onWidthChange]);
 
   if (isCollapsed) {
     return (
-      <div className={`flex flex-col bg-card border-l border-border relative ${className}`}>
+      <div className={`flex flex-col bg-card ${position === "right" ? "border-l" : "border-r"} border-border relative ${className}`}>
         <button
           onClick={() => setIsCollapsed(false)}
-          className="p-2 hover:bg-muted transition-colors border-r border-border"
+          className="p-2 hover:bg-muted transition-colors"
           title="Open Assistant"
         >
-          <ChevronLeft className="w-4 h-4 text-foreground" />
+          {position === "right" ? (
+            <ChevronLeft className="w-4 h-4 text-foreground" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-foreground" />
+          )}
         </button>
       </div>
     );
@@ -576,7 +625,7 @@ I also have context of what you're currently viewing, so feel free to ask questi
 
   return (
     <div
-      className={`flex flex-col bg-card border-l border-border relative ${className}`}
+      className={`flex flex-col bg-card ${position === "right" ? "border-l" : "border-r"} border-border relative ${className}`}
       style={{ width: isCollapsed ? "auto" : width }}
     >
       {/* Header */}
@@ -592,23 +641,38 @@ I also have context of what you're currently viewing, so feel free to ask questi
               <button
                 key={provider.id}
                 onClick={() => setSelectedProvider(provider.id as any)}
-                className={`p-1.5 rounded transition-colors ${
-                  selectedProvider === provider.id
+                className={`p-1.5 rounded transition-colors ${selectedProvider === provider.id
                     ? "bg-muted"
                     : "hover:bg-muted"
-                }`}
+                  }`}
                 title={provider.name}
               >
                 <provider.icon className={`w-3 h-3 ${provider.color}`} />
               </button>
             ))}
           </div>
+          {/* Position Toggle Button */}
+          <button
+            onClick={togglePosition}
+            className="p-1.5 hover:bg-muted transition-colors rounded"
+            title={position === "right" ? "Move to left side" : "Move to right side"}
+          >
+            {position === "right" ? (
+              <PanelLeftClose className="w-4 h-4 text-foreground" />
+            ) : (
+              <PanelRightClose className="w-4 h-4 text-foreground" />
+            )}
+          </button>
           <button
             onClick={() => setIsCollapsed(true)}
             className="p-1.5 hover:bg-muted transition-colors rounded"
             title="Collapse"
           >
-            <ChevronRight className="w-4 h-4 text-foreground" />
+            {position === "right" ? (
+              <ChevronRight className="w-4 h-4 text-foreground" />
+            ) : (
+              <ChevronLeft className="w-4 h-4 text-foreground" />
+            )}
           </button>
         </div>
       </div>
@@ -636,9 +700,8 @@ I also have context of what you're currently viewing, so feel free to ask questi
           messages.map((message) => (
             <div
               key={message.id}
-              className={`flex flex-col ${
-                message.role === "user" ? "items-end" : "items-start"
-              }`}
+              className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"
+                }`}
             >
               {/* Message Header */}
               <div className="flex items-center gap-2 mb-1">
@@ -657,8 +720,8 @@ I also have context of what you're currently viewing, so feel free to ask questi
                   {message.role === "user"
                     ? "You"
                     : message.role === "system"
-                    ? "System"
-                    : currentProvider?.name || "Assistant"}
+                      ? "System"
+                      : currentProvider?.name || "Assistant"}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {new Date(message.timestamp).toLocaleTimeString()}
@@ -667,13 +730,12 @@ I also have context of what you're currently viewing, so feel free to ask questi
 
               {/* Message Content */}
               <div
-                className={`max-w-[85%] px-3 py-2 rounded-lg text-sm ${
-                  message.role === "user"
+                className={`max-w-[85%] px-3 py-2 rounded-lg text-sm ${message.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : message.role === "system"
-                    ? "bg-muted text-muted-foreground"
-                    : "bg-muted text-foreground"
-                }`}
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-muted text-foreground"
+                  }`}
               >
                 {message.role === "user" ? (
                   message.content
@@ -691,13 +753,12 @@ I also have context of what you're currently viewing, so feel free to ask questi
                   {message.toolCalls.map((tool, idx) => (
                     <div
                       key={idx}
-                      className={`text-xs px-2 py-1 rounded flex items-center gap-2 ${
-                        tool.status === "success"
+                      className={`text-xs px-2 py-1 rounded flex items-center gap-2 ${tool.status === "success"
                           ? "bg-green-100 text-green-800"
                           : tool.status === "error"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
+                            ? "bg-red-100 text-red-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
                     >
                       <Code className="w-3 h-3" />
                       <span className="font-medium">{tool.name}</span>
@@ -781,12 +842,14 @@ I also have context of what you're currently viewing, so feel free to ask questi
         </div>
       </div>
 
-      {/* Resize Handle */}
+      {/* Resize Handle - positioned based on panel position */}
       <div
         onMouseDown={handleResizeStart}
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/20 transition-colors group"
+        className={`absolute top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/20 transition-colors group ${position === "right" ? "left-0" : "right-0"
+          }`}
       >
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-border group-hover:bg-primary/50 rounded" />
+        <div className={`absolute top-1/2 -translate-y-1/2 w-1 h-8 bg-border group-hover:bg-primary/50 rounded ${position === "right" ? "left-0" : "right-0"
+          }`} />
       </div>
     </div>
   );

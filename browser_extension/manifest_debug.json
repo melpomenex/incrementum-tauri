@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Incrementum Browser Sync (Debug)",
+  "version": "1.0.0",
+  "description": "Debug version to isolate extension loading issues",
+  
+  "permissions": [
+    "tabs",
+    "storage",
+    "contextMenus",
+    "notifications"
+  ],
+  
+  "host_permissions": [
+    "http://127.0.0.1:8766/*",
+    "http://localhost:8766/*"
+  ],
+  
+  "background": {
+    "service_worker": "background_debug.js"
+  },
+  
+  "action": {
+    "default_title": "Incrementum Debug",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+} 

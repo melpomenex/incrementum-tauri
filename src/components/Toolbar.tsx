@@ -13,19 +13,20 @@ import {
 } from "./tabs/TabRegistry";
 
 import {
-  FileText,
+  FileUp,
   Link,
-  SkipForward,
-  Shuffle,
-  Repeat,
+  BookMarked,
+  Dices,
+  Brain,
   Rss,
   LayoutDashboard,
   Network,
-  Globe,
-  MessageSquare,
+  Orbit,
+  Compass,
+  BotMessageSquare,
   Camera,
   Settings,
-  Search,
+  Command,
 } from "lucide-react";
 
 interface ToolbarButton {
@@ -264,7 +265,7 @@ export function Toolbar() {
     // Group 1: File Operations
     {
       id: "import-file",
-      icon: FileText,
+      icon: FileUp,
       label: "Import File",
       shortcut: "Ctrl+O",
       action: handleImportFile,
@@ -280,7 +281,7 @@ export function Toolbar() {
     },
     {
       id: "read-next",
-      icon: SkipForward,
+      icon: BookMarked,
       label: "Read Next",
       shortcut: "",
       action: handleReadNext,
@@ -288,7 +289,7 @@ export function Toolbar() {
     },
     {
       id: "random-item",
-      icon: Shuffle,
+      icon: Dices,
       label: "Random Item",
       shortcut: "",
       action: handleRandomItem,
@@ -296,7 +297,7 @@ export function Toolbar() {
     },
     {
       id: "start-review",
-      icon: Repeat,
+      icon: Brain,
       label: "Start Review",
       shortcut: "",
       action: handleStartReview,
@@ -332,7 +333,7 @@ export function Toolbar() {
     },
     {
       id: "knowledge-sphere",
-      icon: Globe,
+      icon: Orbit,
       label: "Knowledge Sphere",
       shortcut: "Ctrl+5",
       action: handleKnowledgeSphere,
@@ -341,7 +342,7 @@ export function Toolbar() {
     },
     {
       id: "web-browser",
-      icon: Globe,
+      icon: Compass,
       label: "Web Browser",
       shortcut: "Ctrl+6",
       action: handleWebBrowser,
@@ -350,7 +351,7 @@ export function Toolbar() {
     },
     {
       id: "doc-qa",
-      icon: MessageSquare,
+      icon: BotMessageSquare,
       label: "Document Q&A",
       shortcut: "",
       action: handleDocQA,
@@ -376,7 +377,7 @@ export function Toolbar() {
     },
     {
       id: "command-palette",
-      icon: Search,
+      icon: Command,
       label: "Command Palette",
       shortcut: "Ctrl+Shift+P",
       action: handleCommandPalette,

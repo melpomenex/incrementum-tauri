@@ -27,6 +27,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastVideoIdRef = useRef<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -38,8 +39,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
   const [startTime] = useState(0);
 
-  // Load transcript from backend - MUST be defined before initializePlayer
+  // Load transcript from backend
   const loadTranscript = useCallback(async () => {
+    if (!videoId) return;
+    
     setIsLoadingTranscript(true);
     try {
       const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }>>(
@@ -57,24 +60,43 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       setTranscript(segments);
     } catch (error) {
       console.log("Transcript not available:", error);
-      // Transcript is optional, don't show error to user
+      setTranscript([]);
     } finally {
       setIsLoadingTranscript(false);
     }
   }, [videoId, documentId]);
 
-  // Initialize player - defined after loadTranscript so it can be included in dependencies
+  // Handle videoId changes for transcript
+  useEffect(() => {
+    loadTranscript();
+  }, [loadTranscript]);
+
+  // Initialize player
   const initializePlayer = useCallback(() => {
-    if (!containerRef.current || playerRef.current) return;
+    if (!containerRef.current) return;
+    
+    // If player already exists
+    if (playerRef.current) {
+      // Only load if videoId changed
+      if (videoId !== lastVideoIdRef.current) {
+        if (typeof playerRef.current.loadVideoById === 'function') {
+          playerRef.current.loadVideoById(videoId);
+          lastVideoIdRef.current = videoId;
+        }
+      }
+      return;
+    }
 
     playerRef.current = new window.YT.Player(containerRef.current, {
       videoId,
+      host: 'https://www.youtube.com',
       playerVars: {
         autoplay: 0,
         controls: 1,
         rel: 0,
         modestbranding: 1,
         start: startTime,
+        origin: window.location.origin,
       },
       events: {
         onReady: (event: any) => {
@@ -83,12 +105,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
           setDuration(playerDuration);
           onLoad?.({ duration: playerDuration, title: title || "" });
 
-          // Load transcript
-          loadTranscript();
-
           // Start time tracking
+          if (intervalRef.current) clearInterval(intervalRef.current);
           intervalRef.current = setInterval(() => {
-            if (playerRef.current && playerRef.current.getCurrentTime) {
+            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
               setCurrentTime(playerRef.current.getCurrentTime());
             }
           }, 500);
@@ -102,21 +122,27 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         },
       },
     });
-  }, [videoId, startTime, title, onLoad, loadTranscript]);
+    lastVideoIdRef.current = videoId;
+  }, [videoId, startTime, title, onLoad]);
 
   // Load YouTube IFrame API
   useEffect(() => {
-    if (window.YT) {
+    if (window.YT && window.YT.Player) {
       initializePlayer();
       return;
     }
 
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    const firstScriptTag = document.getElementsByTagName("script")[0];
-    firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+    // Check if script is already present
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+    }
 
+    const previousOnReady = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
+      if (previousOnReady) previousOnReady();
       initializePlayer();
     };
 
@@ -125,7 +151,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      if (playerRef.current) {
+      // We don't destroy the player on unmount if we want to reuse it, 
+      // but React strict mode might cause double mounting.
+      // Safer to destroy.
+      if (playerRef.current && typeof playerRef.current.destroy === 'function') {
         playerRef.current.destroy();
         playerRef.current = null;
       }

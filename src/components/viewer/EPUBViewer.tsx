@@ -30,7 +30,13 @@ export function EPUBViewer({
     const saved = localStorage.getItem(FONT_SIZE_KEY);
     return saved ? parseInt(saved) : DEFAULT_FONT_SIZE;
   });
+  const fontSizeRef = useRef(fontSize); // Track current font size for content hook
   const [showFontSizeControl, setShowFontSizeControl] = useState(false);
+
+  // Keep fontSizeRef in sync with fontSize
+  useEffect(() => {
+    fontSizeRef.current = fontSize;
+  }, [fontSize]);
 
   // Save reading position to database
   const saveReadingPosition = useCallback(async (cfi: string) => {
@@ -111,11 +117,40 @@ export function EPUBViewer({
     updateFontSize(DEFAULT_FONT_SIZE);
   }, [updateFontSize]);
 
+  // ResizeObserver to handle container resize (e.g., when assistant panel is resized)
+  useEffect(() => {
+    if (!rendition || !viewerRef.current) return;
+
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Debounce resize calls to avoid excessive re-renders
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(() => {
+        if (rendition) {
+          console.log("EPUBViewer: Container resized, calling rendition.resize()");
+          rendition.resize();
+        }
+      }, 100);
+    });
+
+    resizeObserver.observe(viewerRef.current);
+
+    return () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeObserver.disconnect();
+    };
+  }, [rendition]);
+
   useEffect(() => {
     let mounted = true;
     let bookInstance: any = null;
     let renditionInstance: any = null;
-    let savePositionTimer: NodeJS.Timeout | null = null;
+    let savePositionTimer: ReturnType<typeof setTimeout> | null = null;
     let retryCount = 0;
     const maxRetries = 10;
 
@@ -156,7 +191,21 @@ export function EPUBViewer({
               return initializeRendition();
             } else {
               console.error("EPUBViewer: viewerRef never became available");
-              return false;
+              throw new Error("Failed to initialize EPUB viewer - container not available. Please try reopening the document.");
+            }
+          }
+
+          // Check if container has dimensions (required for epubjs)
+          const containerRect = viewerRef.current.getBoundingClientRect();
+          if (containerRect.width === 0 || containerRect.height === 0) {
+            if (retryCount < maxRetries) {
+              retryCount++;
+              console.log(`EPUBViewer: Container has no dimensions (${containerRect.width}x${containerRect.height}), retry ${retryCount}/${maxRetries}...`);
+              await new Promise(resolve => setTimeout(resolve, 100));
+              return initializeRendition();
+            } else {
+              console.error("EPUBViewer: Container never got dimensions");
+              throw new Error("Failed to initialize EPUB viewer - container has no size. Please try resizing the window.");
             }
           }
 
@@ -237,7 +286,7 @@ export function EPUBViewer({
                 /* Let epubjs handle scrolling through the scrolled-doc flow */
               }
               body {
-                font-size: ${fontSize}% !important;
+                font-size: ${fontSizeRef.current}% !important;
                 padding-bottom: 80px !important;
               }
               p {
@@ -304,7 +353,7 @@ export function EPUBViewer({
           // Set up themes for font size control and consistent styling
           rendition.themes.register("default", {
             body: {
-              "font-size": `${fontSize}% !important`,
+              "font-size": `${fontSizeRef.current}% !important`,
               "line-height": "1.6 !important",
               "margin": "0 !important",
               "padding": "0 !important",
@@ -405,7 +454,7 @@ export function EPUBViewer({
         bookInstance.destroy();
       }
     };
-  }, [fileData, onLoad, fontSize, loadReadingPosition, saveReadingPosition]);
+  }, [fileData, onLoad, documentId]);
 
   const handlePrevPage = () => {
     if (rendition) {

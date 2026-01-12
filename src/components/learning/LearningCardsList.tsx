@@ -144,7 +144,10 @@ export function LearningCardsList({ documentId }: LearningCardsListProps) {
               <div className="text-xs font-medium text-muted-foreground mb-1">
                 Question
               </div>
-              <p className="text-foreground">{card.question}</p>
+              <div 
+                className="text-foreground" 
+                dangerouslySetInnerHTML={{ __html: card.question }} 
+              />
             </div>
 
             {/* Answer */}
@@ -170,9 +173,10 @@ export function LearningCardsList({ documentId }: LearningCardsListProps) {
                   </button>
                 </div>
                 {showAnswers[card.id] ? (
-                  <p className="text-foreground p-3 bg-muted rounded-md">
-                    {card.answer}
-                  </p>
+                  <div 
+                    className="text-foreground p-3 bg-muted rounded-md" 
+                    dangerouslySetInnerHTML={{ __html: card.answer }} 
+                  />
                 ) : (
                   <p className="text-muted-foreground italic text-sm">
                     Answer hidden - click to reveal

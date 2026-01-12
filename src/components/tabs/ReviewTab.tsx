@@ -223,9 +223,10 @@ export function ReviewTab() {
                       <div className="text-xs text-muted-foreground mb-1">
                         {index + 1} / {queue.length}
                       </div>
-                      <div className="line-clamp-2">
-                        {item.question || item.cloze_text || "Untitled card"}
-                      </div>
+                      <div 
+                        className="line-clamp-2"
+                        dangerouslySetInnerHTML={{ __html: item.question || item.cloze_text || "Untitled card" }}
+                      />
                     </button>
                   ))}
                 </div>

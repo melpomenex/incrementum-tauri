@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Scissors, MessageSquare } from "lucide-react";
 import { createExtract } from "../../api/extracts";
+import { ClozeCreatorPopup } from "./ClozeCreatorPopup";
+import { QACreatorPopup } from "./QACreatorPopup";
 
 interface ExtractCreatorProps {
   documentId: string;
@@ -26,6 +28,11 @@ export function ExtractCreator({
   const [tagInput, setTagInput] = useState("");
   const [category, setCategory] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Chained creation state
+  const [creationMode, setCreationMode] = useState<'edit' | 'cloze' | 'qa'>('edit');
+  const [savedExtractId, setSavedExtractId] = useState<string | null>(null);
+
   const tagInputRef = useRef<HTMLInputElement>(null);
 
   const categories = [
@@ -71,7 +78,7 @@ export function ExtractCreator({
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (nextAction?: 'cloze' | 'qa') => {
     if (!content.trim()) return;
 
     setIsSaving(true);
@@ -94,13 +101,42 @@ export function ExtractCreator({
         });
       }
 
-      onCancel();
+      if (nextAction) {
+        setSavedExtractId(extract.id);
+        setCreationMode(nextAction);
+      } else {
+        onCancel();
+      }
     } catch (error) {
       console.error("Failed to save extract:", error);
+      // Only close if it was a basic save? Or keep open on error?
+      // Keep open so user can retry
     } finally {
       setIsSaving(false);
     }
   };
+
+  if (creationMode === 'cloze' && savedExtractId) {
+    return (
+      <ClozeCreatorPopup
+        extractId={savedExtractId}
+        selectedText={content}
+        selectionRange={[0, content.length]}
+        onCreated={() => onCancel()}
+        onCancel={onCancel}
+      />
+    );
+  }
+
+  if (creationMode === 'qa' && savedExtractId) {
+    return (
+      <QACreatorPopup
+        extractId={savedExtractId}
+        onCreated={() => onCancel()}
+        onCancel={onCancel}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -140,11 +176,10 @@ export function ExtractCreator({
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setCategory("")}
-                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                  !category
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-foreground hover:bg-muted/80"
-                }`}
+                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${!category
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-foreground hover:bg-muted/80"
+                  }`}
               >
                 None
               </button>
@@ -152,11 +187,10 @@ export function ExtractCreator({
                 <button
                   key={cat}
                   onClick={() => setCategory(cat)}
-                  className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                    category === cat
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground hover:bg-muted/80"
-                  }`}
+                  className={`px-3 py-1.5 rounded-md text-sm transition-colors ${category === cat
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground hover:bg-muted/80"
+                    }`}
                 >
                   {cat}
                 </button>
@@ -174,11 +208,10 @@ export function ExtractCreator({
                 <button
                   key={color.name}
                   onClick={() => setSelectedColor(color.value)}
-                  className={`w-8 h-8 rounded-full ${color.value} ${
-                    selectedColor === color.value
-                      ? "ring-2 ring-offset-2 ring-foreground"
-                      : ""
-                  }`}
+                  className={`w-8 h-8 rounded-full ${color.value} ${selectedColor === color.value
+                    ? "ring-2 ring-offset-2 ring-foreground"
+                    : ""
+                    }`}
                   title={color.name}
                 />
               ))}
@@ -248,8 +281,28 @@ export function ExtractCreator({
           >
             Cancel
           </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleSave('cloze')}
+              disabled={!content.trim() || isSaving}
+              className="px-3 py-2 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded-md transition-colors text-sm flex items-center gap-2"
+              title="Save and create Cloze card"
+            >
+              <Scissors className="w-4 h-4" />
+              + Cloze
+            </button>
+            <button
+              onClick={() => handleSave('qa')}
+              disabled={!content.trim() || isSaving}
+              className="px-3 py-2 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded-md transition-colors text-sm flex items-center gap-2"
+              title="Save and create Q&A card"
+            >
+              <MessageSquare className="w-4 h-4" />
+              + Q&A
+            </button>
+          </div>
           <button
-            onClick={handleSave}
+            onClick={() => handleSave()}
             disabled={!content.trim() || isSaving}
             className="px-4 py-2 bg-primary hover:opacity-90 text-primary-foreground rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >

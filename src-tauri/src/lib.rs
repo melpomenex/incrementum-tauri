@@ -21,6 +21,7 @@ mod cloud_sync;
 mod backup;
 mod scheduler;
 mod browser_sync_server;
+#[cfg(feature = "screenshot")]
 mod screenshot;
 
 use database::Database;
@@ -141,6 +142,10 @@ pub fn run() {
             commands::delete_extract,
             commands::bulk_delete_extracts,
             commands::bulk_generate_cards,
+            commands::submit_extract_review,
+            commands::create_cloze_from_extract,
+            commands::create_qa_from_extract,
+            commands::get_reviewable_extracts,
             // Learning item commands
             commands::get_due_items,
             commands::create_learning_item,
@@ -319,9 +324,13 @@ pub fn run() {
             commands::get_ocr_config,
             commands::update_ocr_config,
             // Screenshot commands
+            #[cfg(feature = "screenshot")]
             screenshot::capture_screenshot,
+            #[cfg(feature = "screenshot")]
             screenshot::capture_screen_by_index,
+            #[cfg(feature = "screenshot")]
             screenshot::capture_app_window,
+            #[cfg(feature = "screenshot")]
             screenshot::get_screen_info,
         ])
         .run(tauri::generate_context!())

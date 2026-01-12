@@ -609,6 +609,46 @@ impl Repository {
         Ok(extracts)
     }
 
+    /// Get extracts that have never been reviewed (new extracts without next_review_date)
+    pub async fn get_new_extracts(&self) -> Result<Vec<Extract>> {
+        let rows = sqlx::query("SELECT * FROM extracts WHERE next_review_date IS NULL ORDER BY date_created DESC")
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut extracts = Vec::new();
+        for row in rows {
+            let tags_json: String = row.try_get("tags")?;
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+            let stability: Option<f64> = row.try_get("memory_state_stability").ok();
+            let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
+            let memory_state = Self::parse_memory_state(stability, difficulty);
+
+            extracts.push(Extract {
+                id: row.try_get("id")?,
+                document_id: row.try_get("document_id")?,
+                content: row.try_get("content")?,
+                page_title: row.try_get("page_title")?,
+                page_number: row.try_get("page_number")?,
+                highlight_color: row.try_get("highlight_color")?,
+                notes: row.try_get("notes")?,
+                progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,
+                max_disclosure_level: row.try_get("max_disclosure_level")?,
+                date_created: row.try_get("date_created")?,
+                date_modified: row.try_get("date_modified")?,
+                tags,
+                category: row.try_get("category")?,
+                memory_state,
+                next_review_date: row.try_get("next_review_date").ok(),
+                last_review_date: row.try_get("last_review_date").ok(),
+                review_count: row.try_get("review_count").unwrap_or(0),
+                reps: row.try_get("reps").unwrap_or(0),
+            });
+        }
+
+        Ok(extracts)
+    }
+
     pub async fn update_extract_scheduling(
         &self,
         id: &str,

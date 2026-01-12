@@ -403,9 +403,10 @@ export function ExtractsList({ documentId }: ExtractsListProps) {
             </div>
 
             {/* Content */}
-            <p className="text-foreground mb-3 whitespace-pre-wrap">
-              {extract.content}
-            </p>
+            <div 
+              className="text-foreground mb-3 whitespace-pre-wrap"
+              dangerouslySetInnerHTML={{ __html: extract.content }}
+            />
 
             {/* Notes */}
             {extract.notes && (

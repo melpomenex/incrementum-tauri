@@ -1,0 +1,89 @@
+{
+  "manifest_version": 3,
+  "name": "Incrementum Browser Sync",
+  "version": "1.0.0",
+  "description": "Sync your browser tabs, bookmarks, and pages to Incrementum knowledge management system",
+  
+  "permissions": [
+    "tabs",
+    "bookmarks",
+    "activeTab",
+    "storage",
+    "scripting",
+    "contextMenus",
+    "notifications",
+    "printingMetrics",
+    "tabCapture"
+  ],
+  
+  "host_permissions": [
+    "http://127.0.0.1:8766/*",
+    "http://localhost:8766/*",
+    "https://127.0.0.1:8766/*",
+    "https://localhost:8766/*",
+    "<all_urls>"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Incrementum Browser Sync",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  
+  "commands": {
+    "save-current-tab": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Save current tab to Incrementum"
+    },
+    "toggle-extract-mode": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Toggle extract mode"
+    },
+    "quick-extract": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "Create quick extract from selection"
+    },
+    "toggle-highlights": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description": "Toggle highlights visibility"
+    }
+  },
+
+  "options_page": "options.html"
+}
