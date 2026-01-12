@@ -3,7 +3,6 @@
  */
 
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { invokeCommand } from "../../lib/tauri";
 import { Download, Upload, FileDown, FileUp, RefreshCw } from "lucide-react";
 import { SettingsSection, SettingsRow } from "./SettingsPage";

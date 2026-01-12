@@ -364,7 +364,6 @@ const commandHandlers: Record<string, CommandHandler> = {
         throw new Error('URL fetching requires a CORS proxy in browser mode');
     },
 
-    // YouTube import - not available in browser without proxy
     import_youtube_video: async (args) => {
         const url = args.url as string;
         // Create a document with the YouTube URL
@@ -374,6 +373,15 @@ const commandHandlers: Record<string, CommandHandler> = {
             file_type: 'youtube',
         });
         return toCamelCase(doc);
+    },
+
+    // Anki Import (requires sql.js/jszip in browser, which is a larger task)
+    import_anki_package_to_learning_items: async () => {
+        throw new Error("Anki import is not yet supported in the web version. Please use the desktop application.");
+    },
+
+    import_anki_package_bytes_to_learning_items: async () => {
+        throw new Error("Anki import is not yet supported in the web version. Please use the desktop application.");
     },
 };
 
