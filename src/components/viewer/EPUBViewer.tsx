@@ -205,20 +205,14 @@ export function EPUBViewer({
             });
             console.log(`EPUBViewer: Removed ${styleTags.length} EPUB style tags`);
 
-            // Force inline style cleanup - but preserve overflow settings
-            const allElements = contents.document.querySelectorAll('*');
-            allElements.forEach((el: any) => {
-              if (el.style && el.style.cssText) {
-                // Keep only certain inline styles, remove others
-                el.setAttribute('data-original-style', el.style.cssText);
-                // Preserve overflow properties for scrolling
+            // More targeted inline style cleanup - only fix specific problematic elements
+            // instead of iterating through ALL elements
+            const problematicTags = contents.document.querySelectorAll('div[style], p[style], span[style]');
+            problematicTags.forEach((el: any) => {
+              if (el.style && el.style.overflow) {
+                // Preserve overflow for scrolling
                 const overflow = el.style.overflow;
-                const overflowX = el.style.overflowX;
-                const overflowY = el.style.overflowY;
-                el.style.cssText = '';
-                if (overflow) el.style.overflow = overflow;
-                if (overflowX) el.style.overflowX = overflowX;
-                if (overflowY) el.style.overflowY = overflowY;
+                el.style.overflow = overflow;
               }
             });
 
@@ -352,8 +346,8 @@ export function EPUBViewer({
 
           if (!mounted) return true;
 
-          // Get total locations (pages)
-          await epubBook.locations.generate(1024);
+          // Get total locations (pages) - use larger chunk size for better performance
+          await epubBook.locations.generate(1600);
 
           // Save position when location changes (debounced)
           const debouncedSavePosition = () => {
