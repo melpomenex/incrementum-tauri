@@ -23,7 +23,7 @@ use tauri::State;
 
 // Global AI configuration state
 pub struct AIState {
-    config: Mutex<Option<AIConfig>>,
+    pub config: Mutex<Option<AIConfig>>,
 }
 
 impl Default for AIState {

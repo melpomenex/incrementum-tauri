@@ -2,7 +2,12 @@
 //!
 //! HTTP server for receiving data from the browser extension.
 //! The extension sends POST requests with page/extract/video data.
+//! Also provides AI endpoints for summarization and content analysis.
 
+use crate::ai::{AIConfig, AIProvider, LLMProviderType};
+use crate::ai::summarizer::Summarizer;
+use crate::ai::qa::QuestionAnswerer;
+use crate::ai::flashcard_generator::{FlashcardGenerator, FlashcardGenerationOptions};
 use crate::database::Repository;
 use crate::error::AppError;
 use crate::models::{Document, FileType, Extract};
@@ -10,7 +15,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Json, Response},
-    routing::post,
+    routing::{get, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -31,6 +36,7 @@ const MAX_PAYLOAD_SIZE: usize = 10 * 1024 * 1024;
 pub struct ServerState {
     pub repo: Arc<Repository>,
     pub running: Arc<Mutex<bool>>,
+    pub ai_config: Arc<Mutex<Option<AIConfig>>>,
 }
 
 /// Server status for Tauri commands
@@ -99,6 +105,78 @@ pub struct ExtensionResponse {
     pub error: Option<String>,
 }
 
+/// AI request from browser extension
+#[derive(Debug, Deserialize)]
+pub struct AIRequest {
+    /// Content to process
+    pub content: String,
+    /// Type of AI operation: "summarize", "key-points", "flashcards", "questions"
+    #[serde(default = "default_ai_operation")]
+    pub operation: String,
+    /// Max words for summary (default: 150)
+    #[serde(default = "default_max_words")]
+    pub max_words: usize,
+    /// Count for key points/questions/flashcards (default: 5)
+    #[serde(default = "default_count")]
+    pub count: usize,
+    /// Page URL for context
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Page title for context
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+fn default_ai_operation() -> String { "summarize".to_string() }
+fn default_max_words() -> usize { 150 }
+fn default_count() -> usize { 5 }
+
+/// Generated flashcard for browser extension
+#[derive(Debug, Clone, Serialize)]
+pub struct GeneratedFlashcard {
+    pub question: String,
+    pub answer: String,
+    pub card_type: String,
+}
+
+/// AI response to browser extension
+#[derive(Debug, Serialize)]
+pub struct AIResponse {
+    pub success: bool,
+    /// Summary of the content
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Key points extracted
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_points: Option<Vec<String>>,
+    /// Generated flashcards
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flashcards: Option<Vec<GeneratedFlashcard>>,
+    /// Generated questions
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub questions: Option<Vec<String>>,
+    /// Reading time estimate in minutes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reading_time_minutes: Option<u32>,
+    /// Word count
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub word_count: Option<u32>,
+    /// Complexity score (1-10)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complexity_score: Option<u8>,
+    /// Error message if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// AI status response
+#[derive(Debug, Serialize)]
+pub struct AIStatusResponse {
+    pub configured: bool,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
 /// Global server handle for shutdown
 static SERVER_HANDLE: Mutex<Option<tokio::task::JoinHandle<()>>> = Mutex::const_new(None);
 
@@ -106,6 +184,7 @@ static SERVER_HANDLE: Mutex<Option<tokio::task::JoinHandle<()>>> = Mutex::const_
 pub async fn start_server(
     config: BrowserSyncConfig,
     repo: Arc<Repository>,
+    ai_config: Option<AIConfig>,
 ) -> Result<(), AppError> {
     // Check if server is already running
     let mut handle = SERVER_HANDLE.lock().await;
@@ -125,11 +204,14 @@ pub async fn start_server(
     let state = ServerState {
         repo: repo.clone(),
         running: running.clone(),
+        ai_config: Arc::new(Mutex::new(ai_config)),
     };
 
-    // Build router
+    // Build router with AI endpoints
     let app = Router::new()
         .route("/", post(handle_extension_request))
+        .route("/ai/process", post(handle_ai_request))
+        .route("/ai/status", get(handle_ai_status))
         .layer(CorsLayer::permissive())
         .layer(RequestBodyLimitLayer::new(MAX_PAYLOAD_SIZE))
         .with_state(state);
@@ -501,12 +583,256 @@ fn error_response(status: StatusCode, message: &str) -> Response {
         .into_response()
 }
 
+/// Calculate reading time in minutes (average 200 words per minute)
+fn calculate_reading_time(content: &str) -> u32 {
+    let word_count = content.split_whitespace().count();
+    ((word_count as f64 / 200.0).ceil() as u32).max(1)
+}
+
+/// Calculate word count
+fn calculate_word_count(content: &str) -> u32 {
+    content.split_whitespace().count() as u32
+}
+
+/// Estimate complexity score (1-10) based on simple heuristics
+fn estimate_complexity(content: &str) -> u8 {
+    let words: Vec<&str> = content.split_whitespace().collect();
+    let word_count = words.len();
+    
+    if word_count == 0 {
+        return 1;
+    }
+    
+    // Average word length as a simple proxy for complexity
+    let avg_word_len: f64 = words.iter().map(|w| w.len()).sum::<usize>() as f64 / word_count as f64;
+    
+    // Sentence count (rough estimate)
+    let sentence_count = content.matches('.').count() + content.matches('!').count() + content.matches('?').count();
+    let avg_sentence_len = if sentence_count > 0 { word_count / sentence_count } else { word_count };
+    
+    // Score based on word length and sentence length
+    let complexity = ((avg_word_len - 3.0) * 1.5 + (avg_sentence_len as f64 - 10.0) * 0.2).clamp(1.0, 10.0);
+    complexity as u8
+}
+
+/// Handle AI request from browser extension
+async fn handle_ai_request(
+    State(state): State<ServerState>,
+    Json(payload): Json<AIRequest>,
+) -> Response {
+    info!(
+        "Received AI request: operation={}, content_length={}",
+        payload.operation,
+        payload.content.len()
+    );
+
+    // Get AI config
+    let ai_config = {
+        let config_guard = state.ai_config.lock().await;
+        config_guard.clone()
+    };
+
+    let config = match ai_config {
+        Some(c) => c,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(AIResponse {
+                    success: false,
+                    summary: None,
+                    key_points: None,
+                    flashcards: None,
+                    questions: None,
+                    reading_time_minutes: None,
+                    word_count: None,
+                    complexity_score: None,
+                    error: Some("AI is not configured. Please configure an AI provider in the desktop app settings.".to_string()),
+                }),
+            ).into_response();
+        }
+    };
+
+    // Create AI provider
+    let provider = match AIProvider::from_config(
+        config.default_provider.clone(),
+        &config.api_keys,
+        &config.models,
+        &config.local_settings,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(AIResponse {
+                    success: false,
+                    summary: None,
+                    key_points: None,
+                    flashcards: None,
+                    questions: None,
+                    reading_time_minutes: None,
+                    word_count: None,
+                    complexity_score: None,
+                    error: Some(format!("Failed to create AI provider: {}", e)),
+                }),
+            ).into_response();
+        }
+    };
+
+    // Calculate content stats
+    let reading_time = calculate_reading_time(&payload.content);
+    let word_count = calculate_word_count(&payload.content);
+    let complexity = estimate_complexity(&payload.content);
+
+    // Process based on operation type
+    let mut response = AIResponse {
+        success: true,
+        summary: None,
+        key_points: None,
+        flashcards: None,
+        questions: None,
+        reading_time_minutes: Some(reading_time),
+        word_count: Some(word_count),
+        complexity_score: Some(complexity),
+        error: None,
+    };
+
+    match payload.operation.as_str() {
+        "summarize" => {
+            let summarizer = Summarizer::new(provider);
+            match summarizer.summarize(&payload.content, payload.max_words).await {
+                Ok(summary) => {
+                    response.summary = Some(summary);
+                }
+                Err(e) => {
+                    response.success = false;
+                    response.error = Some(format!("Summarization failed: {}", e));
+                }
+            }
+        }
+        "key-points" => {
+            let summarizer = Summarizer::new(provider);
+            match summarizer.extract_key_points(&payload.content, payload.count).await {
+                Ok(points) => {
+                    response.key_points = Some(points);
+                }
+                Err(e) => {
+                    response.success = false;
+                    response.error = Some(format!("Key points extraction failed: {}", e));
+                }
+            }
+        }
+        "flashcards" => {
+            let generator = FlashcardGenerator::new(provider);
+            let options = FlashcardGenerationOptions {
+                count: payload.count,
+                ..Default::default()
+            };
+            match generator.generate_from_content(&payload.content, &options).await {
+                Ok(cards) => {
+                    response.flashcards = Some(
+                        cards.into_iter().map(|c| GeneratedFlashcard {
+                            question: c.question,
+                            answer: c.answer,
+                            card_type: format!("{:?}", c.card_type),
+                        }).collect()
+                    );
+                }
+                Err(e) => {
+                    response.success = false;
+                    response.error = Some(format!("Flashcard generation failed: {}", e));
+                }
+            }
+        }
+        "questions" => {
+            let qa = QuestionAnswerer::new(provider);
+            match qa.generate_questions(&payload.content, payload.count).await {
+                Ok(questions) => {
+                    response.questions = Some(questions);
+                }
+                Err(e) => {
+                    response.success = false;
+                    response.error = Some(format!("Question generation failed: {}", e));
+                }
+            }
+        }
+        "all" => {
+            // Get all AI features at once - create separate providers for each operation
+            let summarizer = Summarizer::new(provider);
+            
+            // Run summarization
+            if let Ok(summary) = summarizer.summarize(&payload.content, payload.max_words).await {
+                response.summary = Some(summary);
+            }
+            
+            // Run key points extraction
+            if let Ok(points) = summarizer.extract_key_points(&payload.content, payload.count).await {
+                response.key_points = Some(points);
+            }
+            
+            // Create new provider for questions
+            if let Ok(qa_provider) = AIProvider::from_config(
+                config.default_provider.clone(),
+                &config.api_keys,
+                &config.models,
+                &config.local_settings,
+            ) {
+                let qa = QuestionAnswerer::new(qa_provider);
+                if let Ok(questions) = qa.generate_questions(&payload.content, 3).await {
+                    response.questions = Some(questions);
+                }
+            }
+        }
+        _ => {
+            response.success = false;
+            response.error = Some(format!("Unknown operation: {}", payload.operation));
+        }
+    }
+
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+/// Handle AI status check from browser extension
+async fn handle_ai_status(
+    State(state): State<ServerState>,
+) -> Response {
+    let ai_config = {
+        let config_guard = state.ai_config.lock().await;
+        config_guard.clone()
+    };
+
+    let response = match ai_config {
+        Some(config) => {
+            let provider_name = format!("{:?}", config.default_provider);
+            let model = match config.default_provider {
+                LLMProviderType::OpenAI => Some(config.models.openai_model.clone()),
+                LLMProviderType::Anthropic => Some(config.models.anthropic_model.clone()),
+                LLMProviderType::OpenRouter => Some(config.models.openrouter_model.clone()),
+                LLMProviderType::Ollama => Some(config.models.ollama_model.clone()),
+            };
+            
+            AIStatusResponse {
+                configured: true,
+                provider: Some(provider_name),
+                model,
+            }
+        }
+        None => AIStatusResponse {
+            configured: false,
+            provider: None,
+            model: None,
+        },
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
+}
+
 /// Tauri commands
 
 #[tauri::command]
 pub async fn start_browser_sync_server(
     port: u16,
     repo: tauri::State<'_, Repository>,
+    ai_state: tauri::State<'_, crate::commands::ai::AIState>,
 ) -> Result<ServerStatus, AppError> {
     let config = BrowserSyncConfig {
         host: "127.0.0.1".to_string(),
@@ -514,10 +840,16 @@ pub async fn start_browser_sync_server(
         auto_start: false,
     };
 
+    // Get AI config from the AI state
+    let ai_config = {
+        let guard = ai_state.config.lock().unwrap();
+        guard.clone()
+    };
+
     // Get the pool from the repository and create a new Arc<Repository>
     let pool = repo.pool().clone();
     let repo_arc = Arc::new(Repository::new(pool));
-    start_server(config, repo_arc).await?;
+    start_server(config, repo_arc, ai_config).await?;
 
     Ok(ServerStatus {
         running: true,
@@ -595,11 +927,11 @@ pub async fn set_browser_sync_config(config: BrowserSyncConfig) -> Result<(), Ap
 }
 
 /// Initialize browser sync server (called on app startup)
-pub async fn initialize_if_enabled(repo: Arc<Repository>) -> Result<(), AppError> {
+pub async fn initialize_if_enabled(repo: Arc<Repository>, ai_config: Option<AIConfig>) -> Result<(), AppError> {
     let config = load_config();
     if config.auto_start {
         info!("Auto-starting browser extension server on port {}", config.port);
-        let _ = start_server(config, repo).await;
+        let _ = start_server(config, repo, ai_config).await;
     }
     Ok(())
 }

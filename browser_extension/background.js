@@ -81,14 +81,14 @@ function createContextMenus() {
       title: '💾 Save to Incrementum',
       contexts: ['page']
     });
-    
+
     // Save link context menu
     chrome.contextMenus.create({
       id: 'save-link',
       title: '🔗 Save Link to Incrementum',
       contexts: ['link']
     });
-    
+
     // Extract selection context menu
     chrome.contextMenus.create({
       id: 'create-extract',
@@ -115,13 +115,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     case 'save-page':
       await saveCurrentTab();
       break;
-      
+
     case 'save-link':
       if (info.linkUrl) {
         await saveLink(info.linkUrl, tab?.id);
       }
       break;
-      
+
     case 'create-extract':
       if (info.selectionText) {
         await createExtractFromSelection(info.selectionText, tab);
@@ -237,6 +237,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
 
+        case 'generateAISummary': {
+          const data = message.data || {};
+          if (!data.content) {
+            sendResponse({ success: false, error: 'No content provided for analysis' });
+            break;
+          }
+
+          const aiResponse = await requestAIAnalysis(data);
+          sendResponse(aiResponse);
+          break;
+        }
+
+        case 'getAIStatus': {
+          const statusResult = await checkAIStatus();
+          sendResponse(statusResult);
+          break;
+        }
+
         default:
           console.log('[DEBUG] Unknown action:', message.action);
           sendResponse({ success: false, error: 'Unknown action' });
@@ -339,18 +357,18 @@ async function saveAllTabs() {
   try {
     const tabs = await chrome.tabs.query({ currentWindow: true });
     const validTabs = tabs.filter(tab => tab.url && !isInternalUrl(tab.url));
-    
+
     let successful = 0;
     const results = await Promise.allSettled(
       validTabs.map(tab => savePage(tab.url, tab.title))
     );
-    
+
     results.forEach(result => {
       if (result.status === 'fulfilled' && result.value.success) {
         successful++;
       }
     });
-    
+
     return {
       success: true,
       successful,
@@ -363,167 +381,167 @@ async function saveAllTabs() {
 }
 
 async function sendToIncrementum(data) {
-    try {
-        console.log('[DEBUG] sendToIncrementum called with:', data);
-        await loadSettings();
+  try {
+    console.log('[DEBUG] sendToIncrementum called with:', data);
+    await loadSettings();
 
-        // Use the root endpoint as expected by BrowserSyncServer
-        const endpoint = browserSyncEndpoint();
-        console.log('[DEBUG] sendToIncrementum endpoint:', endpoint);
+    // Use the root endpoint as expected by BrowserSyncServer
+    const endpoint = browserSyncEndpoint();
+    console.log('[DEBUG] sendToIncrementum endpoint:', endpoint);
 
-        const trimmedText = (data.text || '').trim();
+    const trimmedText = (data.text || '').trim();
 
-        const requestBody = JSON.stringify({
-            url: data.url,
-            title: data.title || 'Untitled',
-            text: trimmedText,
-            content: trimmedText, // kept for backward compatibility
-            type: data.type || (trimmedText ? 'extract' : 'page'),
-            source: data.source || 'browser_extension',
-            timestamp: data.timestamp || new Date().toISOString(),
-            context: data.context,
-            tags: data.tags,
-            priority: data.priority,
-            analysis: data.analysis,
-            fsrs_data: data.fsrs_data
-        });
+    const requestBody = JSON.stringify({
+      url: data.url,
+      title: data.title || 'Untitled',
+      text: trimmedText,
+      content: trimmedText, // kept for backward compatibility
+      type: data.type || (trimmedText ? 'extract' : 'page'),
+      source: data.source || 'browser_extension',
+      timestamp: data.timestamp || new Date().toISOString(),
+      context: data.context,
+      tags: data.tags,
+      priority: data.priority,
+      analysis: data.analysis,
+      fsrs_data: data.fsrs_data
+    });
 
-        console.log('[DEBUG] sendToIncrementum request body:', requestBody);
+    console.log('[DEBUG] sendToIncrementum request body:', requestBody);
 
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: requestBody
-        });
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: requestBody
+    });
 
-        console.log('[DEBUG] sendToIncrementum response:', response.status, response.ok);
+    console.log('[DEBUG] sendToIncrementum response:', response.status, response.ok);
 
-        if (response.ok) {
-            // The BrowserSyncServer returns 200 OK without JSON body
-            return { success: true, message: 'Data sent successfully' };
-        } else {
-            const errorText = await response.text();
-            console.error('Server response error:', errorText);
-            return { success: false, error: `Server error: ${response.status}` };
-        }
-    } catch (error) {
-        console.error('[DEBUG] Network error in sendToIncrementum:', error);
-        console.error('[DEBUG] Network error details:', error.name, error.message);
-        return { success: false, error: error.message };
+    if (response.ok) {
+      // The BrowserSyncServer returns 200 OK without JSON body
+      return { success: true, message: 'Data sent successfully' };
+    } else {
+      const errorText = await response.text();
+      console.error('Server response error:', errorText);
+      return { success: false, error: `Server error: ${response.status}` };
     }
+  } catch (error) {
+    console.error('[DEBUG] Network error in sendToIncrementum:', error);
+    console.error('[DEBUG] Network error details:', error.name, error.message);
+    return { success: false, error: error.message };
+  }
 }
 // Save link by opening a tab, extracting content, and saving
 async function saveLink(url, sourceTabId) {
-    try {
-        console.log('[DEBUG] saveLink called for URL:', url);
+  try {
+    console.log('[DEBUG] saveLink called for URL:', url);
 
-        // Create a new tab to extract content
-        const tab = await chrome.tabs.create({
-            url: url,
-            active: false  // Don't focus the tab
-        });
+    // Create a new tab to extract content
+    const tab = await chrome.tabs.create({
+      url: url,
+      active: false  // Don't focus the tab
+    });
 
-        // Wait for the tab to finish loading
-        await new Promise((resolve) => {
-            const listener = (tabId, changeInfo) => {
-                if (tabId === tab.id && changeInfo.status === 'complete') {
-                    chrome.tabs.onUpdated.removeListener(listener);
-                    resolve();
-                }
-            };
-            chrome.tabs.onUpdated.addListener(listener);
-        });
-
-        // Additional wait for dynamic content to load
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Try to extract page content using the content script
-        let pageContent = '';
-        try {
-            const response = await chrome.tabs.sendMessage(tab.id, {
-                action: 'getPageContent'
-            });
-            if (response && response.success && response.content) {
-                pageContent = response.content;
-                console.log('[DEBUG] Successfully extracted page content, length:', pageContent.length);
-            }
-        } catch (error) {
-            console.log('[DEBUG] Could not get content from content script:', error.message);
+    // Wait for the tab to finish loading
+    await new Promise((resolve) => {
+      const listener = (tabId, changeInfo) => {
+        if (tabId === tab.id && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
         }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+    });
 
-        // Get the page title
-        const title = tab.title || 'Link saved from context menu';
+    // Additional wait for dynamic content to load
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Close the tab
-        await chrome.tabs.remove(tab.id);
-
-        // Save to Incrementum
-        console.log('[DEBUG] Saving link with content length:', pageContent.length);
-        const result = await sendToIncrementum({
-            url,
-            title,
-            text: pageContent
-        });
-        await sendInPageToast(sourceTabId, result.success, 'Link sent to Incrementum!');
-        return result;
+    // Try to extract page content using the content script
+    let pageContent = '';
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        action: 'getPageContent'
+      });
+      if (response && response.success && response.content) {
+        pageContent = response.content;
+        console.log('[DEBUG] Successfully extracted page content, length:', pageContent.length);
+      }
     } catch (error) {
-        console.error('[DEBUG] Error in saveLink:', error);
-        // Fallback: save without content
-        const result = await sendToIncrementum({
-            url,
-            title: 'Link saved from context menu',
-            text: ''
-        });
-        await sendInPageToast(sourceTabId, result.success, 'Link sent to Incrementum!');
-        return result;
+      console.log('[DEBUG] Could not get content from content script:', error.message);
     }
+
+    // Get the page title
+    const title = tab.title || 'Link saved from context menu';
+
+    // Close the tab
+    await chrome.tabs.remove(tab.id);
+
+    // Save to Incrementum
+    console.log('[DEBUG] Saving link with content length:', pageContent.length);
+    const result = await sendToIncrementum({
+      url,
+      title,
+      text: pageContent
+    });
+    await sendInPageToast(sourceTabId, result.success, 'Link sent to Incrementum!');
+    return result;
+  } catch (error) {
+    console.error('[DEBUG] Error in saveLink:', error);
+    // Fallback: save without content
+    const result = await sendToIncrementum({
+      url,
+      title: 'Link saved from context menu',
+      text: ''
+    });
+    await sendInPageToast(sourceTabId, result.success, 'Link sent to Incrementum!');
+    return result;
+  }
 }
 
 
 async function savePage(url, title) {
-    try {
-        // Try to extract page content using the content script
-        const tabs = await chrome.tabs.query({ url: url });
-        let pageContent = '';
+  try {
+    // Try to extract page content using the content script
+    const tabs = await chrome.tabs.query({ url: url });
+    let pageContent = '';
 
-        if (tabs.length > 0 && tabs[0].id) {
-            try {
-                // Request content from the content script
-                const response = await chrome.tabs.sendMessage(tabs[0].id, {
-                    action: 'getPageContent'
-                });
-                if (response && response.success && response.content) {
-                    pageContent = response.content;
-                }
-            } catch (error) {
-                console.log('[DEBUG] Could not get content from content script:', error.message);
-            }
-        }
-
-        // If we couldn't get content from the content script, return at least URL and title
-        return await sendToIncrementum({
-            url,
-            title,
-            text: pageContent
+    if (tabs.length > 0 && tabs[0].id) {
+      try {
+        // Request content from the content script
+        const response = await chrome.tabs.sendMessage(tabs[0].id, {
+          action: 'getPageContent'
         });
-    } catch (error) {
-        console.error('[DEBUG] Error in savePage:', error);
-        // Fallback to basic save without content
-        return await sendToIncrementum({url, title, text: ''});
+        if (response && response.success && response.content) {
+          pageContent = response.content;
+        }
+      } catch (error) {
+        console.log('[DEBUG] Could not get content from content script:', error.message);
+      }
     }
+
+    // If we couldn't get content from the content script, return at least URL and title
+    return await sendToIncrementum({
+      url,
+      title,
+      text: pageContent
+    });
+  } catch (error) {
+    console.error('[DEBUG] Error in savePage:', error);
+    // Fallback to basic save without content
+    return await sendToIncrementum({ url, title, text: '' });
+  }
 }
 
 // Create extract from selection (context menu)
 async function createExtractFromSelection(selectedText, tab) {
-    const text = (selectedText || '').trim();
-    if (!text) {
-        return { success: false, error: 'No selection provided' };
-    }
-    const result = await sendToIncrementum({url: tab.url, title: tab.title, text});
-    await sendInPageToast(tab?.id, result.success, 'Extract sent to Incrementum!');
-    return result;
+  const text = (selectedText || '').trim();
+  if (!text) {
+    return { success: false, error: 'No selection provided' };
+  }
+  const result = await sendToIncrementum({ url: tab.url, title: tab.title, text });
+  await sendInPageToast(tab?.id, result.success, 'Extract sent to Incrementum!');
+  return result;
 }
 
 async function sendInPageToast(tabId, success, message) {
@@ -544,7 +562,7 @@ async function sendInPageToast(tabId, success, message) {
 // Helper function to check if URL is internal
 function isInternalUrl(url) {
   if (!url) return true;
-  
+
   const internalPrefixes = [
     'chrome://',
     'chrome-extension://',
@@ -554,7 +572,7 @@ function isInternalUrl(url) {
     'opera://',
     'brave://'
   ];
-  
+
   return internalPrefixes.some(prefix => url.startsWith(prefix));
 }
 
@@ -624,4 +642,78 @@ async function toggleHighlights() {
   }
 }
 
+// Request AI analysis from desktop app
+async function requestAIAnalysis(data) {
+  try {
+    await loadSettings();
+    const endpoint = `${INCREMENTUM_BASE_URL}/ai/process`;
+
+    console.log('[DEBUG] Requesting AI analysis:', endpoint);
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        content: data.content,
+        operation: data.operation || 'all',
+        max_words: data.max_words || 150,
+        count: data.count || 5,
+        url: data.url,
+        title: data.title
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[DEBUG] AI request failed:', response.status, errorText);
+      return {
+        success: false,
+        error: response.status === 503
+          ? 'AI is not configured. Please configure an AI provider in the desktop app settings.'
+          : `AI request failed: ${response.status}`
+      };
+    }
+
+    const result = await response.json();
+    console.log('[DEBUG] AI response:', result);
+    return result;
+
+  } catch (error) {
+    console.error('[DEBUG] AI analysis error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to connect to AI service'
+    };
+  }
+}
+
+// Check AI status from desktop app
+async function checkAIStatus() {
+  try {
+    await loadSettings();
+    const endpoint = `${INCREMENTUM_BASE_URL}/ai/status`;
+
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      return { configured: false, error: 'Failed to check AI status' };
+    }
+
+    const result = await response.json();
+    return result;
+
+  } catch (error) {
+    console.error('[DEBUG] AI status check error:', error);
+    return { configured: false, error: error.message };
+  }
+}
+
 console.log('Incrementum background script loaded');
+
