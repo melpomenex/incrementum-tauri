@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../../lib/tauri";
 import { Download, Upload, FileDown, FileUp, RefreshCw } from "lucide-react";
 import { SettingsSection, SettingsRow } from "./SettingsPage";
 
@@ -77,7 +78,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
       if (fileName.endsWith(".apkg")) {
         const filePath = (importFile as File & { path?: string }).path;
         if (filePath) {
-          const imported = await invoke<unknown[]>("import_anki_package_to_learning_items", {
+          const imported = await invokeCommand<unknown[]>("import_anki_package_to_learning_items", {
             apkgPath: filePath,
           });
           alert(`Imported ${imported.length} Anki card(s) as learning items`);
@@ -86,7 +87,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
         }
 
         const apkgBytes = new Uint8Array(await importFile.arrayBuffer());
-        const imported = await invoke<unknown[]>("import_anki_package_bytes_to_learning_items", {
+        const imported = await invokeCommand<unknown[]>("import_anki_package_bytes_to_learning_items", {
           apkgBytes: Array.from(apkgBytes),
         });
         alert(`Imported ${imported.length} Anki card(s) as learning items`);
@@ -100,7 +101,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
           throw new Error("Import requires access to the archive file path.");
         }
 
-        const summary = await invoke<{
+        const summary = await invokeCommand<{
           documents: number;
           extracts: number;
           learningItems: number;
@@ -108,13 +109,14 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
           reviewResults: number;
         }>("import_legacy_archive", { archivePath: filePath });
 
+
         alert(
           `Legacy import complete:\n` +
-            `Documents: ${summary.documents}\n` +
-            `Extracts: ${summary.extracts}\n` +
-            `Learning Items: ${summary.learningItems}\n` +
-            `Review Sessions: ${summary.reviewSessions}\n` +
-            `Review Results: ${summary.reviewResults}`
+          `Documents: ${summary.documents}\n` +
+          `Extracts: ${summary.extracts}\n` +
+          `Learning Items: ${summary.learningItems}\n` +
+          `Review Sessions: ${summary.reviewSessions}\n` +
+          `Review Results: ${summary.reviewResults}`
         );
         onChange();
         return;

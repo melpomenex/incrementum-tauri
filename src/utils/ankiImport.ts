@@ -5,8 +5,7 @@
  * and converting them to Incrementum format
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { invokeCommand, openFilePicker } from "../lib/tauri";
 
 export interface AnkiField {
   name: string;
@@ -44,7 +43,7 @@ export interface AnkiDeck {
  */
 export async function validateAnkiPackage(filePath: string): Promise<boolean> {
   try {
-    const isValid = await invoke<boolean>("validate_anki_package", { path: filePath });
+    const isValid = await invokeCommand<boolean>("validate_anki_package", { path: filePath });
     return isValid;
   } catch (error) {
     console.error("Failed to validate Anki package:", error);
@@ -57,7 +56,7 @@ export async function validateAnkiPackage(filePath: string): Promise<boolean> {
  */
 export async function importAnkiPackage(filePath: string): Promise<AnkiDeck[]> {
   try {
-    const result = await invoke<string>("import_anki_package", { apkgPath: filePath });
+    const result = await invokeCommand<string>("import_anki_package", { apkgPath: filePath });
     const decks = JSON.parse(result) as AnkiDeck[];
     return decks;
   } catch (error) {
@@ -71,7 +70,7 @@ export async function importAnkiPackage(filePath: string): Promise<AnkiDeck[]> {
  */
 export async function selectAnkiPackage(): Promise<string | null> {
   try {
-    const selected = await open({
+    const selected = await openFilePicker({
       multiple: false,
       filters: [{
         name: "Anki Package",
@@ -79,7 +78,8 @@ export async function selectAnkiPackage(): Promise<string | null> {
       }]
     });
 
-    return selected as string | null;
+    if (!selected || selected.length === 0) return null;
+    return selected[0]; // Return the first selected file path
   } catch (error) {
     console.error("Failed to open file picker:", error);
     return null;
