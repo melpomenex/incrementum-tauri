@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 import { KnowledgeGraph, GraphNodeType, type GraphNode, type GraphEdge, type GraphData } from "../components/graph/KnowledgeGraph";
 import {
   Network,
@@ -31,9 +31,9 @@ export function KnowledgeGraphPage() {
 
     try {
       // Fetch data from backend
-      const documents = await invoke<any[]>("get_documents");
-      const extracts = await invoke<any[]>("get_extracts", { documentId: null });
-      const learningItems = await invoke<any[]>("get_learning_items");
+      const documents = await invokeCommand<any[]>("get_documents");
+      const extracts = await invokeCommand<any[]>("get_extracts", { documentId: null });
+      const learningItems = await invokeCommand<any[]>("get_learning_items");
 
       // Build graph nodes
       const nodes: GraphNode[] = [];

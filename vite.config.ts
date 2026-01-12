@@ -9,60 +9,79 @@ const host = rawHost === "localhost" ? "127.0.0.1" : rawHost;
 // https://vite.dev/config/
 export default defineConfig(async ({ mode }) => {
   const isProd = mode === "production";
+  const isPWA = mode === "pwa" || (!rawHost && isProd);
 
-  return ({
-  plugins: [react(), tailwindcss()],
+  const plugins = [react(), tailwindcss()];
 
-  // Use relative asset paths so the production build works with
-  // Tauri's custom protocol and when opening the file directly.
-  base: "./",
+  return {
+    plugins,
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  //
-  // 1. prevent Vite from obscuring rust errors
-  clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
-  server: {
-    port: 15173,
-    strictPort: true,
-    host: host || "127.0.0.1",
-    hmr: host
-      ? {
+    // Use relative asset paths so the production build works with
+    // Tauri's custom protocol and when opening the file directly.
+    base: isPWA ? "/" : "./",
+
+    // Define environment variables
+    define: {
+      __PWA_MODE__: JSON.stringify(isPWA),
+    },
+
+    // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+    //
+    // 1. prevent Vite from obscuring rust errors
+    clearScreen: false,
+    // 2. tauri expects a fixed port, fail if that port is not available
+    server: {
+      port: 15173,
+      strictPort: true,
+      host: host || "127.0.0.1",
+      hmr: host
+        ? {
           protocol: "ws",
           host,
           port: 15174,
         }
-      : undefined,
-    watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
-    },
-  },
-
-  // Performance: Code splitting optimization
-  build: {
-    // Avoid module loading CORS issues when running from file://
-    // by emitting a single JS bundle in production.
-    modulePreload: !isProd,
-    cssCodeSplit: !isProd,
-    rollupOptions: {
-      output: isProd
+        : undefined,
+      watch: {
+        // 3. tell Vite to ignore watching `src-tauri`
+        ignored: ["**/src-tauri/**", "**/server/**"],
+      },
+      // Proxy API requests in development
+      proxy: isPWA
         ? {
-            inlineDynamicImports: true,
-          }
-        : {
-            manualChunks: {
-              // Vendor chunks for large libraries
-              "react-vendor": ["react", "react-dom", "react-router-dom"],
-              "query-vendor": ["@tanstack/react-query"],
-              "pdf-vendor": ["pdfjs-dist"],
-              "epub-vendor": ["epubjs"],
-              "ui-vendor": ["lucide-react"],
-              zustand: ["zustand"],
-            },
+          "/api": {
+            target: "http://localhost:3000",
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api/, ""),
           },
+        }
+        : undefined,
     },
-    chunkSizeWarningLimit: 1000,
-  },
-});
+
+    // Performance: Code splitting optimization
+    build: {
+      // For PWA, we can use normal code splitting
+      // For Tauri, inline everything to avoid CORS issues
+      modulePreload: isPWA || !isProd,
+      cssCodeSplit: isPWA || !isProd,
+      rollupOptions: {
+        output:
+          isProd && !isPWA
+            ? {
+              inlineDynamicImports: true,
+            }
+            : {
+              manualChunks: {
+                // Vendor chunks for large libraries
+                "react-vendor": ["react", "react-dom", "react-router-dom"],
+                "query-vendor": ["@tanstack/react-query"],
+                "pdf-vendor": ["pdfjs-dist"],
+                "epub-vendor": ["epubjs"],
+                "ui-vendor": ["lucide-react"],
+                zustand: ["zustand"],
+              },
+            },
+      },
+      chunkSizeWarningLimit: 1000,
+    },
+  };
 });

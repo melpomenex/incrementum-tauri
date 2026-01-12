@@ -6,6 +6,8 @@
  * requires the Tauri desktop environment.
  */
 
+import { browserInvoke } from './browser-backend.js';
+
 let tauriInvoke: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null = null;
 let tauriDialogOpen: ((options: unknown) => Promise<string | string[] | null>) | null = null;
 let tauriEventListen: (<T>(event: string, handler: (event: T) => void) => Promise<() => void>) | null = null;
@@ -15,6 +17,15 @@ let tauriEventListen: (<T>(event: string, handler: (event: T) => void) => Promis
  */
 export function isTauri(): boolean {
   return "__TAURI__" in window;
+}
+
+/**
+ * Check if running in PWA mode
+ */
+export function isPWA(): boolean {
+  return !isTauri() && (window.matchMedia('(display-mode: standalone)').matches ||
+    // @ts-expect-error - iOS Safari specific
+    window.navigator.standalone === true);
 }
 
 /**
@@ -69,97 +80,8 @@ async function loadTauriEventAPI(): Promise<void> {
 }
 
 /**
- * Mock data for browser environment
- * This allows the app to render in a browser for UI preview
- */
-const MOCK_DATA = {
-  documents: [],
-  extracts: [],
-  ai_config: null,
-  migration_status: { is_migrated: false, in_progress: false },
-};
-
-/**
- * Commands that typically return arrays
- */
-const ARRAY_RETURN_COMMANDS = [
-  "get_activity_data",
-  "get_queue",
-  "get_queue_stats",
-  "get_extracts",
-  "get_learning_items",
-  "get_due_items",
-  "get_dashboard_stats",
-  "get_category_stats",
-  "get_memory_stats",
-];
-
-/**
- * Mock document for browser testing
- */
-const MOCK_DOCUMENT = {
-  id: "mock-doc-1",
-  title: "Sample Document (Browser Mode)",
-  filePath: "/sample.pdf",
-  fileType: "pdf",
-  dateAdded: new Date().toISOString(),
-  dateModified: new Date().toISOString(),
-  extractCount: 0,
-  learningItemCount: 0,
-  pageCount: 10,
-  currentPage: 1,
-  priorityRating: 3,
-  priorityScore: 60,
-  isArchived: false,
-  isFavorite: false,
-  tags: ["demo", "browser-mode"],
-  metadata: {
-    createdAt: new Date().toISOString(),
-  },
-};
-
-/**
- * Browser mock implementation for invoke commands
- * Returns mock data or throws with helpful error
- */
-function browserMockInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  console.warn(`[Browser Mock] Tauri command "${command}" called. Running in browser mode.`);
-
-  // Special handling for import commands - return a mock document for testing UI
-  if (command === "import_document" || command === "import_documents") {
-    console.log("[Browser Mock] Returning mock document for UI testing");
-    return Promise.resolve([MOCK_DOCUMENT] as T);
-  }
-
-  // Check if this command has mock data
-  const mockKey = command as keyof typeof MOCK_DATA;
-  if (mockKey in MOCK_DATA) {
-    return Promise.resolve(MOCK_DATA[mockKey] as T);
-  }
-
-  // Return empty arrays for commands that typically return arrays
-  if (command.startsWith("get_") || ARRAY_RETURN_COMMANDS.includes(command)) {
-    return Promise.resolve([] as T);
-  }
-  if (command.startsWith("set_") || command.startsWith("update_") || command.startsWith("create_")) {
-    return Promise.resolve(undefined as T);
-  }
-
-  // For commands that modify data, just return undefined
-  return Promise.resolve(undefined as T);
-}
-
-/**
- * Browser mock implementation for file picker
- */
-function browserMockOpenFilePicker(): Promise<string[] | null> {
-  console.warn("[Browser Mock] File picker not available in browser. Would open file dialog.");
-  return Promise.resolve(null);
-}
-
-/**
  * Type-safe wrapper for Tauri invoke commands
- * Falls back to mock implementation in browser environments
+ * Falls back to browser backend (IndexedDB) in browser/PWA environments
  */
 export async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri()) {
@@ -168,20 +90,20 @@ export async function invokeCommand<T>(command: string, args?: Record<string, un
       throw new Error("Failed to load Tauri invoke API");
     }
     try {
-      return await tauriInvoke<T>(command, args);
+      return await tauriInvoke(command, args) as T;
     } catch (error) {
       console.error(`Tauri command "${command}" failed:`, error);
       throw error;
     }
   } else {
-    // Browser environment - use mock
-    return browserMockInvoke<T>(command, args);
+    // Browser/PWA environment - use IndexedDB backend
+    return browserInvoke<T>(command, args);
   }
 }
 
 /**
  * Open file picker dialog
- * Falls back to mock implementation in browser environments
+ * Falls back to HTML5 File API in browser environments
  */
 export async function openFilePicker(options?: {
   title?: string;
@@ -202,9 +124,51 @@ export async function openFilePicker(options?: {
     if (selected === null) return null;
     return Array.isArray(selected) ? selected : [selected];
   } else {
-    return browserMockOpenFilePicker();
+    // Browser environment - use HTML5 File API
+    return browserOpenFilePicker(options);
   }
 }
+
+import { storeBrowserFile, getBrowserFile } from './browser-file-store';
+
+/**
+ * Open file picker using HTML5 File API
+ */
+function browserOpenFilePicker(options?: {
+  multiple?: boolean;
+  filters?: Array<{ name: string; extensions: string[] }>;
+}): Promise<string[] | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = options?.multiple ?? false;
+
+    // Build accept attribute from filters
+    if (options?.filters?.length) {
+      const extensions = options.filters.flatMap(f => f.extensions.map(ext => `.${ext}`));
+      input.accept = extensions.join(',');
+    }
+
+    input.onchange = () => {
+      if (input.files && input.files.length > 0) {
+        // Store files in a global map for later retrieval
+        const paths: string[] = [];
+        for (let i = 0; i < input.files.length; i++) {
+          const file = input.files[i];
+          const virtualPath = storeBrowserFile(file);
+          paths.push(virtualPath);
+        }
+        resolve(paths);
+      } else {
+        resolve(null);
+      }
+    };
+
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
 
 /**
  * Open folder picker dialog
@@ -267,6 +231,6 @@ export async function listen<T>(
   } else {
     // Browser environment - return a no-op unlisten function
     console.warn(`[Browser Mock] Event listener for "${event}" not available in browser.`);
-    return () => {};
+    return () => { };
   }
 }

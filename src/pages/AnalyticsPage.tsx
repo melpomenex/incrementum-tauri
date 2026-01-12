@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAnalyticsStore } from "../stores/analyticsStore";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 import {
   TrendingUp,
   TrendingDown,
@@ -22,7 +22,7 @@ export function AnalyticsPage() {
 
   const exportStats = async () => {
     try {
-      await invoke("export_analytics", { timeRange });
+      await invokeCommand("export_analytics", { timeRange });
       alert("Statistics exported successfully!");
     } catch (error) {
       console.error("Failed to export:", error);
@@ -74,7 +74,7 @@ export function AnalyticsPage() {
               trend={
                 activityData && activityData.length > 1
                   ? ((activityData[activityData.length - 1]?.total_cards || 0) -
-                      (activityData[activityData.length - 2]?.total_cards || 0))
+                    (activityData[activityData.length - 2]?.total_cards || 0))
                   : 0
               }
             />
@@ -93,7 +93,7 @@ export function AnalyticsPage() {
               value={`${Math.round(
                 ((dashboardStats?.cards_retained || 0) /
                   Math.max(1, dashboardStats?.total_cards || 0)) *
-                  100
+                100
               )}%`}
               icon={<Activity className="w-5 h-5" />}
             />
@@ -149,7 +149,7 @@ export function AnalyticsPage() {
                         5,
                         (day.reviews_count /
                           Math.max(...activityData.map((d: any) => d.reviews_count))) *
-                          100
+                        100
                       )}%`,
                     }}
                     title={`${day.reviews_count} reviews`}

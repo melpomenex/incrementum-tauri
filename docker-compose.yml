@@ -1,0 +1,42 @@
+services:
+  api:
+    build: ./server
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://incrementum:incrementum@db:5432/incrementum
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - STORAGE_PATH=/app/uploads
+      - CORS_ORIGINS=http://localhost:80,http://localhost:5173
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=incrementum
+      - POSTGRES_PASSWORD=incrementum
+      - POSTGRES_DB=incrementum
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U incrementum"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  uploads:

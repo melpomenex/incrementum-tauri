@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 import {
   Search as SearchIcon,
   FileText,
@@ -50,7 +50,7 @@ export function SearchPage() {
     setIsSearching(true);
 
     try {
-      const searchResults = await invoke<SearchResult[]>("global_search", {
+      const searchResults = await invokeCommand<SearchResult[]>("global_search", {
         query,
         filters: Array.from(selectedFilters),
       });
@@ -70,7 +70,7 @@ export function SearchPage() {
 
     try {
       if (selectedFilters.has("document")) {
-        const documents = await invoke<any[]>("get_documents");
+        const documents = await invokeCommand<any[]>("get_documents");
         documents.forEach((doc: any) => {
           if (
             doc.title?.toLowerCase().includes(query.toLowerCase()) ||
@@ -88,7 +88,7 @@ export function SearchPage() {
       }
 
       if (selectedFilters.has("extract")) {
-        const extracts = await invoke<any[]>("get_extracts", { documentId: null });
+        const extracts = await invokeCommand<any[]>("get_extracts", { documentId: null });
         extracts.forEach((extract: any) => {
           if (
             extract.content?.toLowerCase().includes(query.toLowerCase())
@@ -106,7 +106,7 @@ export function SearchPage() {
       }
 
       if (selectedFilters.has("flashcard")) {
-        const cards = await invoke<any[]>("get_learning_items");
+        const cards = await invokeCommand<any[]>("get_learning_items");
         cards.forEach((card: any) => {
           if (
             card.question?.toLowerCase().includes(query.toLowerCase()) ||
@@ -214,11 +214,10 @@ export function SearchPage() {
                 <button
                   key={filter}
                   onClick={() => toggleFilter(filter)}
-                  className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                    selectedFilters.has(filter)
+                  className={`px-3 py-1.5 rounded text-sm transition-colors ${selectedFilters.has(filter)
                       ? "bg-primary-100 text-primary-700 border border-primary-300"
                       : "bg-background border border-border hover:bg-muted"
-                  }`}
+                    }`}
                 >
                   {filter.charAt(0).toUpperCase() + filter.slice(1)}
                 </button>
