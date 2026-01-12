@@ -42,11 +42,12 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const loadTranscript = useCallback(async () => {
     setIsLoadingTranscript(true);
     try {
-      const transcriptData = await invoke<{
-        segments: Array<{ text: string; start: number; duration: number }>;
-      }>("get_youtube_transcript_by_id", { videoId });
+      const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }>>(
+        "get_youtube_transcript_by_id",
+        { videoId, documentId }
+      );
 
-      const segments: TranscriptSegment[] = transcriptData.segments.map((seg, i) => ({
+      const segments: TranscriptSegment[] = transcriptData.map((seg, i) => ({
         id: `seg-${i}`,
         start: seg.start,
         end: seg.start + seg.duration,
@@ -60,7 +61,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     } finally {
       setIsLoadingTranscript(false);
     }
-  }, [videoId]);
+  }, [videoId, documentId]);
 
   // Initialize player - defined after loadTranscript so it can be included in dependencies
   const initializePlayer = useCallback(() => {

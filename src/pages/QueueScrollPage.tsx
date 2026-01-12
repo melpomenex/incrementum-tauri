@@ -38,6 +38,7 @@ export function QueueScrollPage() {
   const { documents, loadDocuments } = useDocumentStore();
   const { tabs, activeTabId, closeTab } = useTabsStore();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [renderedIndex, setRenderedIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [scrollItems, setScrollItems] = useState<ScrollItem[]>([]);
@@ -46,14 +47,27 @@ export function QueueScrollPage() {
   const startTimeRef = useRef(Date.now());
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Filter to only show documents (not learning items or extracts)
-  const documentQueueItems = allQueueItems.filter((item) => item.itemType === "document");
+  // Filter to only show documents (not learning items or extracts or YouTube videos)
+  const documentQueueItems = allQueueItems.filter((item) => {
+    if (item.itemType !== "document") return false;
+
+    // Filter out YouTube videos - they don't make sense in scroll mode
+    const doc = documents.find(d => d.id === item.documentId);
+    if (doc && doc.fileType === "youtube") return false;
+
+    return true;
+  });
 
   // Load queue and documents on mount
   useEffect(() => {
     loadQueue();
     loadDocuments();
   }, [loadQueue, loadDocuments]);
+
+  // Initialize renderedIndex on mount
+  useEffect(() => {
+    setRenderedIndex(currentIndex);
+  }, []);
 
   // Update scroll items when queue changes
   useEffect(() => {
@@ -75,10 +89,13 @@ export function QueueScrollPage() {
     }));
 
     setScrollItems([...docItems, ...rssItems]);
-  }, [documentQueueItems]);
+  }, [documentQueueItems, documents]);
 
-  // Current item
+  // Current item (for display during transition)
   const currentItem = scrollItems[currentIndex];
+
+  // Rendered item (actual document being rendered)
+  const renderedItem = scrollItems[renderedIndex];
 
   // Debug logging
   useEffect(() => {
@@ -116,18 +133,28 @@ export function QueueScrollPage() {
   const goToNext = useCallback(() => {
     if (currentIndex < scrollItems.length - 1 && !isTransitioning) {
       setIsTransitioning(true);
-      setCurrentIndex((prev) => prev + 1);
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
       startTimeRef.current = Date.now();
-      setTimeout(() => setIsTransitioning(false), 300);
+      // Update renderedIndex after transition completes to avoid premature unmount
+      setTimeout(() => {
+        setRenderedIndex(nextIndex);
+        setIsTransitioning(false);
+      }, 300);
     }
   }, [currentIndex, scrollItems.length, isTransitioning]);
 
   const goToPrevious = useCallback(() => {
     if (currentIndex > 0 && !isTransitioning) {
       setIsTransitioning(true);
-      setCurrentIndex((prev) => prev - 1);
+      const prevIndex = currentIndex - 1;
+      setCurrentIndex(prevIndex);
       startTimeRef.current = Date.now();
-      setTimeout(() => setIsTransitioning(false), 300);
+      // Update renderedIndex after transition completes to avoid premature unmount
+      setTimeout(() => {
+        setRenderedIndex(prevIndex);
+        setIsTransitioning(false);
+      }, 300);
     }
   }, [currentIndex, isTransitioning]);
 
@@ -302,12 +329,13 @@ export function QueueScrollPage() {
           isTransitioning ? "opacity-0" : "opacity-100"
         )}
       >
-        {currentItem.type === "document" ? (
+        {renderedItem?.type === "document" ? (
           <DocumentViewer
-            documentId={currentItem.documentId!}
+            key={renderedItem.documentId}
+            documentId={renderedItem.documentId!}
             disableHoverRating={true}
           />
-        ) : (
+        ) : renderedItem?.type === "rss" ? (
           <div className="h-full w-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-8 py-12">
               {/* RSS Article Header */}
@@ -316,18 +344,18 @@ export function QueueScrollPage() {
                   <span className="px-2 py-1 bg-orange-500/10 text-orange-500 rounded-md text-xs font-medium">
                     RSS
                   </span>
-                  <span>{currentItem.rssFeed?.title}</span>
+                  <span>{renderedItem.rssFeed?.title}</span>
                 </div>
                 <h1 className="text-3xl font-bold text-foreground mb-3">
-                  {currentItem.rssItem?.title}
+                  {renderedItem.rssItem?.title}
                 </h1>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  {currentItem.rssItem?.pubDate && (
-                    <span>{new Date(currentItem.rssItem.pubDate).toLocaleDateString()}</span>
+                  {renderedItem.rssItem?.pubDate && (
+                    <span>{new Date(renderedItem.rssItem.pubDate).toLocaleDateString()}</span>
                   )}
-                  {currentItem.rssItem?.author && <span>• {currentItem.rssItem.author}</span>}
+                  {renderedItem.rssItem?.author && <span>• {renderedItem.rssItem.author}</span>}
                   <a
-                    href={currentItem.rssItem?.link}
+                    href={renderedItem.rssItem?.link}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 hover:text-foreground transition-colors"
@@ -341,9 +369,14 @@ export function QueueScrollPage() {
               {/* RSS Article Content */}
               <div
                 className="prose prose-lg max-w-none text-foreground"
-                dangerouslySetInnerHTML={{ __html: currentItem.rssItem?.content || currentItem.rssItem?.description || "" }}
+                dangerouslySetInnerHTML={{ __html: renderedItem.rssItem?.content || renderedItem.rssItem?.description || "" }}
               />
             </div>
+          </div>
+        ) : (
+          // Fallback for no item
+          <div className="h-full flex items-center justify-center">
+            <div className="text-muted-foreground">Loading...</div>
           </div>
         )}
       </div>

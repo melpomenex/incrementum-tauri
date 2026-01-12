@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useDocumentStore, useTabsStore, useSettingsStore } from "../../stores";
+import { useDocumentStore, useTabsStore, useQueueStore } from "../../stores";
 import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { EPUBViewer } from "./EPUBViewer";
@@ -61,12 +61,13 @@ export function DocumentViewer({
   onSelectionChange,
 }: DocumentViewerProps) {
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
-  const { closeTab, tabs } = useTabsStore();
+  const { closeTab, tabs, updateTab } = useTabsStore();
+  const { items: queueItems, loadQueue } = useQueueStore();
 
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [zoomMode, setZoomMode] = useState<"custom" | "fit-width" | "fit-page">("custom");
-  const [fileData, setFileData] = useState<ArrayBuffer | null>(null);
+  const [fileData, setFileData] = useState<Uint8Array | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("document");
   const [showSearch, setShowSearch] = useState(false);
@@ -78,6 +79,7 @@ export function DocumentViewer({
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
   const lastSelectionRef = useRef("");
   const lastDocumentIdRef = useRef<string | null>(null);
+  const lastLoadedDocumentIdRef = useRef<string | null>(null); // Track successfully loaded documents
 
   const updateSelection = useCallback((rawText: string | null | undefined) => {
     const text = rawText?.trim() ?? "";
@@ -95,9 +97,81 @@ export function DocumentViewer({
   // Queue navigation
   const queueNav = useQueueNavigation();
 
+  const loadDocumentData = useCallback(async (doc: typeof currentDocument) => {
+    if (!doc) return;
+
+    setIsLoading(true);
+
+    // Infer fileType from filePath if missing (handles empty string or undefined)
+    const ext = doc.filePath?.split('.').pop()?.toLowerCase();
+    const inferredType = doc.fileType || ext || "";
+    const needsFileData = inferredType === "pdf" || inferredType === "epub";
+
+    console.log("[DocumentViewer] loadDocumentData:", {
+      fileType: doc.fileType,
+      filePath: doc.filePath,
+      ext,
+      inferredType,
+      needsFileData,
+    });
+
+    if (needsFileData) {
+      setFileData(null);
+      try {
+        // Read file through Tauri backend instead of fetch
+        const base64Data = await documentsApi.readDocumentFile(doc.filePath);
+
+        // Convert base64 to bytes for viewer consumption
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        console.log("[DocumentViewer] File data loaded successfully, size:", bytes.byteLength);
+        setFileData(bytes);
+      } catch (error) {
+        console.error(`Failed to load ${inferredType}:`, error);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      setIsLoading(false);
+    }
+
+    // Auto-extract content if enabled
+    if (isAutoExtractEnabled() && doc.filePath) {
+      try {
+        console.log("[DocumentViewer] Auto-extracting content...");
+        const extractionResult = await autoExtractWithCache(
+          doc.id,
+          doc.filePath,
+          inferredType
+        );
+
+        // Store extraction result for use in the UI
+        if (extractionResult.text || extractionResult.keyPhrases.length > 0) {
+          console.log("[DocumentViewer] Extraction result:", {
+            textLength: extractionResult.text.length,
+            keyPhrases: extractionResult.keyPhrases.length,
+            mathExpressions: extractionResult.mathExpressions.length,
+            ocrUsed: extractionResult.ocrUsed,
+          });
+        }
+      } catch (error) {
+        console.error("[DocumentViewer] Auto-extract failed:", error);
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    // Only reload if documentId actually changed
-    if (documentId && documentId !== lastDocumentIdRef.current) {
+    if (!documentId) return;
+
+    // Only reload if documentId actually changed, OR if we haven't successfully loaded this document yet
+    const shouldLoad = documentId !== lastDocumentIdRef.current ||
+                       documentId !== lastLoadedDocumentIdRef.current;
+
+    if (shouldLoad) {
       lastDocumentIdRef.current = documentId;
 
       // Reset timer when document changes
@@ -107,9 +181,25 @@ export function DocumentViewer({
       if (doc) {
         setCurrentDocument(doc);
         loadDocumentData(doc);
+        lastLoadedDocumentIdRef.current = documentId; // Mark as successfully loaded
+      } else {
+        documentsApi.getDocument(documentId)
+          .then((fetched) => {
+            if (!fetched) return;
+            setCurrentDocument(fetched);
+            loadDocumentData(fetched);
+            lastLoadedDocumentIdRef.current = documentId;
+          })
+          .catch((error) => {
+            console.error("Failed to load document by id:", error);
+          });
       }
     }
-  }, [documentId, documents, setCurrentDocument]);
+  }, [documentId, documents, setCurrentDocument, loadDocumentData]);
+
+  useEffect(() => {
+    loadQueue();
+  }, [loadQueue]);
 
   // Handle text selection
   useEffect(() => {
@@ -177,73 +267,6 @@ export function DocumentViewer({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [viewMode, showSearch, isExtractDialogOpen, isFullscreen]);
-
-  const loadDocumentData = async (doc: typeof currentDocument) => {
-    if (!doc) return;
-
-    setIsLoading(true);
-
-    // Infer fileType from filePath if missing (handles empty string or undefined)
-    const ext = doc.filePath?.split('.').pop()?.toLowerCase();
-    const inferredType = doc.fileType || ext || "";
-    const needsFileData = inferredType === "pdf" || inferredType === "epub";
-
-    console.log("[DocumentViewer] loadDocumentData:", {
-      fileType: doc.fileType,
-      filePath: doc.filePath,
-      ext,
-      inferredType,
-      needsFileData,
-    });
-
-    if (needsFileData) {
-      try {
-        // Read file through Tauri backend instead of fetch
-        const base64Data = await documentsApi.readDocumentFile(doc.filePath);
-
-        // Convert base64 to ArrayBuffer
-        const binaryString = atob(base64Data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const arrayBuffer = bytes.buffer;
-
-        console.log("[DocumentViewer] File data loaded successfully, size:", arrayBuffer.byteLength);
-        setFileData(arrayBuffer);
-      } catch (error) {
-        console.error(`Failed to load ${inferredType}:`, error);
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      setIsLoading(false);
-    }
-
-    // Auto-extract content if enabled
-    if (isAutoExtractEnabled() && doc.filePath) {
-      try {
-        console.log("[DocumentViewer] Auto-extracting content...");
-        const extractionResult = await autoExtractWithCache(
-          doc.id,
-          doc.filePath,
-          inferredType
-        );
-
-        // Store extraction result for use in the UI
-        if (extractionResult.text || extractionResult.keyPhrases.length > 0) {
-          console.log("[DocumentViewer] Extraction result:", {
-            textLength: extractionResult.text.length,
-            keyPhrases: extractionResult.keyPhrases.length,
-            mathExpressions: extractionResult.mathExpressions.length,
-            ocrUsed: extractionResult.ocrUsed,
-          });
-        }
-      } catch (error) {
-        console.error("[DocumentViewer] Auto-extract failed:", error);
-      }
-    }
-  };
 
   const handlePrevPage = () => {
     if (currentDocument && currentDocument.totalPages) {
@@ -334,11 +357,29 @@ export function DocumentViewer({
       // Reset timer
       startTimeRef.current = Date.now();
       
-      // Navigate to next document
-      if (queueNav.canGoToNextDocument) {
-        queueNav.goToNextDocument();
+      const documentQueueItems = queueItems.filter((item) => item.itemType === "document");
+      const currentIndex = documentQueueItems.findIndex((item) => item.documentId === documentId);
+      const nextItem = currentIndex >= 0 ? documentQueueItems[currentIndex + 1] : undefined;
+
+      if (nextItem) {
+        const nextDoc = documents.find((doc) => doc.id === nextItem.documentId);
+        const currentTab = tabs.find((tab) => tab.data?.documentId === documentId);
+
+        if (currentTab && nextDoc) {
+          updateTab(currentTab.id, {
+            title: nextItem.documentTitle,
+            icon:
+              nextDoc.fileType === "pdf"
+                ? "📕"
+                : nextDoc.fileType === "epub"
+                  ? "📖"
+                  : nextDoc.fileType === "youtube"
+                    ? "📺"
+                    : "📄",
+            data: { ...currentTab.data, documentId: nextItem.documentId },
+          });
+        }
       } else {
-        // Optional: show toast "Queue finished"
         console.log("No next document in queue.");
       }
     } catch (error) {

@@ -13,6 +13,7 @@ export enum NavigationMode {
   Hints = "hints",
   Find = "find",
   Mark = "mark",
+  Command = "command",
 }
 
 /**
@@ -33,6 +34,30 @@ interface VimiumState {
   hintPrefix: string;
   findQuery: string;
   marks: Map<string, HTMLElement>;
+  keySequence: string;
+  lastKeyTime: number;
+  markMode: "set" | "go" | null;
+}
+
+export interface VimiumCommand {
+  id: string;
+  name: string;
+  description?: string;
+  action: (args: string[]) => void | Promise<void>;
+  aliases?: string[];
+}
+
+export interface VimiumActions {
+  goBack?: () => void;
+  goForward?: () => void;
+  reload?: () => void;
+  openUrl?: (url: string, newTab: boolean) => void;
+  nextTab?: () => void;
+  previousTab?: () => void;
+  firstTab?: () => void;
+  lastTab?: () => void;
+  closeTab?: () => void;
+  restoreTab?: () => void;
 }
 
 /**
@@ -90,13 +115,18 @@ export const DEFAULT_KEY_BINDINGS: NavigationKeyBindings = {
  */
 export function useVimiumNavigation(
   enabled: boolean = true,
-  keyBindings: NavigationKeyBindings = DEFAULT_KEY_BINDINGS
+  keyBindings: NavigationKeyBindings = DEFAULT_KEY_BINDINGS,
+  commands: VimiumCommand[] = [],
+  actions: VimiumActions = {}
 ) {
   const stateRef = useRef<VimiumState>({
     mode: NavigationMode.Normal,
     hintPrefix: "",
     findQuery: "",
     marks: new Map(),
+    keySequence: "",
+    lastKeyTime: 0,
+    markMode: null,
   });
 
   const hintsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -106,6 +136,8 @@ export function useVimiumNavigation(
     count: 0,
     current: 0,
   });
+  const [commandQuery, setCommandQuery] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
 
   // Create hints container
   useEffect(() => {
@@ -288,40 +320,61 @@ export function useVimiumNavigation(
     }
   }, [getClickableElements, generateHintText, hideHints]);
 
+  const getScrollContainer = useCallback(() => {
+    const active = document.activeElement as HTMLElement | null;
+    if (active) {
+      const activeScrollable = active.closest("[data-vimium-scroll]");
+      if (activeScrollable instanceof HTMLElement) return activeScrollable;
+      if (active.scrollHeight > active.clientHeight || active.scrollWidth > active.clientWidth) {
+        return active;
+      }
+    }
+
+    const mainContent = document.querySelector("[data-vimium-scroll]");
+    if (mainContent instanceof HTMLElement) {
+      return mainContent;
+    }
+
+    return document.scrollingElement || document.documentElement;
+  }, []);
+
   // Scroll in direction
   const scroll = useCallback((direction: "up" | "down" | "left" | "right", amount: number = 100) => {
     const scrollAmount = amount;
-    switch (direction) {
-      case "up":
-        window.scrollBy({ top: -scrollAmount, behavior: "smooth" });
-        break;
-      case "down":
-        window.scrollBy({ top: scrollAmount, behavior: "smooth" });
-        break;
-      case "left":
-        window.scrollBy({ left: -scrollAmount, behavior: "smooth" });
-        break;
-      case "right":
-        window.scrollBy({ left: scrollAmount, behavior: "smooth" });
-        break;
+    const container = getScrollContainer();
+
+    const options =
+      direction === "up"
+        ? { top: -scrollAmount }
+        : direction === "down"
+          ? { top: scrollAmount }
+          : direction === "left"
+            ? { left: -scrollAmount }
+            : { left: scrollAmount };
+
+    if (container === document.scrollingElement || container === document.documentElement) {
+      window.scrollBy({ ...options, behavior: "smooth" });
+      return;
     }
-  }, []);
+
+    container.scrollBy({ ...options, behavior: "smooth" });
+  }, [getScrollContainer]);
 
   // Find text on page
-  const findText = useCallback((query: string, next: boolean = false) => {
+  const findText = useCallback((query: string, forward: boolean = true) => {
     if (!query) {
       setFindResults({ count: 0, current: 0 });
       return;
     }
 
-    const windowFind = next
-      ? window.find(query, false, true)
-      : window.find(query, false, false);
+    stateRef.current.findQuery = query;
+
+    const windowFind = window.find(query, false, !forward);
 
     if (windowFind) {
       setFindResults((prev) => ({
-        count: prev.count + (next ? 0 : 1),
-        current: next ? prev.current + 1 : 1,
+        count: prev.count + (forward ? 0 : 1),
+        current: forward ? prev.current + 1 : 1,
       }));
     }
   }, []);
@@ -358,6 +411,49 @@ export function useVimiumNavigation(
     }
   }, []);
 
+  const openCommandBar = useCallback(() => {
+    stateRef.current.mode = NavigationMode.Command;
+    setMode(NavigationMode.Command);
+    setCommandQuery("");
+  }, []);
+
+  const closeCommandBar = useCallback(() => {
+    stateRef.current.mode = NavigationMode.Normal;
+    setMode(NavigationMode.Normal);
+    setCommandQuery("");
+  }, []);
+
+  const clearKeySequence = useCallback(() => {
+    stateRef.current.keySequence = "";
+    stateRef.current.lastKeyTime = 0;
+  }, []);
+
+  const pushKeySequence = useCallback((key: string) => {
+    const now = Date.now();
+    if (now - stateRef.current.lastKeyTime > 800) {
+      stateRef.current.keySequence = "";
+    }
+    stateRef.current.lastKeyTime = now;
+    stateRef.current.keySequence = `${stateRef.current.keySequence}${key}`.slice(-2);
+    return stateRef.current.keySequence;
+  }, []);
+
+  const executeCommand = useCallback((query: string) => {
+    const normalized = query.trim();
+    if (!normalized) return;
+
+    const [commandName, ...args] = normalized.split(/\s+/);
+    const match = commands.find((cmd) => {
+      const name = cmd.name.toLowerCase();
+      const aliases = cmd.aliases?.map((alias) => alias.toLowerCase()) ?? [];
+      return name === commandName.toLowerCase() || aliases.includes(commandName.toLowerCase());
+    });
+
+    if (match) {
+      void match.action(args);
+    }
+  }, [commands]);
+
   // Handle keyboard event
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -368,6 +464,14 @@ export function useVimiumNavigation(
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 
       if (isInput && stateRef.current.mode === NavigationMode.Normal) {
+        return;
+      }
+
+      if (showHelp) {
+        if (e.key === "Escape" || e.key === "?") {
+          setShowHelp(false);
+          e.preventDefault();
+        }
         return;
       }
 
@@ -387,6 +491,24 @@ export function useVimiumNavigation(
         handleHintKeyPress(key, newTab);
         e.preventDefault();
         return;
+      }
+
+      // Handle command mode
+      if (stateRef.current.mode === NavigationMode.Command) {
+        if (e.key === "Escape") {
+          closeCommandBar();
+          e.preventDefault();
+          return;
+        }
+
+        if (e.key === "Enter") {
+          executeCommand(commandQuery);
+          closeCommandBar();
+          e.preventDefault();
+          return;
+        }
+
+        return; // Let input handle the key
       }
 
       // Handle find mode
@@ -410,6 +532,18 @@ export function useVimiumNavigation(
 
       // Normal mode key bindings
       const key = e.key;
+
+      if (key === "?") {
+        setShowHelp((prev) => !prev);
+        e.preventDefault();
+        return;
+      }
+
+      if (key === ":") {
+        openCommandBar();
+        e.preventDefault();
+        return;
+      }
 
       // Hints
       if (keyBindings.toggleHints.includes(key)) {
@@ -443,14 +577,32 @@ export function useVimiumNavigation(
         return;
       }
 
-      if (keyBindings.scrollToTop.includes(key) && e.shiftKey) {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+      if (key === "d") {
+        scroll("down", window.innerHeight * 0.5);
         e.preventDefault();
         return;
       }
 
-      if (keyBindings.scrollToBottom.includes(key) && !e.shiftKey) {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      if (key === "u") {
+        scroll("up", window.innerHeight * 0.5);
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "e") {
+        scroll("down", 60);
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "y") {
+        scroll("up", 60);
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "b") {
+        scroll("up", window.innerHeight);
         e.preventDefault();
         return;
       }
@@ -470,38 +622,183 @@ export function useVimiumNavigation(
         return;
       }
 
-      // Marks
-      if (e.altKey) {
-        if (e.key === "m") {
-          stateRef.current.mode = NavigationMode.Mark;
-          setMode(NavigationMode.Mark);
-          e.preventDefault();
-          return;
-        }
-        if (stateRef.current.mode === NavigationMode.Mark) {
-          setMark(key);
-          stateRef.current.mode = NavigationMode.Normal;
-          setMode(NavigationMode.Normal);
-          e.preventDefault();
-          return;
-        }
+      if (key === "n") {
+        findText(stateRef.current.findQuery, true);
+        e.preventDefault();
+        return;
       }
 
-      if (keyBindings.markGo.includes(key) && e.key !== "`") {
-        goToMark(key);
+      if (key === "N") {
+        findText(stateRef.current.findQuery, false);
+        e.preventDefault();
+        return;
+      }
+
+      // Marks
+      if (key === "m") {
+        stateRef.current.mode = NavigationMode.Mark;
+        setMode(NavigationMode.Mark);
+        stateRef.current.markMode = "set";
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "`") {
+        stateRef.current.mode = NavigationMode.Mark;
+        setMode(NavigationMode.Mark);
+        stateRef.current.markMode = "go";
+        e.preventDefault();
+        return;
+      }
+
+      if (stateRef.current.mode === NavigationMode.Mark) {
+        if (stateRef.current.markMode === "set") {
+          setMark(key);
+        } else if (stateRef.current.markMode === "go") {
+          goToMark(key);
+        }
+        stateRef.current.mode = NavigationMode.Normal;
+        setMode(NavigationMode.Normal);
+        stateRef.current.markMode = null;
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "J") {
+        actions.nextTab?.();
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "K") {
+        actions.previousTab?.();
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "x") {
+        actions.closeTab?.();
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "X") {
+        actions.restoreTab?.();
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "H") {
+        if (actions.goBack) {
+          actions.goBack();
+        } else {
+          window.history.back();
+        }
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "L") {
+        if (actions.goForward) {
+          actions.goForward();
+        } else {
+          window.history.forward();
+        }
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "o" || key === "O") {
+        openCommandBar();
+        setCommandQuery(key === "O" ? "open " : "open ");
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "t" || key === "T") {
+        openCommandBar();
+        setCommandQuery(key === "T" ? "tab " : "tab ");
+        e.preventDefault();
+        return;
+      }
+
+      if (key === "p" || key === "P") {
+        navigator.clipboard.readText().then((text) => {
+          if (text) {
+            if (actions.openUrl) {
+              actions.openUrl(text, key === "P");
+            } else {
+              window.open(text, key === "P" ? "_blank" : "_self");
+            }
+          }
+        }).catch(() => {});
         e.preventDefault();
         return;
       }
 
       // Reload
       if (keyBindings.reload.includes(key)) {
-        if (e.shiftKey) {
-          location.reload();
+        if (actions.reload) {
+          actions.reload();
         } else {
-          location.reload();
+          window.location.reload();
         }
         e.preventDefault();
         return;
+      }
+
+      if (key === "G") {
+        const container = getScrollContainer();
+        if (container === document.scrollingElement || container === document.documentElement) {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+        } else {
+          container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+        }
+        e.preventDefault();
+        return;
+      }
+
+      if (key.length === 1) {
+        const sequence = pushKeySequence(key);
+        if (sequence === "gg") {
+          const container = getScrollContainer();
+          if (container === document.scrollingElement || container === document.documentElement) {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          } else {
+            container.scrollTo({ top: 0, behavior: "smooth" });
+          }
+          clearKeySequence();
+          e.preventDefault();
+          return;
+        }
+
+        if (sequence === "g0") {
+          actions.firstTab?.();
+          clearKeySequence();
+          e.preventDefault();
+          return;
+        }
+
+        if (sequence === "g$") {
+          actions.lastTab?.();
+          clearKeySequence();
+          e.preventDefault();
+          return;
+        }
+
+        if (sequence === "gi") {
+          focusFirstInput();
+          clearKeySequence();
+          e.preventDefault();
+          return;
+        }
+
+        if (sequence === "yy") {
+          navigator.clipboard.writeText(window.location.href).catch(() => {});
+          clearKeySequence();
+          e.preventDefault();
+          return;
+        }
       }
     },
     [
@@ -517,6 +814,15 @@ export function useVimiumNavigation(
       focusFirstInput,
       findQuery,
       mode,
+      commandQuery,
+      executeCommand,
+      openCommandBar,
+      closeCommandBar,
+      actions,
+      pushKeySequence,
+      clearKeySequence,
+      getScrollContainer,
+      showHelp,
     ]
   );
 
@@ -536,6 +842,12 @@ export function useVimiumNavigation(
     showHints,
     hideHints,
     findText,
+    commandQuery,
+    setCommandQuery,
+    closeCommandBar,
+    showHelp,
+    setShowHelp,
+    commands,
   };
 }
 
@@ -582,6 +894,119 @@ export function VimiumFindBar({
   );
 }
 
+export function VimiumCommandBar({
+  query,
+  onQueryChange,
+  onClose,
+  onSubmit,
+  commands,
+}: {
+  query: string;
+  onQueryChange: (query: string) => void;
+  onClose: () => void;
+  onSubmit: (query: string) => void;
+  commands: VimiumCommand[];
+}) {
+  const filtered = commands.filter((cmd) => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return true;
+    const name = cmd.name.toLowerCase();
+    const desc = cmd.description?.toLowerCase() ?? "";
+    const aliases = cmd.aliases?.map((alias) => alias.toLowerCase()) ?? [];
+    return name.includes(normalized) || desc.includes(normalized) || aliases.some((alias) => alias.includes(normalized));
+  });
+
+  return (
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[999999] bg-background border border-border rounded-lg shadow-lg overflow-hidden min-w-[420px]">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <span className="text-muted-foreground">:</span>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onSubmit(query);
+            }
+            if (e.key === "Escape") {
+              onClose();
+            }
+          }}
+          placeholder="Type a command..."
+          className="bg-transparent border-none outline-none w-full text-foreground"
+          autoFocus
+        />
+        <kbd className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded">ESC</kbd>
+      </div>
+      <div className="max-h-64 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <div className="px-3 py-3 text-sm text-muted-foreground">No commands found</div>
+        ) : (
+          filtered.slice(0, 8).map((cmd) => (
+            <button
+              key={cmd.id}
+              onClick={() => onSubmit(cmd.name)}
+              className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+            >
+              <div className="text-sm font-medium text-foreground">{cmd.name}</div>
+              {cmd.description && (
+                <div className="text-xs text-muted-foreground">{cmd.description}</div>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function VimiumHelpOverlay({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[999998] bg-black/50 flex items-center justify-center">
+      <div className="bg-background border border-border rounded-lg shadow-xl max-w-2xl w-full mx-4">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-foreground">Vimium Help</h2>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ESC
+          </button>
+        </div>
+        <div className="p-4 grid grid-cols-2 gap-4 text-sm text-foreground">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground mb-2">Navigation</div>
+            <div>j/k/h/l — Scroll</div>
+            <div>d/u — Half page</div>
+            <div>g g — Top</div>
+            <div>G — Bottom</div>
+            <div>H/L — Back/Forward</div>
+            <div>J/K — Next/Prev tab</div>
+            <div>g0 / g$ — First/Last tab</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground mb-2">Actions</div>
+            <div>f/F — Link hints</div>
+            <div>/ — Find</div>
+            <div>n/N — Find next/prev</div>
+            <div>o/t — Open (command)</div>
+            <div>p/P — Open clipboard</div>
+            <div>x/X — Close/Restore tab</div>
+            <div>yy — Copy URL</div>
+            <div>: — Command mode</div>
+            <div>? — Toggle help</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Vimium navigation provider
  */
@@ -589,13 +1014,30 @@ export function VimiumNavigationProvider({
   children,
   enabled = true,
   keyBindings,
+  commands = [],
+  actions,
 }: {
   children: React.ReactNode;
   enabled?: boolean;
   keyBindings?: NavigationKeyBindings;
+  commands?: VimiumCommand[];
+  actions?: VimiumActions;
 }) {
-  const { mode, findQuery, setFindQuery, findResults, showHints, hideHints, findText } =
-    useVimiumNavigation(enabled, keyBindings);
+  const {
+    mode,
+    findQuery,
+    setFindQuery,
+    findResults,
+    showHints,
+    hideHints,
+    findText,
+    commandQuery,
+    setCommandQuery,
+    closeCommandBar,
+    showHelp,
+    setShowHelp,
+    commands: commandList,
+  } = useVimiumNavigation(enabled, keyBindings, commands, actions);
 
   return (
     <>
@@ -607,6 +1049,37 @@ export function VimiumNavigationProvider({
           results={findResults}
           onClose={hideHints}
         />
+      )}
+      {mode === NavigationMode.Command && (
+        <VimiumCommandBar
+          query={commandQuery}
+          onQueryChange={setCommandQuery}
+          onClose={closeCommandBar}
+          onSubmit={(query) => {
+            const normalized = query.trim();
+            if (!normalized) {
+              closeCommandBar();
+              return;
+            }
+            const [commandName, ...args] = normalized.split(/\s+/);
+            const match = commandList.find((cmd) => {
+              const name = cmd.name.toLowerCase();
+              const aliases = cmd.aliases?.map((alias) => alias.toLowerCase()) ?? [];
+              return name === commandName.toLowerCase() || aliases.includes(commandName.toLowerCase());
+            });
+            if (match) {
+              void match.action(args);
+            }
+            closeCommandBar();
+          }}
+          commands={commandList}
+        />
+      )}
+      {showHelp && <VimiumHelpOverlay onClose={() => setShowHelp(false)} />}
+      {enabled && mode !== NavigationMode.Normal && (
+        <div className="fixed bottom-4 right-4 z-[999997] bg-background border border-border rounded-md px-3 py-1 text-xs text-muted-foreground shadow">
+          Vimium: {mode}
+        </div>
       )}
     </>
   );

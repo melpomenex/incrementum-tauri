@@ -28,11 +28,14 @@ export interface TabsState {
   // State
   tabs: Tab[];
   activeTabId: string | null;
+  closedTabs: Tab[];
 
   // Actions
   addTab: (tab: Omit<Tab, "id">) => string;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
+  updateTab: (tabId: string, updates: Partial<Tab>) => void;
+  reopenLastClosedTab: () => void;
   closeOtherTabs: (tabId: string) => void;
   closeTabsToRight: (tabId: string) => void;
   closeAllTabs: () => void;
@@ -50,6 +53,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   // Initial State
   tabs: [],
   activeTabId: null,
+  closedTabs: [],
 
   // Get default tabs that should always be available
   getDefaultTabs: () => {
@@ -130,6 +134,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       }
 
       const newTabs = state.tabs.filter((t) => t.id !== tabId);
+      const closedTabs = tabToClose ? [...state.closedTabs, tabToClose] : state.closedTabs;
 
       // If no tabs left, this shouldn't happen with proper setup
       if (newTabs.length === 0) {
@@ -149,6 +154,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       const newState = {
         tabs: newTabs,
         activeTabId: newActiveTabId,
+        closedTabs,
       };
 
       // Auto-save after closing
@@ -164,6 +170,31 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     get().saveTabs();
   },
 
+  updateTab: (tabId, updates) => {
+    set((state) => {
+      const tabs = state.tabs.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab));
+      return { tabs };
+    });
+    get().saveTabs();
+  },
+
+  reopenLastClosedTab: () => {
+    set((state) => {
+      const closedTabs = [...state.closedTabs];
+      const lastClosed = closedTabs.pop();
+      if (!lastClosed) return state;
+
+      if (state.tabs.some((tab) => tab.id === lastClosed.id)) {
+        return { closedTabs };
+      }
+
+      const tabs = [...state.tabs, lastClosed];
+      const activeTabId = lastClosed.id;
+      setTimeout(() => get().saveTabs(), 0);
+      return { tabs, activeTabId, closedTabs };
+    });
+  },
+
   // Close all tabs except the specified one
   closeOtherTabs: (tabId) => {
     set((state) => {
@@ -174,6 +205,10 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       const newTabs = state.tabs.filter(
         (t) => t.id === tabId || !t.closable
       );
+      const closedTabs = [
+        ...state.closedTabs,
+        ...state.tabs.filter((t) => !newTabs.includes(t) && t.closable),
+      ];
 
       // Auto-save
       setTimeout(() => get().saveTabs(), 0);
@@ -181,6 +216,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       return {
         tabs: newTabs,
         activeTabId: tabId,
+        closedTabs,
       };
     });
   },
@@ -196,6 +232,10 @@ export const useTabsStore = create<TabsState>((set, get) => ({
         // OR if it's non-closable
         return index <= tabIndex || !t.closable;
       });
+      const closedTabs = [
+        ...state.closedTabs,
+        ...state.tabs.filter((t) => !newTabs.includes(t) && t.closable),
+      ];
 
       // Auto-save
       setTimeout(() => get().saveTabs(), 0);
@@ -203,6 +243,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       return {
         tabs: newTabs,
         activeTabId: state.activeTabId,
+        closedTabs,
       };
     });
   },
@@ -212,6 +253,10 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     set((state) => {
       // Keep only non-closable tabs
       const newTabs = state.tabs.filter((t) => !t.closable);
+      const closedTabs = [
+        ...state.closedTabs,
+        ...state.tabs.filter((t) => t.closable),
+      ];
 
       // Set active tab to first available
       const newActiveTabId =
@@ -223,6 +268,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       return {
         tabs: newTabs,
         activeTabId: newActiveTabId,
+        closedTabs,
       };
     });
   },

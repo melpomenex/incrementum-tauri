@@ -3,7 +3,7 @@ import ePub from "epubjs";
 import { cn } from "../../utils";
 
 interface EPUBViewerProps {
-  fileData: ArrayBuffer;
+  fileData: Uint8Array;
   fileName: string;
   documentId?: string;
   onLoad?: (toc: any[]) => void;
@@ -126,8 +126,8 @@ export function EPUBViewer({
       try {
         console.log("EPUBViewer: Loading EPUB, fileData length:", fileData.byteLength);
 
-        // Create book from ArrayBuffer
-        const epubBook = ePub(fileData);
+        // Create book from a fresh buffer to avoid detached ArrayBuffer issues
+        const epubBook = ePub(fileData.slice().buffer);
         bookInstance = epubBook;
         setBook(epubBook);
 

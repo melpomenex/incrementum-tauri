@@ -215,7 +215,7 @@ function isLinux(): boolean {
   return navigator.platform.includes("Linux") || navigator.userAgent.includes("Linux");
 }
 
-export function WebBrowserTab() {
+export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const [url, setUrl] = useState("");
   const [currentUrl, setCurrentUrl] = useState("");
   const [pageTitle, setPageTitle] = useState("");
@@ -401,6 +401,12 @@ export function WebBrowserTab() {
       });
     });
   }, []);
+
+  useEffect(() => {
+    if (initialUrl) {
+      void handleNavigate(initialUrl);
+    }
+  }, [initialUrl, handleNavigate]);
 
   useEffect(() => {
     return () => {

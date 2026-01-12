@@ -51,6 +51,19 @@ pub struct TranscriptSegment {
     pub duration: f64,
 }
 
+fn build_transcript_text(segments: &[TranscriptSegment]) -> String {
+    segments
+        .iter()
+        .map(|segment| segment.text.trim())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_transcript_segments(json: &str) -> Result<Vec<TranscriptSegment>, String> {
+    serde_json::from_str(json).map_err(|e| format!("Failed to parse transcript cache: {}", e))
+}
+
 /// Download options
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadOptions {
@@ -647,8 +660,29 @@ pub async fn download_youtube_video(
 pub async fn get_youtube_transcript(
     url: String,
     language: Option<String>,
+    document_id: Option<String>,
+    repo: State<'_, Repository>,
 ) -> Result<Vec<TranscriptSegment>, String> {
-    extract_transcript(&url, language.as_deref())
+    if let Some(video_id) = extract_video_id(&url) {
+        if let Ok(Some((_transcript, segments_json))) = repo
+            .get_youtube_transcript_by_video_id(&video_id)
+            .await
+        {
+            return parse_transcript_segments(&segments_json);
+        }
+    }
+
+    let segments = extract_transcript(&url, language.as_deref())?;
+    if let Some(video_id) = extract_video_id(&url) {
+        let transcript = build_transcript_text(&segments);
+        let segments_json = serde_json::to_string(&segments)
+            .map_err(|e| format!("Failed to serialize transcript: {}", e))?;
+        repo.upsert_youtube_transcript(document_id.as_deref(), &video_id, &transcript, &segments_json)
+            .await
+            .map_err(|e| format!("Failed to cache transcript: {}", e))?;
+    }
+
+    Ok(segments)
 }
 
 /// Tauri command: Extract transcript by videoId
@@ -656,10 +690,27 @@ pub async fn get_youtube_transcript(
 pub async fn get_youtube_transcript_by_id(
     video_id: String,
     language: Option<String>,
+    document_id: Option<String>,
+    repo: State<'_, Repository>,
 ) -> Result<Vec<TranscriptSegment>, String> {
+    if let Ok(Some((_transcript, segments_json))) = repo
+        .get_youtube_transcript_by_video_id(&video_id)
+        .await
+    {
+        return parse_transcript_segments(&segments_json);
+    }
+
     // Construct YouTube URL from video ID
     let url = format!("https://www.youtube.com/watch?v={}", video_id);
-    extract_transcript(&url, language.as_deref())
+    let segments = extract_transcript(&url, language.as_deref())?;
+    let transcript = build_transcript_text(&segments);
+    let segments_json = serde_json::to_string(&segments)
+        .map_err(|e| format!("Failed to serialize transcript: {}", e))?;
+    repo.upsert_youtube_transcript(document_id.as_deref(), &video_id, &transcript, &segments_json)
+        .await
+        .map_err(|e| format!("Failed to cache transcript: {}", e))?;
+
+    Ok(segments)
 }
 
 /// Tauri command: Search YouTube

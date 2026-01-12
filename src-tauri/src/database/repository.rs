@@ -1061,6 +1061,77 @@ impl Repository {
 
         Ok(())
     }
+
+    pub async fn get_youtube_transcript_by_video_id(
+        &self,
+        video_id: &str,
+    ) -> Result<Option<(String, String)>> {
+        let row = sqlx::query(
+            "SELECT transcript, segments_json FROM youtube_transcripts WHERE video_id = ?1 LIMIT 1",
+        )
+        .bind(video_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| {
+            let transcript: String = row.get("transcript");
+            let segments_json: String = row.get("segments_json");
+            (transcript, segments_json)
+        }))
+    }
+
+    pub async fn get_youtube_transcript_by_document_id(
+        &self,
+        document_id: &str,
+    ) -> Result<Option<(String, String)>> {
+        let row = sqlx::query(
+            "SELECT transcript, segments_json FROM youtube_transcripts WHERE document_id = ?1 LIMIT 1",
+        )
+        .bind(document_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| {
+            let transcript: String = row.get("transcript");
+            let segments_json: String = row.get("segments_json");
+            (transcript, segments_json)
+        }))
+    }
+
+    pub async fn upsert_youtube_transcript(
+        &self,
+        document_id: Option<&str>,
+        video_id: &str,
+        transcript: &str,
+        segments_json: &str,
+    ) -> Result<()> {
+        let now = Utc::now();
+        let id = uuid::Uuid::new_v4().to_string();
+
+        sqlx::query(
+            r#"
+            INSERT INTO youtube_transcripts (
+                id, document_id, video_id, transcript, segments_json, date_created, date_modified
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(video_id) DO UPDATE SET
+                document_id = COALESCE(excluded.document_id, youtube_transcripts.document_id),
+                transcript = excluded.transcript,
+                segments_json = excluded.segments_json,
+                date_modified = excluded.date_modified
+            "#,
+        )
+        .bind(id)
+        .bind(document_id)
+        .bind(video_id)
+        .bind(transcript)
+        .bind(segments_json)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
 
 // Helper struct for study statistics rows

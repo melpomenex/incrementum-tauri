@@ -424,6 +424,25 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_extracts_next_review ON extracts(next_review_date);
         "#,
     ),
+    // Migration 012: Add YouTube transcripts cache
+    Migration::new(
+        "012_add_youtube_transcripts",
+        r#"
+        CREATE TABLE IF NOT EXISTS youtube_transcripts (
+            id TEXT PRIMARY KEY,
+            document_id TEXT,
+            video_id TEXT NOT NULL,
+            transcript TEXT NOT NULL,
+            segments_json TEXT NOT NULL,
+            date_created TEXT NOT NULL,
+            date_modified TEXT NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_transcripts_video_id ON youtube_transcripts(video_id);
+        CREATE INDEX IF NOT EXISTS idx_youtube_transcripts_document_id ON youtube_transcripts(document_id);
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

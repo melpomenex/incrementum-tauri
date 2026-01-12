@@ -69,7 +69,8 @@ export function HoverRatingControls({
   }, [disabled, isVisible, forceVisible]);
 
   const handleRating = useCallback(async (rating: ReviewRating) => {
-    if (disabled || isSubmitting || !itemId) return;
+    if (disabled || isSubmitting) return;
+    if (context === "review" && !itemId) return;
 
     setIsSubmitting(true);
     try {

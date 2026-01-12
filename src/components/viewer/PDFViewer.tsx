@@ -12,7 +12,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 interface PDFViewerProps {
   documentId: string;
-  fileData: ArrayBuffer;
+  fileData: Uint8Array;
   pageNumber: number;
   scale: number;
   zoomMode?: ZoomMode;
@@ -63,7 +63,7 @@ export function PDFViewer({
       setError(null);
 
       try {
-        const loadingTask = pdfjsLib.getDocument({ data: fileData });
+        const loadingTask = pdfjsLib.getDocument({ data: fileData.slice() });
         const pdfDoc = await loadingTask.promise;
 
         if (!mounted) return;

@@ -118,12 +118,12 @@ export interface FetchedUrlContent {
  * Used for Arxiv PDF downloads and URL-based imports
  */
 export async function fetchUrlContent(url: string): Promise<FetchedUrlContent> {
-  return await invoke<FetchedUrlContent>("fetch_url_content", { url });
+  return await invokeCommand<FetchedUrlContent>("fetch_url_content", { url });
 }
 
 /**
  * Import a YouTube video as a document
  */
 export async function importYouTubeVideo(url: string): Promise<Document> {
-  return await invoke<Document>("import_youtube_video", { url });
+  return await invokeCommand<Document>("import_youtube_video", { url });
 }
