@@ -244,6 +244,7 @@ pub fn run() {
             commands::update_rss_feed_fetched,
             commands::get_rss_feed_unread_count,
             commands::cleanup_old_rss_articles,
+            commands::fetch_rss_feed_url,
             // Segmentation commands
             commands::segment_document,
             commands::auto_segment_and_create_extracts,

@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Folder,
   Import,
-  Export,
+  Download,
 } from "lucide-react";
 import {
   Feed,
@@ -215,7 +215,7 @@ export function RSSReader() {
                 className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
                 title="Export OPML"
               >
-                <Export className="w-4 h-4" />
+                <Download className="w-4 h-4" />
               </button>
             </div>
           </div>

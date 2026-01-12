@@ -386,3 +386,343 @@ pub async fn cleanup_old_rss_articles(days: i32, repo: State<'_, Repository>) ->
 
     Ok(result.rows_affected() as i32)
 }
+
+/// Parsed feed item for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedFeedItem {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub content: String,
+    pub link: String,
+    pub pub_date: String,
+    pub author: Option<String>,
+    pub categories: Vec<String>,
+    pub guid: Option<String>,
+}
+
+/// Parsed feed for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedFeed {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub link: String,
+    pub feed_url: String,
+    pub image_url: Option<String>,
+    pub language: Option<String>,
+    pub category: Option<String>,
+    pub items: Vec<ParsedFeedItem>,
+}
+
+/// Fetch and parse RSS/Atom feed from URL
+#[tauri::command]
+pub async fn fetch_rss_feed_url(feed_url: String) -> Result<ParsedFeed> {
+    use reqwest::Client;
+    use roxmltree::Document;
+
+    let client = Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .build()
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to create HTTP client: {}", e)))?;
+
+    let response = client
+        .get(&feed_url)
+        .send()
+        .await
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to fetch feed: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(crate::error::IncrementumError::Internal(format!(
+            "Failed to fetch feed: HTTP {}", response.status()
+        ))
+        .into());
+    }
+
+    let xml_bytes = response
+        .bytes()
+        .await
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to read response: {}", e)))?;
+
+    let xml_content = String::from_utf8(xml_bytes.to_vec())
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to parse XML: {}", e)))?;
+
+    let doc = Document::parse(&xml_content)
+        .map_err(|e| crate::error::IncrementumError::Internal(format!("Failed to parse XML: {}", e)))?;
+
+    // Generate feed ID from URL
+    let digest = md5::compute(&feed_url);
+    let id = format!("feed-{:02x}", digest.0[0]);
+    let now = Utc::now().to_rfc3339();
+
+    // Try to parse as RSS first
+    if let Some(channel) = doc.descendants().find(|n| n.tag_name().name() == "channel") {
+        let title = channel
+            .children()
+            .find(|n| n.tag_name().name() == "title")
+            .and_then(|n| n.text())
+            .unwrap_or("Unknown Feed")
+            .to_string();
+
+        let description = channel
+            .children()
+            .find(|n| n.tag_name().name() == "description")
+            .and_then(|n| n.text())
+            .unwrap_or_default()
+            .to_string();
+
+        let link = channel
+            .children()
+            .find(|n| n.tag_name().name() == "link")
+            .and_then(|n| n.text())
+            .unwrap_or(&feed_url)
+            .to_string();
+
+        let image_url = channel
+            .descendants()
+            .find(|n| n.tag_name().name() == "url")
+            .and_then(|n| n.text())
+            .map(|s| s.to_string());
+
+        let language = channel
+            .children()
+            .find(|n| n.tag_name().name() == "language")
+            .and_then(|n| n.text())
+            .map(|s| s.to_string());
+
+        let category = channel
+            .children()
+            .find(|n| n.tag_name().name() == "category")
+            .and_then(|n| n.text())
+            .map(|s| s.to_string());
+
+        let mut items = Vec::new();
+        for item in doc.descendants().filter(|n| n.tag_name().name() == "item") {
+            if let Some(parsed) = parse_rss_item_node(&item) {
+                items.push(parsed);
+            }
+        }
+
+        return Ok(ParsedFeed {
+            id,
+            title,
+            description,
+            link,
+            feed_url,
+            image_url,
+            language,
+            category,
+            items,
+        });
+    }
+
+    // Try to parse as Atom
+    if let Some(feed) = doc.descendants().find(|n| n.tag_name().name() == "feed") {
+        let title = feed
+            .children()
+            .find(|n| n.tag_name().name() == "title")
+            .and_then(|n| n.text())
+            .unwrap_or("Unknown Feed")
+            .to_string();
+
+        let description = feed
+            .children()
+            .find(|n| n.tag_name().name() == "subtitle")
+            .and_then(|n| n.text())
+            .unwrap_or_default()
+            .to_string();
+
+        let link = feed
+            .descendants()
+            .find(|n| {
+                n.tag_name().name() == "link"
+                    && (n.attribute("rel") != Some("self") || n.attribute("rel").is_none())
+            })
+            .and_then(|n| n.attribute("href"))
+            .unwrap_or(&feed_url)
+            .to_string();
+
+        let image_url = feed
+            .children()
+            .find(|n| n.tag_name().name() == "logo")
+            .and_then(|n| n.text())
+            .or_else(|| {
+                feed.children()
+                    .find(|n| n.tag_name().name() == "icon")
+                    .and_then(|n| n.text())
+            })
+            .map(|s| s.to_string());
+
+        let language = feed.attribute("xml:lang").map(|s| s.to_string());
+
+        let mut items = Vec::new();
+        for entry in doc.descendants().filter(|n| n.tag_name().name() == "entry") {
+            if let Some(parsed) = parse_atom_entry_node(&entry) {
+                items.push(parsed);
+            }
+        }
+
+        return Ok(ParsedFeed {
+            id,
+            title,
+            description,
+            link,
+            feed_url,
+            image_url,
+            language,
+            category: None,
+            items,
+        });
+    }
+
+    Err(crate::error::IncrementumError::Internal(
+        "Could not parse feed: not a valid RSS or Atom feed".to_string(),
+    )
+    .into())
+}
+
+fn parse_rss_item_node(item: &roxmltree::Node) -> Option<ParsedFeedItem> {
+    let title = item
+        .children()
+        .find(|n| n.tag_name().name() == "title")
+        .and_then(|n| n.text())
+        .unwrap_or("Untitled")
+        .to_string();
+
+    let link = item
+        .children()
+        .find(|n| n.tag_name().name() == "link")
+        .and_then(|n| n.text())
+        .unwrap_or_default()
+        .to_string();
+
+    let description = item
+        .children()
+        .find(|n| n.tag_name().name() == "description")
+        .or_else(|| item.children().find(|n| n.tag_name().name() == "summary"))
+        .and_then(|n| n.text())
+        .unwrap_or_default()
+        .to_string();
+
+    // Try content:encoded first, then description
+    let content = item
+        .descendants()
+        .find(|n| n.tag_name().name() == "encoded")
+        .and_then(|n| n.text())
+        .unwrap_or(&description)
+        .to_string();
+
+    let pub_date = item
+        .children()
+        .find(|n| n.tag_name().name() == "pubDate")
+        .and_then(|n| n.text())
+        .unwrap_or_default()
+        .to_string();
+
+    let author = item
+        .children()
+        .find(|n| n.tag_name().name() == "author")
+        .or_else(|| item.children().find(|n| n.tag_name().name() == "dc:creator"))
+        .and_then(|n| n.text())
+        .map(|s| s.to_string());
+
+    let guid = item
+        .children()
+        .find(|n| n.tag_name().name() == "guid")
+        .and_then(|n| n.text())
+        .map(|s| s.to_string());
+
+    let id = guid.clone().unwrap_or_else(|| {
+        let digest = md5::compute(format!("{}{}", link, pub_date).as_str());
+        format!("item-{:02x}", digest.0[0])
+    });
+
+    let categories: Vec<String> = item
+        .descendants()
+        .filter(|n| n.tag_name().name() == "category")
+        .filter_map(|n| n.text().map(|s| s.to_string()))
+        .collect();
+
+    Some(ParsedFeedItem {
+        id,
+        title,
+        description,
+        content,
+        link,
+        pub_date,
+        author,
+        categories,
+        guid,
+    })
+}
+
+fn parse_atom_entry_node(entry: &roxmltree::Node) -> Option<ParsedFeedItem> {
+    let title = entry
+        .children()
+        .find(|n| n.tag_name().name() == "title")
+        .and_then(|n| n.text())
+        .unwrap_or("Untitled")
+        .to_string();
+
+    let link = entry
+        .descendants()
+        .find(|n| n.tag_name().name() == "link" && n.attribute("href").is_some())
+        .and_then(|n| n.attribute("href"))
+        .unwrap_or_default()
+        .to_string();
+
+    let content = entry
+        .children()
+        .find(|n| n.tag_name().name() == "content")
+        .and_then(|n| n.text())
+        .or_else(|| {
+            entry.children()
+                .find(|n| n.tag_name().name() == "summary")
+                .and_then(|n| n.text())
+        })
+        .unwrap_or_default()
+        .to_string();
+
+    let pub_date = entry
+        .children()
+        .find(|n| n.tag_name().name() == "published")
+        .or_else(|| entry.children().find(|n| n.tag_name().name() == "updated"))
+        .and_then(|n| n.text())
+        .unwrap_or_default()
+        .to_string();
+
+    let author = entry
+        .descendants()
+        .find(|n| n.tag_name().name() == "name")
+        .and_then(|n| n.text())
+        .map(|s| s.to_string());
+
+    let id = if let Some(text) = entry
+        .children()
+        .find(|n| n.tag_name().name() == "id")
+        .and_then(|n| n.text())
+    {
+        text.to_string()
+    } else {
+        let digest = md5::compute(format!("{}{}", link, pub_date).as_str());
+        format!("item-{:02x}", digest.0[0])
+    };
+
+    let categories: Vec<String> = entry
+        .descendants()
+        .filter(|n| n.tag_name().name() == "category")
+        .filter_map(|n| n.attribute("label").or(n.attribute("term")).map(|s| s.to_string()))
+        .collect();
+
+    Some(ParsedFeedItem {
+        id: id.clone(),
+        title,
+        description: content.clone(),
+        content,
+        link,
+        pub_date,
+        author,
+        categories,
+        guid: Some(id),
+    })
+}

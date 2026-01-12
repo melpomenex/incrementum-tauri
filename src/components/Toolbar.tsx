@@ -9,6 +9,7 @@ import {
   KnowledgeNetworkTab,
   KnowledgeSphereTab,
   WebBrowserTab,
+  RSSReader,
 } from "./tabs/TabRegistry";
 
 import {
@@ -129,8 +130,13 @@ export function Toolbar() {
 
   // RSS button
   const handleRss = () => {
-    console.log("RSS Feeds");
-    // TODO: Implement RSS management
+    addTab({
+      title: "RSS Feeds",
+      icon: "📰",
+      type: "rss",
+      content: RSSReader,
+      closable: true,
+    });
   };
 
   // Dashboard button

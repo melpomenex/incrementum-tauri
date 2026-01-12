@@ -313,30 +313,48 @@ function generateItemId(link: string, pubDate: string): string {
 }
 
 /**
- * Fetch feed from URL
+ * Fetch feed from URL using Tauri backend (bypasses CORS)
  */
 export async function fetchFeed(feedUrl: string): Promise<Feed | null> {
   try {
-    // Use CORS proxy for browser requests
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`;
-    const response = await fetch(proxyUrl);
+    const { invoke } = await import("@tauri-apps/api/core");
+    const parsedFeed = await invoke("fetch_rss_feed_url", { feedUrl });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch feed: ${response.statusText}`);
-    }
-
-    const xmlText = await response.text();
-    const feed = parseFeed(xmlText, feedUrl);
-
-    if (feed) {
-      feed.feedId = feed.id;
-      feed.items.forEach((item) => (item.feedId = feed.id));
-    }
+    // Convert backend format to frontend format
+    const feed: Feed = {
+      id: parsedFeed.id,
+      title: parsedFeed.title,
+      description: parsedFeed.description,
+      link: parsedFeed.link,
+      feedUrl: parsedFeed.feed_url,
+      imageUrl: parsedFeed.image_url,
+      language: parsedFeed.language,
+      category: parsedFeed.category,
+      lastUpdated: new Date().toISOString(),
+      lastFetched: new Date().toISOString(),
+      updateInterval: 60,
+      items: parsedFeed.items.map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        content: item.content,
+        link: item.link,
+        pubDate: item.pub_date,
+        author: item.author,
+        categories: item.categories || [],
+        guid: item.guid,
+        read: false,
+        favorite: false,
+        feedId: parsedFeed.id,
+      })),
+      subscribeDate: new Date().toISOString(),
+      unreadCount: parsedFeed.items.length,
+    };
 
     return feed;
   } catch (error) {
     console.error("Failed to fetch feed:", error);
-    return null;
+    throw error;
   }
 }
 

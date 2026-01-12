@@ -74,6 +74,10 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 xcap = "0.0.9"
 image = "0.24"
 
+# RSS parsing
+roxmltree = "0.20"
+md5 = "0.7"
+
 # Spaced Repetition
 fsrs = "5"
 

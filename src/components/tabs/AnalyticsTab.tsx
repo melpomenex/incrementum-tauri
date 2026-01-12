@@ -236,5 +236,3 @@ export function AnalyticsTab() {
     </div>
   );
 }
-
-import { lazy } from "react";
