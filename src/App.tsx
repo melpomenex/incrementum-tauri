@@ -9,6 +9,7 @@ import { invokeCommand } from "./lib/tauri";
 // Page components
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { QueuePage } from "./pages/QueuePage";
+import { QueueScrollPage } from "./pages/QueueScrollPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -38,6 +39,8 @@ function App() {
         return <DocumentsPage />;
       case "queue":
         return <QueuePage />;
+      case "queue-scroll":
+        return <QueueScrollPage />;
       case "analytics":
         return <AnalyticsPage />;
       case "settings":
@@ -46,6 +49,11 @@ function App() {
         return <DashboardPage onNavigate={setCurrentPage} />;
     }
   };
+
+  // Full-screen pages without layout
+  if (currentPage === "queue-scroll") {
+    return <QueueScrollPage />;
+  }
 
   return (
     <NewMainLayout activeItem={currentPage} onPageChange={setCurrentPage}>

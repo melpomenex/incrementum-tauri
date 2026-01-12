@@ -3,6 +3,7 @@ import { useTabsStore } from "../stores";
 import { DocumentViewer } from "../components/tabs/TabRegistry";
 import type { QueueItem } from "../types/queue";
 import { ReviewTab } from "../components/tabs/TabRegistry";
+import { QueueScrollPage } from "./QueueScrollPage";
 
 export function QueuePage() {
   const { addTab } = useTabsStore();
@@ -28,5 +29,21 @@ export function QueuePage() {
     });
   };
 
-  return <ReviewQueueView onStartReview={handleStartReview} onOpenDocument={handleOpenDocument} />;
+  const handleOpenScrollMode = () => {
+    addTab({
+      title: "Scroll Mode",
+      icon: "📱",
+      type: "queue-scroll",
+      content: QueueScrollPage,
+      closable: true,
+    });
+  };
+
+  return (
+    <ReviewQueueView
+      onStartReview={handleStartReview}
+      onOpenDocument={handleOpenDocument}
+      onOpenScrollMode={handleOpenScrollMode}
+    />
+  );
 }

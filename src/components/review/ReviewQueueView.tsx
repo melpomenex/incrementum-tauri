@@ -8,6 +8,7 @@ import {
   Keyboard,
   LayoutList,
   Play,
+  Smartphone,
   Sparkles,
   Target,
 } from "lucide-react";
@@ -32,9 +33,10 @@ type QueueMode = "reading" | "review";
 interface ReviewQueueViewProps {
   onStartReview?: () => void;
   onOpenDocument?: (item: QueueItem) => void;
+  onOpenScrollMode?: () => void;
 }
 
-export function ReviewQueueView({ onStartReview, onOpenDocument }: ReviewQueueViewProps) {
+export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMode }: ReviewQueueViewProps) {
   const {
     items,
     isLoading,
@@ -62,6 +64,11 @@ export function ReviewQueueView({ onStartReview, onOpenDocument }: ReviewQueueVi
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Debug: Check if scroll mode is available
+  useEffect(() => {
+    console.log("ReviewQueueView state:", { queueMode, onOpenScrollMode: !!onOpenScrollMode });
+  }, [queueMode, onOpenScrollMode]);
 
   useEffect(() => {
     loadQueue();
@@ -202,6 +209,16 @@ export function ReviewQueueView({ onStartReview, onOpenDocument }: ReviewQueueVi
               <Play className="w-4 h-4" />
               Start Optimal Session
             </button>
+            {queueMode === "reading" && onOpenScrollMode && (
+              <button
+                onClick={onOpenScrollMode}
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:opacity-90 flex items-center gap-2"
+                title="TikTok-style vertical scrolling through documents"
+              >
+                <Smartphone className="w-4 h-4" />
+                Scroll Mode
+              </button>
+            )}
             <button className="px-4 py-2 bg-muted text-foreground rounded-md hover:bg-muted/80">
               Customize Session
             </button>

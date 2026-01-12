@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 export type TabType =
   | "dashboard"
   | "queue"
+  | "queue-scroll"
   | "review"
   | "documents"
   | "document-viewer"

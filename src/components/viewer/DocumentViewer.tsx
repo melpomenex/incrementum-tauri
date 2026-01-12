@@ -77,6 +77,7 @@ export function DocumentViewer({
   const [selectedText, setSelectedText] = useState("");
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
   const lastSelectionRef = useRef("");
+  const lastDocumentIdRef = useRef<string | null>(null);
 
   const updateSelection = useCallback((rawText: string | null | undefined) => {
     const text = rawText?.trim() ?? "";
@@ -95,10 +96,13 @@ export function DocumentViewer({
   const queueNav = useQueueNavigation();
 
   useEffect(() => {
-    if (documentId) {
+    // Only reload if documentId actually changed
+    if (documentId && documentId !== lastDocumentIdRef.current) {
+      lastDocumentIdRef.current = documentId;
+
       // Reset timer when document changes
       startTimeRef.current = Date.now();
-      
+
       const doc = documents.find((d) => d.id === documentId);
       if (doc) {
         setCurrentDocument(doc);
@@ -360,7 +364,7 @@ export function DocumentViewer({
 
   // Infer fileType from filePath if it's missing (legacy data or import issue)
   const inferFileType = (): DocumentType => {
-    if (currentDocument.fileType) {
+    if (currentDocument.fileType && currentDocument.fileType !== 'other') {
       return currentDocument.fileType as DocumentType;
     }
     // Fallback: infer from file extension
@@ -374,6 +378,10 @@ export function DocumentViewer({
         currentDocument.filePath?.includes('youtu.be') ||
         currentDocument.fileType === 'youtube') {
       return 'youtube';
+    }
+    // If document has content, treat as markdown
+    if (currentDocument.content) {
+      return 'markdown';
     }
     return 'other';
   };
