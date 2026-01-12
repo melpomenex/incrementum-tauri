@@ -130,6 +130,8 @@ export function Toolbar() {
 
   // RSS button
   const handleRss = () => {
+    console.log("RSS button clicked - opening RSS tab");
+    console.log("RssTab component:", RssTab);
     addTab({
       title: "RSS Feeds",
       icon: "📰",
