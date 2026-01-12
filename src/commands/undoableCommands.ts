@@ -3,7 +3,7 @@
  * Pre-built commands for common operations that support undo/redo
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../lib/tauri";
 import { Document } from "../types/document";
 import { Extract } from "../types/extract";
 import { LearningItem } from "../types/learning-item";

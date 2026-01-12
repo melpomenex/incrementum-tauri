@@ -1,7 +1,8 @@
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { emit } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+// Dynamic imports used instead of static imports to prevent PWA crash
+type EmitFn = typeof import("@tauri-apps/api/event").emit;
+type GetCurrentWindowFn = typeof import("@tauri-apps/api/window").getCurrentWindow;
 
 type CaptureMode = "region" | "screen" | "app";
 
@@ -27,25 +28,47 @@ function getOverlayParams() {
 
 export default function ScreenshotOverlay() {
   const { screenIndex, scaleFactor } = useMemo(() => getOverlayParams(), []);
-  const appWindow = useMemo(() => getCurrentWindow(), []);
+  // Lazy load window object
+  const [appWindow, setAppWindow] = useState<any>(null);
+
+  useEffect(() => {
+    if ("__TAURI__" in window) {
+      import("@tauri-apps/api/window").then(m => {
+        setAppWindow(m.getCurrentWindow());
+      });
+    }
+  }, []);
+
   const [mode, setMode] = useState<CaptureMode>("region");
   const [dragState, setDragState] = useState<DragState>(null);
 
   const cancel = useCallback(async () => {
-    await emit("screenshot-cancel");
-    await appWindow.close();
-  }, []);
+    if (!appWindow) return;
+    try {
+      const { emit } = await import("@tauri-apps/api/event");
+      await emit("screenshot-cancel");
+      await appWindow.close();
+    } catch (e) {
+      console.error(e);
+    }
+  }, [appWindow]);
 
   const finalizeSelection = useCallback(
     async (selectionMode: CaptureMode, rect?: { x: number; y: number; width: number; height: number }) => {
-      await emit("screenshot-selection", {
-        mode: selectionMode,
-        screenIndex,
-        rect,
-      });
-      await appWindow.close();
+      if (!appWindow) return;
+      try {
+        const { emit } = await import("@tauri-apps/api/event");
+        await emit("screenshot-selection", {
+          mode: selectionMode,
+          screenIndex,
+          rect,
+        });
+        await appWindow.close();
+      } catch (e) {
+        console.error(e);
+      }
     },
-    [screenIndex]
+    [screenIndex, appWindow]
   );
 
   useEffect(() => {
@@ -135,17 +158,15 @@ export default function ScreenshotOverlay() {
         onMouseUp={(event) => event.stopPropagation()}
       >
         <button
-          className={`px-3 py-1 rounded-full text-xs uppercase tracking-wide ${
-            mode === "region" ? "bg-white text-black" : "bg-white/10"
-          }`}
+          className={`px-3 py-1 rounded-full text-xs uppercase tracking-wide ${mode === "region" ? "bg-white text-black" : "bg-white/10"
+            }`}
           onClick={() => setMode("region")}
         >
           Region
         </button>
         <button
-          className={`px-3 py-1 rounded-full text-xs uppercase tracking-wide ${
-            mode === "app" ? "bg-white text-black" : "bg-white/10"
-          }`}
+          className={`px-3 py-1 rounded-full text-xs uppercase tracking-wide ${mode === "app" ? "bg-white text-black" : "bg-white/10"
+            }`}
           onClick={() => {
             setMode("app");
             finalizeSelection("app");
@@ -154,9 +175,8 @@ export default function ScreenshotOverlay() {
           App Window
         </button>
         <button
-          className={`px-3 py-1 rounded-full text-xs uppercase tracking-wide ${
-            mode === "screen" ? "bg-white text-black" : "bg-white/10"
-          }`}
+          className={`px-3 py-1 rounded-full text-xs uppercase tracking-wide ${mode === "screen" ? "bg-white text-black" : "bg-white/10"
+            }`}
           onClick={() => {
             setMode("screen");
             finalizeSelection("screen");
@@ -176,8 +196,8 @@ export default function ScreenshotOverlay() {
         {mode === "region"
           ? "Drag to select a region"
           : mode === "app"
-          ? "Capture the Incrementum window"
-          : "Capture the full screen"}
+            ? "Capture the Incrementum window"
+            : "Capture the full screen"}
       </div>
 
       {selectionStyle && (

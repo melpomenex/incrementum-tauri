@@ -4,9 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { listen } from "@tauri-apps/api/event";
+import { invokeCommand as invoke, isTauri } from "../../lib/tauri";
 import { useSearchParams } from "react-router-dom";
 import {
   Cloud,
@@ -144,7 +142,12 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
       sessionStorage.setItem("pending_oauth_provider", providerType);
 
       // Open the OAuth URL in a new window
-      await openUrl(url);
+      if (isTauri()) {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(url);
+      } else {
+        window.open(url, "_blank");
+      }
 
       setOauthUrl(url);
     } catch (err) {
@@ -230,11 +233,10 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
               return (
                 <div
                   key={providerType}
-                  className={`p-4 border-2 rounded-lg transition-all ${
-                    isConnected
+                  className={`p-4 border-2 rounded-lg transition-all ${isConnected
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-muted-foreground"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -279,11 +281,10 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
                         : handleConnect(providerType)
                     }
                     disabled={isConnecting}
-                    className={`w-full px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
-                      isConnected
+                    className={`w-full px-4 py-2 rounded-lg transition-colors text-sm font-medium ${isConnected
                         ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         : info.bgColor + " " + info.color
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {isConnecting ? (
                       <>
@@ -345,11 +346,10 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
                 onClick={() => handleSyncModeChange("backup")}
-                className={`p-4 border-2 rounded-lg transition-all text-left ${
-                  state.syncMode === "backup"
+                className={`p-4 border-2 rounded-lg transition-all text-left ${state.syncMode === "backup"
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-muted-foreground"
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3 mb-2">
                   <Cloud className="w-5 h-5 text-primary" />
@@ -363,11 +363,10 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
 
               <button
                 onClick={() => handleSyncModeChange("two-way")}
-                className={`p-4 border-2 rounded-lg transition-all text-left ${
-                  state.syncMode === "two-way"
+                className={`p-4 border-2 rounded-lg transition-all text-left ${state.syncMode === "two-way"
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-muted-foreground"
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3 mb-2">
                   <RefreshCw className="w-5 h-5 text-primary" />
@@ -405,18 +404,16 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
                   onClick={() =>
                     handleAutoBackupChange(!state.autoBackup.enabled)
                   }
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    state.autoBackup.enabled
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${state.autoBackup.enabled
                       ? "bg-primary"
                       : "bg-muted"
-                  }`}
+                    }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      state.autoBackup.enabled
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${state.autoBackup.enabled
                         ? "translate-x-6"
                         : "translate-x-1"
-                    }`}
+                      }`}
                   />
                 </button>
               </div>

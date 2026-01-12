@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../../lib/tauri";
 import {
   RefreshCw,
   Check,
@@ -51,7 +51,7 @@ export function SyncStatusIndicator({
 
   const loadSyncStatus = async () => {
     try {
-      const status = await invoke<{
+      const status = await invokeCommand<{
         last_sync: string | null;
         sync_version: number;
         pending_conflicts: number;
@@ -82,7 +82,7 @@ export function SyncStatusIndicator({
         });
       }, 1000);
 
-      const result = await invoke<SyncResult>("cloud_sync_now");
+      const result = await invokeCommand<SyncResult>("cloud_sync_now");
 
       clearInterval(progressInterval);
 
@@ -178,17 +178,16 @@ export function SyncStatusIndicator({
         <button
           onClick={handleSyncNow}
           disabled={syncState === "syncing"}
-          className={`p-2 rounded-lg transition-colors ${
-            syncState === "syncing"
+          className={`p-2 rounded-lg transition-colors ${syncState === "syncing"
               ? "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400"
               : "bg-background hover:bg-muted text-muted-foreground"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
           title={
             syncMode === "backup"
               ? "Backup to cloud"
               : syncState === "syncing"
-              ? "Syncing..."
-              : "Sync now"
+                ? "Syncing..."
+                : "Sync now"
           }
         >
           {syncState === "syncing" ? (

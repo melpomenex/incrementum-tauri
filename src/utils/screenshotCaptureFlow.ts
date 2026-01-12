@@ -1,5 +1,5 @@
-import { listen } from "@tauri-apps/api/event";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+// import { listen } from "@tauri-apps/api/event";
+// import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   captureAppWindow,
   captureScreenByIndex,
@@ -7,6 +7,10 @@ import {
   saveScreenshotAsDocument,
   ScreenInfo,
 } from "./screenshotCapture";
+
+// Type definitions for lazy loading
+type WebviewWindowType = import("@tauri-apps/api/webviewWindow").WebviewWindow;
+type ListenFn = typeof import("@tauri-apps/api/event").listen;
 
 export type ScreenshotSelectionMode = "region" | "screen" | "app";
 
@@ -23,6 +27,12 @@ const CANCEL_EVENT = "screenshot-cancel";
 export async function captureScreenshotWithOverlay(
   screenIndex?: number
 ): Promise<string | null> {
+  // Guard for PWA/Browser environment
+  if (!("__TAURI__" in window)) {
+    console.warn("Screenshot capture is not supported in browser mode");
+    return null;
+  }
+
   const screen = await resolveScreenInfo(screenIndex);
   if (!screen) {
     return null;
@@ -80,6 +90,10 @@ async function resolveScreenInfo(screenIndex?: number): Promise<ScreenInfo | nul
 }
 
 async function openOverlay(screen: ScreenInfo): Promise<ScreenshotSelection | null> {
+  // Dynamically import Tauri APIs
+  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+  const { listen } = await import("@tauri-apps/api/event");
+
   const existing = await WebviewWindow.getByLabel(OVERLAY_LABEL);
   if (existing) {
     try {
@@ -116,7 +130,7 @@ async function openOverlay(screen: ScreenInfo): Promise<ScreenshotSelection | nu
 
   return await new Promise((resolve) => {
     let settled = false;
-    let unlistenAll = () => {};
+    let unlistenAll = () => { };
 
     const finalize = async (value: ScreenshotSelection | null) => {
       if (settled) return;

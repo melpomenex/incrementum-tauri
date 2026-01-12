@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../lib/tauri";
 import {
   SiObsidian,
   SiAnki,

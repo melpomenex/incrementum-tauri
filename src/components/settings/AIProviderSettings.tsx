@@ -8,7 +8,7 @@ import { LLMProviderSettings } from "./LLMProviderSettings";
 import { MCPServersSettings } from "./MCPServersSettings";
 import { useLLMProvidersStore } from "../../stores/llmProvidersStore";
 import { useMCPServersStore } from "../../stores/mcpServersStore";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../../lib/tauri";
 
 /**
  * AI Provider Settings

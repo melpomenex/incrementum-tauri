@@ -3,7 +3,7 @@ import { useDocumentStore } from "../../stores";
 import { Camera, Download, Trash2, Calendar, Check } from "lucide-react";
 import { downloadScreenshot } from "../../utils/screenshotCapture";
 import { captureScreenshotWithOverlay } from "../../utils/screenshotCaptureFlow";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../../lib/tauri";
 
 export function ScreenshotTab() {
   const { documents, loadDocuments, deleteDocument } = useDocumentStore();
@@ -70,7 +70,7 @@ export function ScreenshotTab() {
         },
       };
 
-      const savedDoc = await invoke("save_document", { document: documentData });
+      const savedDoc = await invokeCommand("save_document", { document: documentData });
       console.log("Screenshot saved:", savedDoc);
 
       // Reset preview and reload
@@ -208,11 +208,10 @@ export function ScreenshotTab() {
                 {screenshots.map((screenshot) => (
                   <div
                     key={screenshot.id}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                      selectedScreenshot?.id === screenshot.id
+                    className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedScreenshot?.id === screenshot.id
                         ? "bg-primary/10 border border-primary/20"
                         : "bg-card border border-border hover:bg-muted"
-                    }`}
+                      }`}
                     onClick={() => setSelectedScreenshot(screenshot)}
                   >
                     <div className="flex items-center gap-2">

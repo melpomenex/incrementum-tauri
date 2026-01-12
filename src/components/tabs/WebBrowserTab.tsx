@@ -1,9 +1,11 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Webview } from "@tauri-apps/api/webview";
-import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
-import { invoke } from "@tauri-apps/api/core";
+// Dynamic imports or helpers to prevent PWA crash
+// import { openUrl } from "@tauri-apps/plugin-opener";
+// import { getCurrentWindow } from "@tauri-apps/api/window";
+// import { Webview } from "@tauri-apps/api/webview";
+// import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+// import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand, isTauri } from "../../lib/tauri";
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +23,10 @@ import {
 import { createExtract, type CreateExtractInput } from "../../api/extracts";
 import { createLearningItem, type CreateLearningItemInput } from "../../api/learning-items";
 import { AssistantPanel, type AssistantContext } from "../assistant/AssistantPanel";
+
+// Type definitions for lazy loading
+type WebviewType = import("@tauri-apps/api/webview").Webview; // Instance type
+
 
 interface WebExtract {
   content: string;
@@ -234,7 +240,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     return currentUrl ? { type: "web", url: currentUrl } : { type: "web" };
   }, [currentUrl]);
 
-  const webviewRef = useRef<Webview | null>(null);
+  const webviewRef = useRef<WebviewType | null>(null);
   const webviewHostRef = useRef<HTMLDivElement | null>(null);
   const webviewContainerRef = useRef<HTMLDivElement | null>(null);
   const isMountedRef = useRef(true);
@@ -298,7 +304,12 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const handleOpenInBrowser = async () => {
     if (currentUrl) {
       try {
-        await openUrl(currentUrl);
+        if (isTauri()) {
+          const { openUrl } = await import("@tauri-apps/plugin-opener");
+          await openUrl(currentUrl);
+        } else {
+          window.open(currentUrl, "_blank");
+        }
       } catch (error) {
         console.error("Error opening URL:", error);
       }
@@ -390,8 +401,11 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           // Only update if we have valid dimensions
           if (width > 0 && height > 0) {
             try {
-              await webviewRef.current?.setPosition(new LogicalPosition(x, y));
-              await webviewRef.current?.setSize(new LogicalSize(width, height));
+              if (isTauri()) {
+                const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
+                await webviewRef.current?.setPosition(new LogicalPosition(x, y));
+                await webviewRef.current?.setSize(new LogicalSize(width, height));
+              }
             } catch (e) {
               console.warn("Failed to update webview bounds:", e);
             }
@@ -438,9 +452,12 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         webviewRef.current = null;
       }
 
-      const existing = await Webview.getByLabel("web-browser");
-      if (existing) {
-        await existing.close().catch(() => undefined);
+      if (isTauri()) {
+        const { Webview } = await import("@tauri-apps/api/webview");
+        const existing = await Webview.getByLabel("web-browser");
+        if (existing) {
+          await existing.close().catch(() => undefined);
+        }
       }
 
       if (!webviewContainerRef.current || !isMountedRef.current || isCancelled) {
@@ -449,6 +466,15 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       }
 
       try {
+        if (!isTauri()) {
+          // PWA mode: do nothing, render iframe in render function
+          setIsLoading(false);
+          return;
+        }
+
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const { Webview } = await import("@tauri-apps/api/webview");
+
         const appWindow = getCurrentWindow();
 
         // Wait for window to be ready before creating webview
@@ -562,9 +588,13 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         webviewRef.current = null;
       }
 
-      void Webview.getByLabel("web-browser")
-        .then((existing) => existing?.close())
-        .catch(() => undefined);
+      if (isTauri()) {
+        import("@tauri-apps/api/webview").then(({ Webview }) => {
+          Webview.getByLabel("web-browser")
+            .then((existing) => existing?.close())
+            .catch(() => undefined);
+        });
+      }
     };
   }, []);
 
@@ -790,7 +820,16 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                   </div>
                 </div>
               )}
-              <div ref={webviewContainerRef} className="absolute inset-0" />
+              <div ref={webviewContainerRef} className="absolute inset-0">
+                {!isTauri() && currentUrl && (
+                  <iframe
+                    src={currentUrl}
+                    className="w-full h-full border-0"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                    title="Web Browser"
+                  />
+                )}
+              </div>
             </>
           )}
         </div>

@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../../lib/tauri";
 import {
   HardDrive,
   RefreshCw,
@@ -41,43 +41,43 @@ const BACKUP_PRESETS: {
   options: BackupOptions;
   icon: React.ReactNode;
 }[] = [
-  {
-    name: "Full Backup",
-    description: "Database, documents, and settings",
-    options: {
-      include_database: true,
-      include_documents: true,
-      include_settings: true,
-      compress: true,
-      encrypt: true,
+    {
+      name: "Full Backup",
+      description: "Database, documents, and settings",
+      options: {
+        include_database: true,
+        include_documents: true,
+        include_settings: true,
+        compress: true,
+        encrypt: true,
+      },
+      icon: <HardDrive className="w-5 h-5" />,
     },
-    icon: <HardDrive className="w-5 h-5" />,
-  },
-  {
-    name: "Database Only",
-    description: "Just your learning database",
-    options: {
-      include_database: true,
-      include_documents: false,
-      include_settings: false,
-      compress: true,
-      encrypt: true,
+    {
+      name: "Database Only",
+      description: "Just your learning database",
+      options: {
+        include_database: true,
+        include_documents: false,
+        include_settings: false,
+        compress: true,
+        encrypt: true,
+      },
+      icon: <Database className="w-5 h-5" />,
     },
-    icon: <Database className="w-5 h-5" />,
-  },
-  {
-    name: "Documents Only",
-    description: "Document files without database",
-    options: {
-      include_database: false,
-      include_documents: true,
-      include_settings: false,
-      compress: true,
-      encrypt: true,
+    {
+      name: "Documents Only",
+      description: "Document files without database",
+      options: {
+        include_database: false,
+        include_documents: true,
+        include_settings: false,
+        compress: true,
+        encrypt: true,
+      },
+      icon: <FileText className="w-5 h-5" />,
     },
-    icon: <FileText className="w-5 h-5" />,
-  },
-];
+  ];
 
 export function BackupRestorePanel({
   provider,
@@ -287,11 +287,10 @@ export function BackupRestorePanel({
               key={index}
               onClick={() => setSelectedPreset(index)}
               disabled={backupInProgress}
-              className={`p-4 border-2 rounded-lg transition-all text-left ${
-                selectedPreset === index
+              className={`p-4 border-2 rounded-lg transition-all text-left ${selectedPreset === index
                   ? "border-primary bg-primary/5"
                   : "border-border hover:border-muted-foreground"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <div className="flex items-center gap-3 mb-2">
                 <div className="text-primary">{preset.icon}</div>

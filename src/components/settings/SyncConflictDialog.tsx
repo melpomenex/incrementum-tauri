@@ -4,7 +4,7 @@
  */
 
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../../lib/tauri";
 import {
   AlertTriangle,
   X,
@@ -30,31 +30,31 @@ const RESOLUTION_OPTIONS: {
   description: string;
   icon: React.ReactNode;
 }[] = [
-  {
-    value: "keep-local",
-    label: "Keep Local",
-    description: "Use your local version and overwrite the remote",
-    icon: <Monitor className="w-4 h-4" />,
-  },
-  {
-    value: "keep-remote",
-    label: "Keep Remote",
-    description: "Use the cloud version and overwrite your local data",
-    icon: <Cloud className="w-4 h-4" />,
-  },
-  {
-    value: "keep-newest",
-    label: "Keep Newest",
-    description: "Automatically keep whichever version was modified more recently",
-    icon: <Calendar className="w-4 h-4" />,
-  },
-  {
-    value: "keep-both",
-    label: "Keep Both",
-    description: "Create a duplicate so you don't lose either version",
-    icon: <FileText className="w-4 h-4" />,
-  },
-];
+    {
+      value: "keep-local",
+      label: "Keep Local",
+      description: "Use your local version and overwrite the remote",
+      icon: <Monitor className="w-4 h-4" />,
+    },
+    {
+      value: "keep-remote",
+      label: "Keep Remote",
+      description: "Use the cloud version and overwrite your local data",
+      icon: <Cloud className="w-4 h-4" />,
+    },
+    {
+      value: "keep-newest",
+      label: "Keep Newest",
+      description: "Automatically keep whichever version was modified more recently",
+      icon: <Calendar className="w-4 h-4" />,
+    },
+    {
+      value: "keep-both",
+      label: "Keep Both",
+      description: "Create a duplicate so you don't lose either version",
+      icon: <FileText className="w-4 h-4" />,
+    },
+  ];
 
 export function SyncConflictDialog({
   conflicts,
@@ -236,11 +236,10 @@ export function SyncConflictDialog({
                         key={option.value}
                         onClick={() => handleResolutionChange(index, option.value)}
                         disabled={applying}
-                        className={`p-3 border-2 rounded-lg transition-all text-left ${
-                          resolution === option.value
+                        className={`p-3 border-2 rounded-lg transition-all text-left ${resolution === option.value
                             ? "border-primary bg-primary/5"
                             : "border-border hover:border-muted-foreground"
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <div

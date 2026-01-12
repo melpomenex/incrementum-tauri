@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Youtube, Clock, ExternalLink } from "lucide-react";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../../lib/tauri";
 import { getYouTubeEmbedURL, getYouTubeWatchURL, formatDuration } from "../../api/youtube";
 
 interface YouTubeViewerProps {
@@ -42,7 +42,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   // Load transcript from backend
   const loadTranscript = useCallback(async () => {
     if (!videoId) return;
-    
+
     setIsLoadingTranscript(true);
     try {
       const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }>>(
@@ -74,7 +74,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   // Initialize player
   const initializePlayer = useCallback(() => {
     if (!containerRef.current) return;
-    
+
     // If player already exists
     if (playerRef.current) {
       // Only load if videoId changed

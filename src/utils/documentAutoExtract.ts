@@ -3,7 +3,7 @@
  * Automatically extracts text and key phrases from documents on load
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../lib/tauri";
 import { ocrImageFile, extractKeyPhrases } from "../api/ocrCommands";
 import { useSettingsStore } from "../stores/settingsStore";
 import { detectMathContent, extractMathFromText, extractMathWithNougat } from "./mathOcr";

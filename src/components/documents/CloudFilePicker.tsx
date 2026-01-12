@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../../lib/tauri";
 import {
   X,
   FolderOpen,
@@ -253,9 +253,8 @@ export function CloudFilePicker({
                 {index > 0 && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                 <button
                   onClick={() => handleNavigateTo(crumb.path)}
-                  className={`px-2 py-1 rounded hover:bg-muted transition-colors ${
-                    index === arr.length - 1 ? "text-foreground font-medium" : "text-muted-foreground"
-                  }`}
+                  className={`px-2 py-1 rounded hover:bg-muted transition-colors ${index === arr.length - 1 ? "text-foreground font-medium" : "text-muted-foreground"
+                    }`}
                 >
                   {crumb.name}
                 </button>
@@ -294,17 +293,15 @@ export function CloudFilePicker({
               <div className="flex border border-border rounded-lg overflow-hidden">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`p-2 transition-colors ${
-                    viewMode === "grid" ? "bg-muted" : "hover:bg-muted/50"
-                  }`}
+                  className={`p-2 transition-colors ${viewMode === "grid" ? "bg-muted" : "hover:bg-muted/50"
+                    }`}
                 >
                   <Grid3x3 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`p-2 transition-colors ${
-                    viewMode === "list" ? "bg-muted" : "hover:bg-muted/50"
-                  }`}
+                  className={`p-2 transition-colors ${viewMode === "list" ? "bg-muted" : "hover:bg-muted/50"
+                    }`}
                 >
                   <List className="w-4 h-4" />
                 </button>
@@ -352,11 +349,10 @@ export function CloudFilePicker({
                       handleFolderClick(file);
                     }
                   }}
-                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all hover:border-muted-foreground ${
-                    selectedFiles.has(file.id)
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all hover:border-muted-foreground ${selectedFiles.has(file.id)
                       ? "border-primary bg-primary/5"
                       : "border-border"
-                  }`}
+                    }`}
                 >
                   <div className="flex flex-col items-center text-center">
                     <div className="mb-2">{getFileIcon(file)}</div>
@@ -382,11 +378,10 @@ export function CloudFilePicker({
                       handleFileSelect(file.id);
                     }
                   }}
-                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all hover:border-muted-foreground ${
-                    selectedFiles.has(file.id)
+                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all hover:border-muted-foreground ${selectedFiles.has(file.id)
                       ? "border-primary bg-primary/5"
                       : "border-border"
-                  }`}
+                    }`}
                 >
                   <div className="flex-shrink-0">{getFileIcon(file)}</div>
                   <div className="flex-1 min-w-0">

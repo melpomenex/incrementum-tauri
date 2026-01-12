@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand as invoke } from "../lib/tauri";
 import { useExtractStore } from "../stores/extractStore";
 import {
   Sparkles,
@@ -151,11 +151,10 @@ export function AIWorkflowsPage() {
               <button
                 key={workflow.id}
                 onClick={() => setSelectedWorkflow(workflow.id)}
-                className={`w-full p-3 rounded text-left transition-colors ${
-                  selectedWorkflow === workflow.id
+                className={`w-full p-3 rounded text-left transition-colors ${selectedWorkflow === workflow.id
                     ? "bg-primary-100 border border-primary-300"
                     : "hover:bg-muted border border-transparent"
-                }`}
+                  }`}
               >
                 <div className="flex items-start gap-3">
                   <div className="text-primary-600">{workflow.icon}</div>
@@ -206,8 +205,8 @@ export function AIWorkflowsPage() {
                     {selectedWorkflow === "flashcards"
                       ? "Content to generate flashcards from"
                       : selectedWorkflow === "qa"
-                      ? "Context to answer your question"
-                      : "Content to process"}
+                        ? "Context to answer your question"
+                        : "Content to process"}
                   </label>
                   <textarea
                     value={input}
