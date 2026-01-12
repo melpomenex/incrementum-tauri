@@ -183,6 +183,9 @@ pub fn calculate_priority_score(
 }
 
 /// Calculate combined priority score for documents using rating (1-4) and slider (0-100).
+///
+/// DEPRECATED: Use `calculate_fsrs_document_priority` instead for FSRS-first scheduling.
+/// This function is kept for backward compatibility.
 pub fn calculate_document_priority_score(
     priority_rating: Option<i32>,
     priority_slider: i32,
@@ -196,6 +199,113 @@ pub fn calculate_document_priority_score(
     };
 
     ((slider + rating_normalized) / 2.0).max(0.0).min(100.0)
+}
+
+/// Calculate FSRS-first document priority score.
+///
+/// This function prioritizes FSRS scheduling over manual priority settings,
+/// ensuring that documents are scheduled based on memory retention algorithms.
+///
+/// # Priority Calculation
+///
+/// 1. **Base Priority (0-10)** - Calculated from FSRS due date:
+///    - Overdue: 10.0 - (days_overdue / 30) * 3  (decreases as it gets more overdue)
+///    - Due today: 9.0
+///    - Due in 1 day: 7.0
+///    - Due in 3 days: 5.0
+///    - Due in 7 days: 3.0
+///    - Due later: max(1.0, 10 - days_until_due / 10)
+///
+/// 2. **FSRS Adjustments**:
+///    - Difficulty: +difficulty * 0.1 (harder items get higher priority)
+///    - Stability: Lower stability = higher urgency for review
+///    - New items (stability ~0): Get boosted priority
+///
+/// 3. **Manual Priority Modifier**:
+///    - Acts as a multiplier: base_priority * (0.5 to 1.5)
+///    - Calculated from: 1.0 + (priority_slider - 50) / 100
+///    - This allows users to boost/reduce priority without overriding FSRS
+///
+/// # Arguments
+///
+/// * `next_reading_date` - FSRS-calculated next reading date (required for FSRS scheduling)
+/// * `stability` - FSRS stability value (how long memory lasts, in days)
+/// * `difficulty` - FSRS difficulty value (1-10 scale)
+/// * `reps` - Number of times the document has been reviewed
+/// * `priority_slider` - User-set priority slider (0-100, default 50 = neutral)
+///
+pub fn calculate_fsrs_document_priority(
+    next_reading_date: chrono::DateTime<Utc>,
+    stability: f64,
+    difficulty: f64,
+    reps: i32,
+    priority_slider: i32,
+) -> f64 {
+    let now = Utc::now();
+    let is_due = next_reading_date <= now;
+    let days_diff = (next_reading_date - now).num_days();
+
+    // Base priority from FSRS due date
+    let mut base_priority = if is_due {
+        // Overdue items - priority decreases as items get MORE overdue
+        // This prevents ancient overdue items from clogging the queue
+        let days_overdue = -days_diff;
+        let overdue_penalty = (days_overdue as f64 / 30.0) * 3.0;
+        (10.0 - overdue_penalty).max(6.0) // Floor at 6.0 for overdue items
+    } else if days_diff <= 0 {
+        9.0  // Due today
+    } else if days_diff <= 1 {
+        7.0  // Due tomorrow
+    } else if days_diff <= 3 {
+        5.0  // Due in 2-3 days
+    } else if days_diff <= 7 {
+        3.0  // Due this week
+    } else {
+        // Due later - gradually decrease priority
+        (10.0 - (days_diff as f64 / 10.0)).max(1.0)
+    };
+
+    // FSRS Adjustments
+
+    // 1. Difficulty adjustment - harder items get slightly higher priority
+    base_priority += difficulty * 0.1;
+
+    // 2. Stability adjustment - items with low stability need more frequent review
+    // Stability < 1 day = very unstable, needs immediate review
+    // Stability > 30 days = very stable, less urgent
+    let stability_bonus = if stability < 1.0 {
+        1.0  // Very unstable, boost priority
+    } else if stability < 7.0 {
+        0.5  // Somewhat unstable
+    } else if stability > 30.0 {
+        -0.5  // Very stable, reduce priority slightly
+    } else {
+        0.0  // Normal stability
+    };
+    base_priority += stability_bonus;
+
+    // 3. New item boost - items with few repetitions get higher priority
+    // This ensures new documents get reviewed quickly to establish stability
+    if reps == 0 {
+        base_priority += 2.0;  // Never reviewed - high priority
+    } else if reps < 3 {
+        base_priority += 1.0;  // Still learning - medium boost
+    }
+
+    // Clamp base priority to 0-10 range before applying user modifier
+    base_priority = base_priority.max(0.0).min(10.0);
+
+    // Manual Priority Modifier (0.5x to 1.5x)
+    // slider = 0   -> 0.5x multiplier (reduce priority by half)
+    // slider = 50  -> 1.0x multiplier (neutral, FSRS only)
+    // slider = 100 -> 1.5x multiplier (boost priority by 50%)
+    let slider_normalized = priority_slider.clamp(0, 100) as f64;
+    let priority_multiplier = 1.0 + (slider_normalized - 50.0) / 100.0;
+
+    let final_priority = base_priority * priority_multiplier;
+
+    // Final clamp to 0-10 range
+    final_priority.max(0.0).min(10.0)
 }
 
 #[derive(Clone, serde::Serialize)]

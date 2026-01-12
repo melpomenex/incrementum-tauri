@@ -267,6 +267,50 @@ pub async fn read_document_file(
     Ok(base64_string)
 }
 
+/// Initialize FSRS state for all documents that don't have it yet.
+///
+/// This is a one-time migration command that ensures all existing documents
+/// have FSRS scheduling enabled. New documents are automatically initialized
+/// with FSRS state, so this only needs to be run once for legacy data.
+///
+/// Returns the number of documents that were initialized.
+#[tauri::command]
+pub async fn initialize_fsrs_for_all_documents(
+    repo: State<'_, Repository>,
+) -> Result<i32> {
+    let documents = repo.list_documents().await?;
+    let now = chrono::Utc::now();
+    let mut initialized_count = 0;
+
+    for document in documents {
+        // Skip if document already has FSRS scheduling
+        if document.next_reading_date.is_some() {
+            continue;
+        }
+
+        // Initialize FSRS state with defaults
+        let next_reading_date = Some(now);
+        let stability = Some(0.0);  // New/unreviewed
+        let difficulty = Some(5.0);  // Medium difficulty
+        let reps = Some(0);
+        let total_time_spent = Some(0);
+
+        // Update the document with FSRS scheduling
+        repo.update_document_scheduling(
+            &document.id,
+            next_reading_date,
+            stability,
+            difficulty,
+            reps,
+            total_time_spent,
+        ).await?;
+
+        initialized_count += 1;
+    }
+
+    Ok(initialized_count)
+}
+
 /// Result from fetching URL content
 #[derive(serde::Serialize)]
 pub struct FetchedUrlContent {

@@ -133,6 +133,7 @@ pub fn run() {
             commands::import_documents,
             commands::read_document_file,
             commands::fetch_url_content,
+            commands::initialize_fsrs_for_all_documents,
             // Extract commands
             commands::get_extracts,
             commands::get_extract,

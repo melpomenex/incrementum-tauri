@@ -73,6 +73,7 @@ pub struct DocumentMetadata {
 
 impl Document {
     pub fn new(title: String, file_path: String, file_type: FileType) -> Self {
+        let now = Utc::now();
         Self {
             id: Uuid::new_v4().to_string(),
             title,
@@ -84,24 +85,25 @@ impl Document {
             current_page: None,
             category: None,
             tags: Vec::new(),
-            date_added: Utc::now(),
-            date_modified: Utc::now(),
+            date_added: now,
+            date_modified: now,
             date_last_reviewed: None,
             extract_count: 0,
             learning_item_count: 0,
             priority_rating: 0,
-            priority_slider: 0,
+            priority_slider: 50,  // Default to neutral priority (50 = 1.0x multiplier)
             priority_score: 0.0,
             is_archived: false,
             is_favorite: false,
             metadata: None,
-            // Scheduling fields
-            next_reading_date: None,
+            // FSRS scheduling fields - initialize with default FSRS state
+            // New documents are "due now" with zero stability and medium difficulty
+            next_reading_date: Some(now),  // Due immediately for first reading
             reading_count: 0,
-            stability: None,
-            difficulty: None,
-            reps: None,
-            total_time_spent: None,
+            stability: Some(0.0),  // No stability yet (new document)
+            difficulty: Some(5.0),  // Medium difficulty default (1-10 scale)
+            reps: Some(0),  // No repetitions yet
+            total_time_spent: Some(0),  // No time spent yet
         }
     }
 }

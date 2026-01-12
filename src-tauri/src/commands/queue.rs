@@ -2,7 +2,7 @@
 
 use tauri::State;
 use crate::database::Repository;
-use crate::algorithms::{calculate_document_priority_score, QueueSelector};
+use crate::algorithms::{calculate_document_priority_score, calculate_fsrs_document_priority, QueueSelector};
 use crate::error::Result;
 use crate::models::QueueItem;
 use chrono::Utc;
@@ -138,36 +138,40 @@ pub async fn get_queue(
             _ => 0,
         };
 
-        // Calculate priority for documents
-        let priority_score = calculate_document_priority_score(
-            if document.priority_rating > 0 {
-                Some(document.priority_rating)
-            } else {
-                None
-            },
-            document.priority_slider,
-        );
-
-        // For documents with next_reading_date, adjust priority based on due date
+        // FSRS-first priority calculation
+        // For documents with FSRS scheduling data, use FSRS priority
+        // For new documents without FSRS data, initialize with defaults
         let priority = if let Some(next_reading_date) = document.next_reading_date {
-            let is_due = next_reading_date <= now;
-            let days_until_due = (next_reading_date - now).num_days();
+            // Document has FSRS scheduling - use FSRS-first priority
+            let stability = document.stability.unwrap_or(0.0);
+            let difficulty = document.difficulty.unwrap_or(5.0);
+            let reps = document.reps.unwrap_or(0);
+            let slider = document.priority_slider;
 
-            if is_due {
-                // Documents that are due for reading get higher priority
-                priority_score.max(8.0)
-            } else if days_until_due <= 1 {
-                priority_score.max(7.0)
-            } else if days_until_due <= 3 {
-                priority_score.max(6.0)
-            } else if days_until_due <= 7 {
-                priority_score.max(5.0)
-            } else {
-                priority_score
-            }
+            calculate_fsrs_document_priority(
+                next_reading_date,
+                stability,
+                difficulty,
+                reps,
+                slider,
+            )
         } else {
-            // Documents without scheduled dates get base priority
-            priority_score
+            // New document without FSRS scheduling
+            // Initialize with default FSRS state: due immediately, no stability, medium difficulty
+            let stability = document.stability.unwrap_or(0.0);
+            let difficulty = document.difficulty.unwrap_or(5.0);
+            let reps = document.reps.unwrap_or(0);
+            let slider = document.priority_slider;
+
+            // Use current time as next_reading_date for new documents
+            // This makes them "due now" with high priority
+            calculate_fsrs_document_priority(
+                now,
+                stability,
+                difficulty,
+                reps,
+                slider,
+            )
         };
 
         queue_items.push(QueueItem {
