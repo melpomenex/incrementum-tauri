@@ -132,13 +132,20 @@ export function Toolbar() {
   const handleRss = () => {
     console.log("RSS button clicked - opening RSS tab");
     console.log("RssTab component:", RssTab);
-    addTab({
-      title: "RSS Feeds",
-      icon: "📰",
-      type: "rss",
-      content: RssTab,
-      closable: true,
-    });
+    console.log("addTab function:", addTab);
+
+    try {
+      const tabId = addTab({
+        title: "RSS Feeds",
+        icon: "📰",
+        type: "rss",
+        content: RssTab,
+        closable: true,
+      });
+      console.log("Tab added successfully with ID:", tabId);
+    } catch (error) {
+      console.error("Error adding RSS tab:", error);
+    }
   };
 
   const handleRssBackground = () => {

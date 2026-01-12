@@ -27,6 +27,17 @@ import {
 } from "lucide-react";
 
 export function RssTab() {
+  console.log("RssTab component rendering...");
+
+  let storeData;
+  try {
+    storeData = useRssStore();
+    console.log("RSS Store loaded successfully:", storeData);
+  } catch (error) {
+    console.error("Error loading RSS store:", error);
+    return <div className="p-8 text-red-500">Error loading RSS store: {String(error)}</div>;
+  }
+
   const {
     feeds,
     articles,
@@ -58,7 +69,7 @@ export function RssTab() {
     setSelectedFeedId,
     importOPML,
     exportOPML,
-  } = useRssStore();
+  } = storeData;
 
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
