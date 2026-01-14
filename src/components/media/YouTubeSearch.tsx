@@ -8,7 +8,6 @@ import {
   Download,
   Loader2,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { getYouTubeThumbnail, getYouTubeWatchURL, formatDuration, formatViewCount } from "../../api/youtube";
 
 interface YouTubeSearchResult {

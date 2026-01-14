@@ -2,6 +2,8 @@
  * RSS and Atom feed parser and management
  */
 
+import { invokeCommand } from "../lib/tauri";
+
 /**
  * Feed item (article/blog post)
  */
@@ -317,8 +319,7 @@ function generateItemId(link: string, pubDate: string): string {
  */
 export async function fetchFeed(feedUrl: string): Promise<Feed | null> {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const parsedFeed = await invoke("fetch_rss_feed_url", { feedUrl });
+    const parsedFeed = await invokeCommand<any>("fetch_rss_feed_url", { feedUrl });
 
     // Convert backend format to frontend format
     const feed: Feed = {

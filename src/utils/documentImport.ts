@@ -3,7 +3,6 @@
  * Handles importing documents from various sources: URLs, Arxiv, files, etc.
  */
 
-import { invoke } from '@tauri-apps/api/core';
 import { Document } from '../types/document';
 import { fetchUrlContent } from '../api/documents';
 

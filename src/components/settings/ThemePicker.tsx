@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Theme, ThemeId } from '../../types/theme';
 import { Check, Palette, Download, Upload, Trash2, Eye } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '../../lib/tauri';
 import { ThemeGallery } from './ThemeGallery';
 
 interface ThemeCardProps {
@@ -131,7 +131,7 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
       const theme = themes.find((t) => t.id === themeId);
 
       // Use Tauri to save file
-      const filePath = await invoke<string>('dialog_save_file', {
+      const filePath = await invokeCommand<string>('dialog_save_file', {
         defaultPath: `${theme?.name || 'theme'}.json`,
         filters: [
           {
@@ -142,7 +142,7 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
       });
 
       if (filePath) {
-        await invoke('write_file', {
+        await invokeCommand('write_file', {
           path: filePath,
           contents: json,
         });
@@ -154,7 +154,7 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
 
   const handleImportTheme = async () => {
     try {
-      const filePath = await invoke<string>('dialog_open_file', {
+      const filePath = await invokeCommand<string>('dialog_open_file', {
         filters: [
           {
             name: 'JSON',
@@ -164,7 +164,7 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
       });
 
       if (filePath) {
-        const contents = await invoke<string>('read_file', { path: filePath });
+        const contents = await invokeCommand<string>('read_file', { path: filePath });
         const importedTheme = importTheme(contents);
         setTheme(importedTheme.id);
       }

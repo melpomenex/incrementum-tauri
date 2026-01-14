@@ -24,7 +24,6 @@ import {
   getYouTubeThumbnail,
   getYouTubeWatchURL,
 } from "../../api/youtube";
-import { invoke } from "@tauri-apps/api/core";
 
 interface YouTubeVideoInfo {
   id: string;

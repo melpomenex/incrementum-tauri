@@ -5,8 +5,7 @@
  * and converting them to Incrementum format
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { invokeCommand, openFilePicker } from "../lib/tauri";
 
 export interface SuperMemoItem {
   id: string;
@@ -33,7 +32,7 @@ export interface SuperMemoCollection {
  */
 export async function validateSuperMemoPackage(filePath: string): Promise<boolean> {
   try {
-    const isValid = await invoke<boolean>("validate_supermemo_package", { path: filePath });
+    const isValid = await invokeCommand<boolean>("validate_supermemo_package", { path: filePath });
     return isValid;
   } catch (error) {
     console.error("Failed to validate SuperMemo export:", error);
@@ -46,7 +45,7 @@ export async function validateSuperMemoPackage(filePath: string): Promise<boolea
  */
 export async function importSuperMemoPackage(filePath: string): Promise<SuperMemoCollection> {
   try {
-    const result = await invoke<string>("import_supermemo_package", { zipPath: filePath });
+    const result = await invokeCommand<string>("import_supermemo_package", { zipPath: filePath });
     const collection = JSON.parse(result) as SuperMemoCollection;
     return collection;
   } catch (error) {
@@ -60,7 +59,7 @@ export async function importSuperMemoPackage(filePath: string): Promise<SuperMem
  */
 export async function selectSuperMemoPackage(): Promise<string | null> {
   try {
-    const selected = await open({
+    const selected = await openFilePicker({
       multiple: false,
       filters: [{
         name: "SuperMemo Export",
@@ -68,7 +67,7 @@ export async function selectSuperMemoPackage(): Promise<string | null> {
       }]
     });
 
-    return selected as string | null;
+    return selected ? selected[0] : null;
   } catch (error) {
     console.error("Failed to open file picker:", error);
     return null;

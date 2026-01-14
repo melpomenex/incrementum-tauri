@@ -3,7 +3,7 @@
  * OCR for mathematical equations and formulas
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "../lib/tauri";
 
 /**
  * Math OCR model types
@@ -47,7 +47,7 @@ export async function extractMathWithNougat(
 
   try {
     // Call Nougat via Python subprocess
-    const result = await invoke<{ latex: string; confidence: number }>("run_nougat_ocr", {
+    const result = await invokeCommand<{ latex: string; confidence: number }>("run_nougat_ocr", {
       imageData,
       modelDir,
     });
@@ -85,7 +85,7 @@ export async function extractMathWithPix2Tex(
 
   try {
     // Call pix2tex via Python subprocess
-    const result = await invoke<{ latex: string; confidence: number }>("run_pix2tex_ocr", {
+    const result = await invokeCommand<{ latex: string; confidence: number }>("run_pix2tex_ocr", {
       imageData,
     });
 

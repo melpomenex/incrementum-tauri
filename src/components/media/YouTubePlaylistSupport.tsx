@@ -12,7 +12,6 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { extractPlaylistID, extractChannelID, getYouTubeThumbnail } from "../../api/youtube";
 
 interface YouTubeVideo {
