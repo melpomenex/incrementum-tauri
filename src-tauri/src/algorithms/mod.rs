@@ -14,11 +14,13 @@ pub mod fsrs;
 pub mod supermemo;
 pub mod queue_selector;
 pub mod document_scheduler;
+pub mod incremental_scheduler;
 
 // Re-exports
 pub use optimizer::calculate_review_statistics;
 pub use queue_selector::QueueSelector;
 pub use document_scheduler::DocumentScheduler;
+pub use incremental_scheduler::{IncrementalScheduler, IncrementalSchedulerParams};
 
 #[cfg(test)]
 mod tests;

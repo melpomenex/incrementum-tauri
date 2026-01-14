@@ -42,6 +42,9 @@ pub struct Document {
     pub reps: Option<i32>,
     /// Total time spent reading (in seconds)
     pub total_time_spent: Option<i32>,
+    /// Consecutive rating count for incremental scheduler
+    /// Positive = consecutive good/easy ratings, Negative = consecutive again/hard ratings
+    pub consecutive_count: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +105,7 @@ impl Document {
             difficulty: None,
             reps: None,
             total_time_spent: None,
+            consecutive_count: None,
         }
     }
 }

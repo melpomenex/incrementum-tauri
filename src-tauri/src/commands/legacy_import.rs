@@ -521,6 +521,7 @@ fn parse_document_row(row: &sqlx::sqlite::SqliteRow) -> Result<Document> {
         difficulty: row.try_get("difficulty").ok(),
         reps: row.try_get("reps").ok(),
         total_time_spent: row.try_get("total_time_spent").ok(),
+        consecutive_count: row.try_get("consecutive_count").ok(),
     })
 }
 

@@ -150,6 +150,7 @@ impl Repository {
                     difficulty: row.try_get("difficulty").ok(),
                     reps: row.try_get("reps").ok(),
                     total_time_spent: row.try_get("total_time_spent").ok(),
+                    consecutive_count: row.try_get("consecutive_count").ok(),
                 }))
             }
             None => Ok(None),
@@ -202,6 +203,7 @@ impl Repository {
                     difficulty: row.try_get("difficulty").ok(),
                     reps: row.try_get("reps").ok(),
                     total_time_spent: row.try_get("total_time_spent").ok(),
+                    consecutive_count: row.try_get("consecutive_count").ok(),
                 }))
             }
             None => Ok(None),
@@ -253,6 +255,7 @@ impl Repository {
                 difficulty: row.try_get("difficulty").ok(),
                 reps: row.try_get("reps").ok(),
                 total_time_spent: row.try_get("total_time_spent").ok(),
+                consecutive_count: row.try_get("consecutive_count").ok(),
             });
         }
 
@@ -360,6 +363,32 @@ impl Repository {
         })
     }
 
+    pub async fn update_document_progress(
+        &self,
+        id: &str,
+        current_page: Option<i32>,
+    ) -> Result<Document> {
+        let now = Utc::now();
+
+        sqlx::query(
+            r#"
+            UPDATE documents SET
+                current_page = ?1,
+                date_modified = ?2
+            WHERE id = ?3
+            "#,
+        )
+        .bind(current_page)
+        .bind(now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        self.get_document(id).await?.ok_or_else(|| {
+            crate::error::IncrementumError::NotFound(format!("Document {}", id))
+        })
+    }
+
     pub async fn update_document_scheduling(
         &self,
         id: &str,
@@ -386,6 +415,43 @@ impl Repository {
         .bind(difficulty)
         .bind(reps)
         .bind(total_time_spent)
+        .bind(Utc::now())
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_document_scheduling_with_consecutive(
+        &self,
+        id: &str,
+        next_reading_date: Option<chrono::DateTime<Utc>>,
+        stability: Option<f64>,
+        difficulty: Option<f64>,
+        reps: Option<i32>,
+        total_time_spent: Option<i32>,
+        consecutive_count: Option<i32>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE documents SET
+                next_reading_date = ?1,
+                stability = ?2,
+                difficulty = ?3,
+                reps = ?4,
+                total_time_spent = ?5,
+                consecutive_count = ?6,
+                date_modified = ?7
+            WHERE id = ?8
+            "#,
+        )
+        .bind(next_reading_date)
+        .bind(stability)
+        .bind(difficulty)
+        .bind(reps)
+        .bind(total_time_spent)
+        .bind(consecutive_count)
         .bind(Utc::now())
         .bind(id)
         .execute(&self.pool)

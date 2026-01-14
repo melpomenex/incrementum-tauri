@@ -23,11 +23,16 @@ declare global {
   }
 }
 
+// Auto-save interval (in milliseconds) - save position every 5 seconds
+const AUTO_SAVE_INTERVAL = 5000;
+
 export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeViewerProps) {
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastVideoIdRef = useRef<string | null>(null);
+  const lastSavedTimeRef = useRef<number>(0);
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -37,7 +42,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [showTranscript, setShowTranscript] = useState(true);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
-  const [startTime] = useState(0);
+  const [startTime, setStartTime] = useState(0);
 
   // Load transcript from backend
   const loadTranscript = useCallback(async () => {
@@ -71,6 +76,53 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     loadTranscript();
   }, [loadTranscript]);
 
+  // Load saved position from document
+  const loadSavedPosition = useCallback(async () => {
+    if (!documentId) return;
+
+    try {
+      const doc = await invoke<any>("get_document", { id: documentId });
+      if (doc && doc.current_page !== null && doc.current_page !== undefined) {
+        const savedTime = doc.current_page;
+        // For videos, current_page stores the timestamp in seconds
+        // Only restore if the video is more than 5% watched (to avoid resuming from beginning)
+        const hasProgress = savedTime > 0;
+        if (hasProgress) {
+          setStartTime(savedTime);
+          console.log(`Restoring video position: ${savedTime}s`);
+        }
+      }
+    } catch (error) {
+      console.log("Failed to load saved position:", error);
+    }
+  }, [documentId]);
+
+  // Save current position to document
+  const saveCurrentPosition = useCallback(async (time: number) => {
+    if (!documentId) return;
+
+    // Avoid saving if time hasn't changed significantly (more than 1 second)
+    if (Math.abs(time - lastSavedTimeRef.current) < 1) {
+      return;
+    }
+
+    try {
+      await invoke("update_document_progress", {
+        id: documentId,
+        currentPage: Math.floor(time),
+      });
+      lastSavedTimeRef.current = time;
+      console.log(`Saved video position: ${Math.floor(time)}s`);
+    } catch (error) {
+      console.log("Failed to save position:", error);
+    }
+  }, [documentId]);
+
+  // Load saved position when component mounts
+  useEffect(() => {
+    loadSavedPosition();
+  }, [loadSavedPosition]);
+
   // Initialize player
   const initializePlayer = useCallback(() => {
     if (!containerRef.current) return;
@@ -80,7 +132,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       // Only load if videoId changed
       if (videoId !== lastVideoIdRef.current) {
         if (typeof playerRef.current.loadVideoById === 'function') {
-          playerRef.current.loadVideoById(videoId);
+          playerRef.current.loadVideoById(videoId, startTime);
           lastVideoIdRef.current = videoId;
         }
       }
@@ -105,17 +157,41 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
           setDuration(playerDuration);
           onLoad?.({ duration: playerDuration, title: title || "" });
 
+          // Seek to saved position if we have one
+          if (startTime > 0) {
+            event.target.seekTo(startTime, true);
+            console.log(`Seeked to saved position: ${startTime}s`);
+          }
+
           // Start time tracking
           if (intervalRef.current) clearInterval(intervalRef.current);
           intervalRef.current = setInterval(() => {
             if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-              setCurrentTime(playerRef.current.getCurrentTime());
+              const time = playerRef.current.getCurrentTime();
+              setCurrentTime(time);
             }
           }, 500);
+
+          // Start auto-save interval
+          if (autoSaveIntervalRef.current) clearInterval(autoSaveIntervalRef.current);
+          autoSaveIntervalRef.current = setInterval(() => {
+            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlaying) {
+              const time = playerRef.current.getCurrentTime();
+              saveCurrentPosition(time);
+            }
+          }, AUTO_SAVE_INTERVAL);
         },
         onStateChange: (event: any) => {
           const playerState = event.target.getPlayerState();
+          const wasPlaying = isPlaying;
           setIsPlaying(playerState === window.YT.PlayerState.PLAYING);
+
+          // Save position when pausing
+          if (wasPlaying && playerState === window.YT.PlayerState.PAUSED) {
+            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+              saveCurrentPosition(playerRef.current.getCurrentTime());
+            }
+          }
         },
         onError: (event: any) => {
           console.error("YouTube player error:", event.data);
@@ -123,7 +199,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       },
     });
     lastVideoIdRef.current = videoId;
-  }, [videoId, startTime, title, onLoad]);
+  }, [videoId, startTime, title, onLoad, saveCurrentPosition, isPlaying]);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -151,7 +227,16 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      // We don't destroy the player on unmount if we want to reuse it, 
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+        autoSaveIntervalRef.current = null;
+      }
+      // Save position before unmount
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && documentId) {
+        const time = playerRef.current.getCurrentTime();
+        saveCurrentPosition(time);
+      }
+      // We don't destroy the player on unmount if we want to reuse it,
       // but React strict mode might cause double mounting.
       // Safer to destroy.
       if (playerRef.current && typeof playerRef.current.destroy === 'function') {
@@ -159,15 +244,17 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         playerRef.current = null;
       }
     };
-  }, [initializePlayer]);
+  }, [initializePlayer, saveCurrentPosition, documentId]);
 
   // Seek to time
   const handleSeek = useCallback((time: number) => {
     if (playerRef.current && playerRef.current.seekTo) {
       playerRef.current.seekTo(time, true);
       setCurrentTime(time);
+      // Save position when user manually seeks
+      saveCurrentPosition(time);
     }
-  }, []);
+  }, [saveCurrentPosition]);
 
   // Play/Pause
   const handlePlayPause = () => {

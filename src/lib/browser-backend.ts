@@ -413,61 +413,86 @@ const commandHandlers: Record<string, CommandHandler> = {
     fetch_rss_feed_url: async (args) => {
         const feedUrl = args.feedUrl as string;
 
+        // List of CORS proxies to try
+        const corsProxies = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
+        let lastError: Error | null = null;
+
         // Try direct fetch first (might work for CORS-enabled feeds)
-        let response: Response;
-        let xmlText: string;
-
         try {
-            response = await fetch(feedUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            console.log('[Browser] Trying direct fetch for:', feedUrl);
+            const response = await fetch(feedUrl);
+            if (response.ok) {
+                const xmlText = await response.text();
+                return await parseAndReturnFeed(xmlText, feedUrl);
             }
-            xmlText = await response.text();
         } catch (directError) {
-            // Try with CORS proxy
-            const corsProxy = 'https://api.allorigins.win/raw?url=';
+            console.log('[Browser] Direct fetch failed, trying CORS proxies:', directError);
+            lastError = directError as Error;
+        }
+
+        // Try each CORS proxy
+        for (const proxy of corsProxies) {
             try {
-                response = await fetch(corsProxy + encodeURIComponent(feedUrl));
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                console.log('[Browser] Trying CORS proxy:', proxy);
+                const proxyUrl = proxy + encodeURIComponent(feedUrl);
+                const response = await fetch(proxyUrl);
+
+                if (response.ok) {
+                    const xmlText = await response.text();
+                    console.log('[Browser] Successfully fetched feed via proxy:', proxy);
+                    return await parseAndReturnFeed(xmlText, feedUrl);
+                } else {
+                    console.log('[Browser] Proxy returned status:', response.status);
                 }
-                xmlText = await response.text();
             } catch (proxyError) {
-                throw new Error(`Failed to fetch feed: ${proxyError}`);
+                console.log('[Browser] Proxy failed:', proxy, proxyError);
+                lastError = proxyError as Error;
             }
         }
 
-        // Parse the feed
-        const feed = await import('../api/rss').then(m => m.parseFeed(xmlText, feedUrl));
-
-        if (!feed) {
-            throw new Error('Failed to parse feed');
-        }
-
-        // Convert to backend format (snake_case)
-        return {
-            id: feed.id,
-            title: feed.title,
-            description: feed.description,
-            link: feed.link,
-            feed_url: feed.feedUrl,
-            image_url: feed.imageUrl || feed.icon,
-            language: feed.language,
-            category: feed.category,
-            items: feed.items.map(item => ({
-                id: item.id,
-                title: item.title,
-                description: item.description,
-                content: item.content,
-                link: item.link,
-                pub_date: item.pubDate,
-                author: item.author,
-                categories: item.categories,
-                guid: item.guid,
-            }))
-        };
+        throw new Error(`Failed to fetch feed after trying all methods. Last error: ${lastError?.message || 'Unknown error'}`);
     },
 };
+
+/**
+ * Helper function to parse and return feed
+ */
+async function parseAndReturnFeed(xmlText: string, feedUrl: string) {
+    const { parseFeed } = await import('../api/rss');
+    const feed = await parseFeed(xmlText, feedUrl);
+
+    if (!feed) {
+        throw new Error('Failed to parse feed');
+    }
+
+    // Convert to backend format (snake_case)
+    return {
+        id: feed.id,
+        title: feed.title,
+        description: feed.description,
+        link: feed.link,
+        feed_url: feed.feedUrl,
+        image_url: feed.imageUrl || feed.icon,
+        language: feed.language,
+        category: feed.category,
+        items: feed.items.map(item => ({
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            content: item.content,
+            link: item.link,
+            pub_date: item.pubDate,
+            author: item.author,
+            categories: item.categories,
+            guid: item.guid,
+        }))
+    };
+}
 
 /**
  * Import an Anki package (shared helper)

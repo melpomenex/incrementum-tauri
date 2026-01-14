@@ -255,6 +255,20 @@ pub async fn update_document_priority(
     Ok(updated)
 }
 
+/// Update the current page/progress of a document
+/// For YouTube videos, this stores the current playback position in seconds
+#[tauri::command]
+pub async fn update_document_progress(
+    id: String,
+    current_page: Option<i32>,
+    repo: State<'_, Repository>,
+) -> Result<Document> {
+    let updated = repo
+        .update_document_progress(&id, current_page)
+        .await?;
+    Ok(updated)
+}
+
 #[tauri::command]
 pub async fn delete_document(
     id: String,

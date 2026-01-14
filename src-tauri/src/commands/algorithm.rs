@@ -4,6 +4,7 @@ use crate::algorithms::{
     calculate_priority_score, calculate_review_statistics, compare_algorithms,
     optimizer::{OptimizationParams, OptimizationResult, ParameterOptimizer},
     DocumentScheduler as DocScheduler,
+    IncrementalScheduler,
     AlgorithmComparison, SM2Params,
 };
 use crate::commands::review::RepositoryExt;
@@ -98,7 +99,9 @@ pub async fn calculate_sm2_next(
 
 /// Rate a document and schedule its next reading
 ///
-/// This implements FSRS-based scheduling for incremental reading.
+/// This uses the incremental reading scheduler for documents and videos,
+/// which is optimized for keeping content in regular rotation rather than
+/// maximizing long-term retention (which is what FSRS does for flashcards).
 #[tauri::command]
 pub async fn rate_document(
     request: DocumentRatingRequest,
@@ -109,42 +112,44 @@ pub async fn rate_document(
         crate::error::IncrementumError::NotFound(format!("Document {} not found", request.document_id))
     })?;
 
-    // Create document scheduler
-    let scheduler = DocScheduler::default_params();
-    let now = Utc::now();
-
-    // Calculate elapsed days since last review
-    // If never reviewed, use days since creation (or 0 for immediate first review)
-    let elapsed_days = document.date_last_reviewed
-        .map(|lr| (now - lr).num_seconds() as f64 / 86400.0)
-        .unwrap_or_else(|| {
-            // For new documents, elapsed is usually small, but FSRS can handle it
-            (now - document.date_added).num_seconds() as f64 / 86400.0
-        })
-        .max(0.0);
+    // Create incremental scheduler (optimized for documents/videos)
+    let scheduler = IncrementalScheduler::default_params();
 
     let review_rating = ReviewRating::from(request.rating);
 
-    // Schedule the document using FSRS
-    // Use current stability/difficulty or defaults (None = new document)
-    let result = scheduler.schedule_document(
+    // Get consecutive count (defaults to 0 if not set)
+    let consecutive_count = document.consecutive_count.unwrap_or(0);
+
+    // Split into consecutive good and hard counts
+    let (consecutive_good_count, consecutive_hard_count) = if consecutive_count > 0 {
+        (consecutive_count, 0)
+    } else {
+        (0, -consecutive_count)
+    };
+
+    // Get current interval days (if any)
+    let current_interval_days = document.stability.map(|s| s as i64);
+
+    // Schedule the document using the incremental scheduler
+    let result = scheduler.schedule_item(
         review_rating,
-        document.stability,
-        document.difficulty,
-        elapsed_days
+        current_interval_days,
+        consecutive_good_count,
+        consecutive_hard_count,
     );
 
     // Update the document with new scheduling data
     let new_reps = document.reps.unwrap_or(0) + 1;
     let new_time_spent = document.total_time_spent.unwrap_or(0) + request.time_taken.unwrap_or(0);
 
-    repo.update_document_scheduling(
+    repo.update_document_scheduling_with_consecutive(
         &document.id,
         Some(result.next_review),
         Some(result.stability),
         Some(result.difficulty),
         Some(new_reps),
         Some(new_time_spent),
+        Some(result.consecutive_count),
     ).await?;
 
     Ok(DocumentRatingResponse {

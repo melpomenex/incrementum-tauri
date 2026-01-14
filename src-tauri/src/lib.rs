@@ -130,6 +130,7 @@ pub fn run() {
             commands::update_document,
             commands::update_document_content,
             commands::update_document_priority,
+            commands::update_document_progress,
             commands::delete_document,
             commands::import_document,
             commands::import_documents,

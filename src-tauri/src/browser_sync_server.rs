@@ -412,6 +412,7 @@ async fn handle_import_request(
         difficulty: None,
         reps: None,
         total_time_spent: None,
+        consecutive_count: None,
     };
 
     let created = state.repo.create_document(&document).await?;
@@ -466,6 +467,7 @@ async fn handle_extract_request(
             difficulty: None,
             reps: None,
             total_time_spent: None,
+            consecutive_count: None,
         };
 
         let created = state.repo.create_document(&document).await?;

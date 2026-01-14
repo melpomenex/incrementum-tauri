@@ -328,6 +328,7 @@ pub async fn import_from_obsidian_internal(
         difficulty: None,
         reps: None,
         total_time_spent: None,
+        consecutive_count: None,
     };
 
     let created_doc = repo.create_document(&document).await?;
