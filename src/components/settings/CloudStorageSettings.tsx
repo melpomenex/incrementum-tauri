@@ -53,21 +53,21 @@ const PROVIDER_INFO = {
     description: "Microsoft's cloud storage service",
     icon: "🔷",
     color: "text-blue-500",
-    bgColor: "bg-blue-50 dark:bg-blue-950",
+    bgColor: "bg-blue-50 dark:bg-blue-900/30",
   },
   "google-drive": {
     name: "Google Drive",
     description: "Google's cloud storage service",
     icon: "🟢",
     color: "text-green-500",
-    bgColor: "bg-green-50 dark:bg-green-950",
+    bgColor: "bg-green-50 dark:bg-green-900/30",
   },
   dropbox: {
     name: "Dropbox",
     description: "Dropbox cloud storage",
     icon: "📦",
     color: "text-blue-600",
-    bgColor: "bg-blue-50 dark:bg-blue-950",
+    bgColor: "bg-blue-50 dark:bg-blue-900/30",
   },
 };
 
@@ -312,9 +312,9 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
 
       {/* OAuth Callback Info */}
       {oauthUrl && !state.isAuthenticated && (
-        <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+        <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-300 mt-0.5" />
             <div className="flex-1">
               <h4 className="font-medium text-foreground mb-1">
                 Complete the sign-in process
@@ -325,7 +325,7 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
               </p>
               <button
                 onClick={() => setOauthUrl(null)}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-sm text-blue-600 dark:text-blue-300 hover:underline"
               >
                 I've completed the sign-in
               </button>
