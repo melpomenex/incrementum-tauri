@@ -244,6 +244,7 @@ impl MCPToolRegistry {
             input_schema: json!({
                 "type": "object",
                 "properties": {
+                    "document_id": {"type": "string", "description": "Optional document ID to associate all cards"},
                     "cards": {
                         "type": "array",
                         "items": {
@@ -1050,6 +1051,7 @@ impl MCPToolRegistry {
 
     async fn execute_batch_create_cards(&self, args: serde_json::Value) -> Result<ToolCallResult, String> {
         let cards = args["cards"].as_array().ok_or("cards array is required")?;
+        let document_id = args["document_id"].as_str();
         let mut results = vec![];
 
         for card in cards {
@@ -1066,6 +1068,7 @@ impl MCPToolRegistry {
 
                 let mut item = LearningItem::new(item_type, question.to_string());
                 item.answer = answer.map(|a| a.to_string());
+                item.document_id = document_id.map(|id| id.to_string());
 
                 match self.repository.create_learning_item(&item).await {
                     Ok(created) => {

@@ -172,6 +172,30 @@ pub async fn mcp_get_incrementum_tools() -> Result<Vec<ToolDefinitionResponse>, 
             }),
         },
         ToolDefinitionResponse {
+            name: "update_document".to_string(),
+            description: "Update document metadata".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["document_id"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "delete_document".to_string(),
+            description: "Delete a document".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"}
+                },
+                "required": ["document_id"]
+            }),
+        },
+        ToolDefinitionResponse {
             name: "create_cloze_card".to_string(),
             description: "Create a cloze deletion flashcard".to_string(),
             input_schema: json!({
@@ -197,6 +221,44 @@ pub async fn mcp_get_incrementum_tools() -> Result<Vec<ToolDefinitionResponse>, 
             }),
         },
         ToolDefinitionResponse {
+            name: "create_extract".to_string(),
+            description: "Create an extract or note from content".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "Extract content"},
+                    "document_id": {"type": "string", "description": "Source document ID"},
+                    "note": {"type": "string", "description": "Additional notes"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "color": {"type": "string", "description": "Highlight color"}
+                },
+                "required": ["content", "document_id"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "get_learning_items".to_string(),
+            description: "Get learning items for a document".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"},
+                    "item_type": {"type": "string", "enum": ["flashcard", "cloze", "qa", "basic"]}
+                },
+                "required": ["document_id"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "get_document_extracts".to_string(),
+            description: "Get all extracts for a document".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"}
+                },
+                "required": ["document_id"]
+            }),
+        },
+        ToolDefinitionResponse {
             name: "get_review_queue".to_string(),
             description: "Get items due for review".to_string(),
             input_schema: json!({
@@ -219,11 +281,83 @@ pub async fn mcp_get_incrementum_tools() -> Result<Vec<ToolDefinitionResponse>, 
             }),
         },
         ToolDefinitionResponse {
+            name: "rate_document".to_string(),
+            description: "Rate a document and schedule its next review using FSRS".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"},
+                    "rating": {"type": "number", "minimum": 1, "maximum": 4, "description": "FSRS rating: 1=Again, 2=Hard, 3=Good, 4=Easy"},
+                    "time_taken": {"type": "number", "description": "Time spent in seconds (optional)"}
+                },
+                "required": ["document_id", "rating"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "rate_extract".to_string(),
+            description: "Rate an extract and schedule its next review using FSRS".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "extract_id": {"type": "string"},
+                    "rating": {"type": "number", "minimum": 1, "maximum": 4, "description": "FSRS rating: 1=Again, 2=Hard, 3=Good, 4=Easy"},
+                    "time_taken": {"type": "number", "description": "Time spent in seconds (optional)"}
+                },
+                "required": ["extract_id", "rating"]
+            }),
+        },
+        ToolDefinitionResponse {
             name: "get_statistics".to_string(),
             description: "Get learning statistics".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {}
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "add_pdf_selection".to_string(),
+            description: "Create notes from PDF text selection".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"},
+                    "page_number": {"type": "number"},
+                    "selection": {"type": "string"}
+                },
+                "required": ["document_id", "page_number", "selection"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "batch_create_cards".to_string(),
+            description: "Create multiple flashcards at once".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string", "description": "Optional document ID to associate all cards"},
+                    "cards": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "question": {"type": "string"},
+                                "answer": {"type": "string"},
+                                "type": {"type": "string"}
+                            }
+                        }
+                    }
+                },
+                "required": ["cards"]
+            }),
+        },
+        ToolDefinitionResponse {
+            name: "get_queue_documents".to_string(),
+            description: "Get next N documents from reading queue".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "count": {"type": "number", "description": "Number of documents to retrieve"}
+                },
+                "required": ["count"]
             }),
         },
     ])

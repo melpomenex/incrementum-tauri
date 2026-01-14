@@ -14,6 +14,7 @@ import {
   PanelRightClose,
 } from "lucide-react";
 import { chatWithContext } from "../../api/llm";
+import { callIncrementumMCPTool, getIncrementumMCPTools, type MCPTool } from "../../api/mcp";
 import { useSettingsStore } from "../../stores";
 import { useLLMProvidersStore } from "../../stores/llmProvidersStore";
 
@@ -78,6 +79,7 @@ export function AssistantPanel({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [availableTools, setAvailableTools] = useState<MCPTool[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<"openai" | "anthropic" | "ollama" | "openrouter">(() => {
     const stored = localStorage.getItem("assistant-llm-provider");
     if (stored === "openai" || stored === "anthropic" || stored === "ollama" || stored === "openrouter") {
@@ -115,6 +117,22 @@ export function AssistantPanel({
   useEffect(() => {
     localStorage.setItem("assistant-llm-provider", selectedProvider);
   }, [selectedProvider]);
+
+  useEffect(() => {
+    let isActive = true;
+    getIncrementumMCPTools()
+      .then((tools) => {
+        if (isActive) {
+          setAvailableTools(tools);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load assistant tools:", error);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   // Add context message when context changes
   useEffect(() => {
@@ -334,6 +352,9 @@ export function AssistantPanel({
     try {
       // Handle slash commands locally
       if (userInput === "/help") {
+        const toolsList = getAvailableTools()
+          .map((tool) => `• **${tool.name}** - ${tool.description}`)
+          .join("\n");
         const helpMessage: Message = {
           id: `assistant-${Date.now()}`,
           role: "assistant",
@@ -344,12 +365,13 @@ export function AssistantPanel({
 /clear - Clear conversation
 
 **Available Tools:**
-• create_document - Create a new document
-• get_document - Get document details
-• search_documents - Search documents by content
-• create_extract - Create an extract from selection
-• create_qa_card - Create a Q&A flashcard
-• get_review_queue - Get items due for review
+${toolsList || "No tools available."}
+
+**Tool Calls:**
+To save items, I will include a tool call block like:
+\`\`\`tool_calls
+{"tool_calls":[{"name":"create_cloze_card","arguments":{"text":"...","document_id":"..."}}]}
+\`\`\`
 
 I also have context of what you're currently viewing, so feel free to ask questions about your documents!`,
           timestamp: Date.now(),
@@ -393,16 +415,21 @@ I also have context of what you're currently viewing, so feel free to ask questi
 
       // Call the LLM API (this will be implemented)
       const response = await callLLM(userMessage.content, contextData);
+      const { cleanedContent, toolCalls } = parseToolCalls(response.content);
 
+      const displayContent = cleanedContent || (toolCalls.length > 0 ? "Running tool calls..." : response.content);
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: response.content,
+        content: displayContent,
         timestamp: Date.now(),
-        toolCalls: response.toolCalls,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      if (toolCalls.length > 0) {
+        await executeToolCalls(assistantMessage.id, toolCalls);
+      }
     } catch (error) {
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
@@ -460,7 +487,12 @@ I also have context of what you're currently viewing, so feel free to ask questi
       const provider = selectedTypeProvider;
 
       // Convert messages to LLM format
+      const toolInstruction = buildToolInstruction(getAvailableTools());
       const llmMessages = [
+        {
+          role: "system" as const,
+          content: toolInstruction,
+        },
         {
           role: "user" as const,
           content: prompt,
@@ -508,38 +540,136 @@ I also have context of what you're currently viewing, so feel free to ask questi
   };
 
   const getAvailableTools = () => {
-    return [
+    return availableTools.length > 0 ? availableTools : [
       {
         name: "create_document",
         description: "Create a new document",
-        parameters: { title: "string", content: "string" },
+        inputSchema: { title: "string", content: "string" },
       },
       {
         name: "get_document",
         description: "Get document details",
-        parameters: { documentId: "string" },
+        inputSchema: { document_id: "string" },
       },
       {
         name: "search_documents",
         description: "Search documents by content",
-        parameters: { query: "string" },
+        inputSchema: { query: "string" },
       },
       {
         name: "create_extract",
         description: "Create an extract from selection",
-        parameters: { content: "string", note: "string" },
+        inputSchema: { content: "string", note: "string" },
       },
       {
         name: "create_qa_card",
         description: "Create a Q&A flashcard",
-        parameters: { question: "string", answer: "string" },
+        inputSchema: { question: "string", answer: "string" },
       },
       {
         name: "get_review_queue",
         description: "Get items due for review",
-        parameters: {},
+        inputSchema: {},
       },
     ];
+  };
+
+  const parseToolCalls = (content: string) => {
+    const toolCalls: ToolCall[] = [];
+    const toolCallRegex = /```tool_calls\s*([\s\S]*?)```/g;
+    let cleanedContent = content;
+    let match: RegExpExecArray | null;
+
+    while ((match = toolCallRegex.exec(content)) !== null) {
+      const raw = match[1].trim();
+      try {
+        const parsed = JSON.parse(raw);
+        const calls = Array.isArray(parsed)
+          ? parsed
+          : Array.isArray(parsed?.tool_calls)
+            ? parsed.tool_calls
+            : [];
+
+        calls.forEach((call: { name?: string; arguments?: Record<string, unknown> }) => {
+          if (typeof call?.name === "string") {
+            const args = call.arguments;
+            const normalizedArgs = args && typeof args === "object" && !Array.isArray(args)
+              ? args
+              : {};
+            toolCalls.push({
+              name: call.name,
+              parameters: normalizedArgs,
+              status: "pending",
+            });
+          }
+        });
+        cleanedContent = cleanedContent.replace(match[0], "").trim();
+      } catch (error) {
+        console.warn("Failed to parse tool call block:", error);
+      }
+    }
+
+    return { cleanedContent, toolCalls };
+  };
+
+  const executeToolCalls = async (messageId: string, calls: ToolCall[]) => {
+    for (let index = 0; index < calls.length; index += 1) {
+      const call = calls[index];
+      const parameters = normalizeToolParameters(call.name, call.parameters);
+      updateToolCall(messageId, index, { parameters });
+
+      try {
+        const result = await callIncrementumMCPTool(call.name, parameters);
+        updateToolCall(messageId, index, { result, status: "success" });
+      } catch (error) {
+        updateToolCall(messageId, index, {
+          result: error instanceof Error ? error.message : error,
+          status: "error",
+        });
+      }
+    }
+  };
+
+  const updateToolCall = (messageId: string, index: number, updates: Partial<ToolCall>) => {
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.id !== messageId || !message.toolCalls) return message;
+        const updatedCalls = message.toolCalls.map((call, callIndex) =>
+          callIndex === index ? { ...call, ...updates } : call
+        );
+        return { ...message, toolCalls: updatedCalls };
+      })
+    );
+  };
+
+  const normalizeToolParameters = (toolName: string, parameters: Record<string, unknown>) => {
+    const normalized = { ...parameters };
+    const documentId = context?.documentId;
+    const attachableTools = new Set([
+      "create_cloze_card",
+      "create_qa_card",
+      "create_extract",
+      "batch_create_cards",
+    ]);
+
+    if (documentId && attachableTools.has(toolName) && normalized.document_id == null) {
+      normalized.document_id = documentId;
+    }
+
+    return normalized;
+  };
+
+  const buildToolInstruction = (tools: MCPTool[]) => {
+    if (tools.length === 0) {
+      return "Answer normally. Tool calls are unavailable.";
+    }
+    const toolNames = tools.map((tool) => tool.name).join(", ");
+    return `You can call tools when the user asks to create, save, update, or delete data.
+Use this exact format for tool calls:
+\`\`\`tool_calls
+{"tool_calls":[{"name":"tool_name","arguments":{}}]}
+\`\`\`
+Available tools: ${toolNames}`;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -784,7 +914,7 @@ I also have context of what you're currently viewing, so feel free to ask questi
           {/* Available Tools Hint */}
           <div className="text-xs text-muted-foreground flex items-center gap-1">
             <Sparkles className="w-3 h-3" />
-            <span>I can help with: documents, extracts, flashcards, reviews</span>
+            <span>Type /tools to see available tools</span>
           </div>
 
           {/* Text Input */}
