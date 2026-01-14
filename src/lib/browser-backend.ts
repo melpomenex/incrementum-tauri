@@ -221,6 +221,12 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(items);
     },
 
+    get_learning_item: async (args) => {
+        const itemId = args.itemId as string;
+        const item = await db.getLearningItem(itemId);
+        return item ? toCamelCase(item) : null;
+    },
+
     create_learning_item: async (args) => {
         const item = await db.createLearningItem({
             extract_id: args.extractId as string | undefined,

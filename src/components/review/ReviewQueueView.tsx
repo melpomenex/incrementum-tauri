@@ -5,6 +5,7 @@ import {
   ChevronUp,
   Clock,
   Filter,
+  Info,
   Keyboard,
   LayoutList,
   Play,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { useQueueStore } from "../../stores/queueStore";
 import type { QueueItem } from "../../types/queue";
+import { ItemDetailsPopover, type ItemDetailsTarget } from "../common/ItemDetailsPopover";
 import {
   PriorityPreset,
   buildSessionBlocks,
@@ -185,6 +187,34 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
 
   const handleBulkDelete = async () => {
     await bulkDelete();
+  };
+
+  const buildDetailsTarget = (item: QueueItem): ItemDetailsTarget => {
+    if (item.itemType === "learning-item") {
+      return {
+        type: "learning-item",
+        id: item.learningItemId ?? item.id,
+        title: item.documentTitle,
+        tags: item.tags,
+        category: item.category,
+      };
+    }
+    if (item.itemType === "extract") {
+      return {
+        type: "extract",
+        id: item.extractId ?? item.id,
+        title: item.documentTitle,
+        tags: item.tags,
+        category: item.category,
+      };
+    }
+    return {
+      type: "document",
+      id: item.documentId,
+      title: item.documentTitle,
+      tags: item.tags,
+      category: item.category,
+    };
   };
 
   return (
@@ -428,6 +458,23 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                       </div>
                         <div className="flex items-center gap-3">
                           <PriorityGlyph vector={priorityVector} />
+                          <ItemDetailsPopover
+                            target={buildDetailsTarget(item)}
+                            renderTrigger={({ onClick, isOpen }) => (
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onClick();
+                                }}
+                                className={`p-2 rounded-md border border-border bg-background hover:bg-muted/60 ${
+                                  isOpen ? "text-foreground" : "text-muted-foreground"
+                                }`}
+                                title="Item details"
+                              >
+                                <Info className="w-4 h-4" />
+                              </button>
+                            )}
+                          />
                           <button
                             onClick={(event) => {
                               event.stopPropagation();

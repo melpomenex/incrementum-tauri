@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink } from "lucide-react";
+import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2 } from "lucide-react";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
 import { useDocumentStore } from "../stores/documentStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { DocumentViewer } from "../components/viewer/DocumentViewer";
 import { FlashcardScrollItem } from "../components/review/FlashcardScrollItem";
 import { ScrollModeArticleEditor } from "../components/review/ScrollModeArticleEditor";
@@ -17,6 +18,7 @@ import { submitReview } from "../api/review";
 import { getUnreadItems, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemRead } from "../api/rss";
 import { cn } from "../utils";
 import type { QueueItem } from "../types";
+import { ItemDetailsPopover, type ItemDetailsTarget } from "../components/common/ItemDetailsPopover";
 
 /**
  * Unified scroll item type for documents, RSS articles, and flashcards
@@ -49,10 +51,12 @@ export function QueueScrollPage() {
   const { filteredItems: allQueueItems, loadQueue } = useQueueStore();
   const { documents, loadDocuments } = useDocumentStore();
   const { tabs, activeTabId, closeTab } = useTabsStore();
+  const { settings, updateSettingsCategory } = useSettingsStore();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [renderedIndex, setRenderedIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
   const [scrollItems, setScrollItems] = useState<ScrollItem[]>([]);
   const [dueFlashcards, setDueFlashcards] = useState<LearningItem[]>([]);
   const [dueExtracts, setDueExtracts] = useState<Extract[]>([]);
@@ -174,18 +178,113 @@ export function QueueScrollPage() {
       };
     });
 
-    // Interleave: flashcards and extracts first (most urgent), then documents, then RSS
-    // Ideally mix flashcards and extracts randomly or by priority
-    const reviewItems = [...flashcardItems, ...extractItems].sort(() => Math.random() - 0.5); // Simple shuffle for now
+    // Distribute flashcards and extracts evenly throughout the queue based on percentage setting
+    const flashcardPercentage = settings.scrollQueue.flashcardPercentage;
+    const extractsCountAsFlashcards = settings.scrollQueue.extractsCountAsFlashcards;
 
-    setScrollItems([...reviewItems, ...docItems, ...rssItems]);
-  }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating]);
+    // Combine flashcards and extracts for distribution
+    const reviewItems = [...flashcardItems, ...extractItems].sort(() => Math.random() - 0.5);
+
+    // Calculate how many review items to include based on percentage
+    // If percentage is 30%, then for every 100 items, 30 should be review items
+    const nonReviewItems = [...docItems, ...rssItems];
+    const totalNonReview = nonReviewItems.length;
+
+    // Calculate target number of review items based on percentage
+    // formula: review_items / (review_items + non_review_items) = percentage / 100
+    // So: review_items = (percentage * non_review_items) / (100 - percentage)
+    let targetReviewCount = 0;
+    if (flashcardPercentage < 100) {
+      targetReviewCount = Math.round((flashcardPercentage * totalNonReview) / (100 - flashcardPercentage));
+    }
+
+    // Limit review items to the target count
+    const limitedReviewItems = reviewItems.slice(0, targetReviewCount);
+
+    // Distribute review items evenly throughout the queue
+    // This creates a more balanced experience instead of all review items at the start
+    const distributedItems: ScrollItem[] = [];
+    if (limitedReviewItems.length > 0 && nonReviewItems.length > 0) {
+      // Calculate the interval for inserting review items
+      const interval = Math.max(1, Math.round(nonReviewItems.length / limitedReviewItems.length));
+
+      let reviewIndex = 0;
+      for (let i = 0; i < nonReviewItems.length; i++) {
+        distributedItems.push(nonReviewItems[i]);
+
+        // Insert a review item after every 'interval' non-review items
+        if (reviewIndex < limitedReviewItems.length && (i + 1) % interval === 0) {
+          distributedItems.push(limitedReviewItems[reviewIndex]);
+          reviewIndex++;
+        }
+      }
+
+      // Add any remaining review items at the end
+      while (reviewIndex < limitedReviewItems.length) {
+        distributedItems.push(limitedReviewItems[reviewIndex]);
+        reviewIndex++;
+      }
+    } else if (limitedReviewItems.length > 0) {
+      // Only review items, use them all
+      distributedItems.push(...limitedReviewItems);
+    } else {
+      // Only non-review items
+      distributedItems.push(...nonReviewItems);
+    }
+
+    setScrollItems(distributedItems);
+  }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating, settings.scrollQueue]);
 
   // Current item (for display during transition)
   const currentItem = scrollItems[currentIndex];
 
   // Rendered item (actual document being rendered)
   const renderedItem = scrollItems[renderedIndex];
+
+  const detailsTarget = useMemo<ItemDetailsTarget | null>(() => {
+    if (!currentItem) return null;
+
+    if (currentItem.type === "document" && currentItem.documentId) {
+      const doc = documents.find(d => d.id === currentItem.documentId);
+      return {
+        type: "document",
+        id: currentItem.documentId,
+        title: currentItem.documentTitle,
+        tags: doc?.tags,
+        category: doc?.category,
+      };
+    }
+
+    if (currentItem.type === "flashcard" && currentItem.learningItem) {
+      return {
+        type: "learning-item",
+        id: currentItem.learningItem.id,
+        title: currentItem.documentTitle,
+        tags: currentItem.learningItem.tags,
+      };
+    }
+
+    if (currentItem.type === "extract" && currentItem.extract) {
+      return {
+        type: "extract",
+        id: currentItem.extract.id,
+        title: currentItem.documentTitle,
+        tags: currentItem.extract.tags,
+        category: currentItem.extract.category,
+      };
+    }
+
+    if (currentItem.type === "rss") {
+      return {
+        type: "rss",
+        title: currentItem.documentTitle,
+        source: currentItem.rssFeed?.title,
+        link: currentItem.rssItem?.link,
+      };
+    }
+
+    return null;
+  }, [currentItem, documents]);
 
   // Debug logging
   useEffect(() => {
@@ -580,6 +679,93 @@ export function QueueScrollPage() {
         />
       )}
 
+      {/* Scroll Queue Settings Panel */}
+      {showSettings && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-foreground">Queue Settings</h2>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="p-2 rounded-lg hover:bg-muted transition-colors"
+                title="Close settings"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Flashcard Percentage Setting */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-foreground">
+                    Flashcard Percentage
+                  </label>
+                  <span className="text-sm font-mono text-primary">
+                    {settings.scrollQueue.flashcardPercentage}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={settings.scrollQueue.flashcardPercentage}
+                  onChange={(e) => {
+                    updateSettingsCategory('scrollQueue', {
+                      flashcardPercentage: parseInt(e.target.value)
+                    });
+                  }}
+                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Percentage of the queue that should be flashcards and extracts.
+                </p>
+              </div>
+
+              {/* Extracts Count as Flashcards Toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-foreground">
+                    Extracts count as flashcards
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Include extracts in the flashcard percentage calculation
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    updateSettingsCategory('scrollQueue', {
+                      extractsCountAsFlashcards: !settings.scrollQueue.extractsCountAsFlashcards
+                    });
+                  }}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                    settings.scrollQueue.extractsCountAsFlashcards ? "bg-primary" : "bg-muted"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                      settings.scrollQueue.extractsCountAsFlashcards ? "translate-x-6" : "translate-x-1"
+                    )}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-border">
+              <button
+                onClick={() => setShowSettings(false)}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Overlay Controls */}
       <div
         className={cn(
@@ -603,25 +789,59 @@ export function QueueScrollPage() {
               </div>
             </div>
 
-            <div className="text-white text-sm bg-black/40 backdrop-blur-sm px-3 py-2 rounded-lg">
-              {currentItem.type === "document" && (
-                <span className="flex items-center gap-2">
-                  <span className="px-1.5 py-0.5 bg-blue-500/30 rounded text-xs">DOC</span>
-                  {currentItem.documentTitle}
-                </span>
+            <div className="flex items-center gap-3">
+              {detailsTarget && (
+                <ItemDetailsPopover
+                  target={detailsTarget}
+                  renderTrigger={({ onClick, isOpen }) => (
+                    <button
+                      onClick={onClick}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg bg-black/40 backdrop-blur-sm text-white text-sm transition-colors hover:bg-black/60",
+                        isOpen && "bg-black/60"
+                      )}
+                      title="Item details"
+                    >
+                      <Info className="w-4 h-4" />
+                      Details
+                    </button>
+                  )}
+                />
               )}
-              {currentItem.type === "flashcard" && (
-                <span className="flex items-center gap-2">
-                  <span className="px-1.5 py-0.5 bg-purple-500/30 rounded text-xs">CARD</span>
-                  {currentItem.documentTitle}
-                </span>
-              )}
-              {currentItem.type === "rss" && (
-                <span className="flex items-center gap-2">
-                  <span className="px-1.5 py-0.5 bg-orange-500/30 rounded text-xs">RSS</span>
-                  {currentItem.documentTitle}
-                </span>
-              )}
+              <button
+                onClick={() => setShowSettings(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/40 backdrop-blur-sm text-white text-sm transition-colors hover:bg-black/60"
+                title="Queue settings"
+              >
+                <Settings2 className="w-4 h-4" />
+                Settings
+              </button>
+              <div className="text-white text-sm bg-black/40 backdrop-blur-sm px-3 py-2 rounded-lg">
+                {currentItem.type === "document" && (
+                  <span className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 bg-blue-500/30 rounded text-xs">DOC</span>
+                    {currentItem.documentTitle}
+                  </span>
+                )}
+                {currentItem.type === "flashcard" && (
+                  <span className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 bg-purple-500/30 rounded text-xs">CARD</span>
+                    {currentItem.documentTitle}
+                  </span>
+                )}
+                {currentItem.type === "rss" && (
+                  <span className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 bg-orange-500/30 rounded text-xs">RSS</span>
+                    {currentItem.documentTitle}
+                  </span>
+                )}
+                {currentItem.type === "extract" && (
+                  <span className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 bg-yellow-500/30 rounded text-xs">EXTRACT</span>
+                    {currentItem.documentTitle}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

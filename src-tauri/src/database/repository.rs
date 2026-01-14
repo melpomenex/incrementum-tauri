@@ -824,6 +824,51 @@ impl Repository {
         Ok(items)
     }
 
+    pub async fn get_learning_items_by_extract(&self, extract_id: &str) -> Result<Vec<LearningItem>> {
+        let rows = sqlx::query("SELECT * FROM learning_items WHERE extract_id = ? ORDER BY date_created DESC")
+            .bind(extract_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut items = Vec::new();
+        for row in rows {
+            let item_type_str: String = row.try_get("item_type")?;
+            let state_str: String = row.try_get("state")?;
+            let tags_json: String = row.try_get("tags")?;
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+            let stability: Option<f64> = row.try_get("memory_state_stability").ok();
+            let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
+            let memory_state = Self::parse_memory_state(stability, difficulty);
+
+            items.push(LearningItem {
+                id: row.try_get("id")?,
+                extract_id: row.try_get("extract_id")?,
+                document_id: row.try_get("document_id")?,
+                item_type: Self::parse_item_type(&item_type_str),
+                question: row.try_get("question")?,
+                answer: row.try_get("answer")?,
+                cloze_text: row.try_get("cloze_text")?,
+                cloze_ranges: None,
+                difficulty: row.try_get("difficulty")?,
+                interval: row.try_get("interval")?,
+                ease_factor: row.try_get("ease_factor")?,
+                due_date: row.try_get("due_date")?,
+                date_created: row.try_get("date_created")?,
+                date_modified: row.try_get("date_modified")?,
+                last_review_date: row.try_get("last_review_date")?,
+                review_count: row.try_get("review_count")?,
+                lapses: row.try_get("lapses")?,
+                state: Self::parse_item_state(&state_str),
+                is_suspended: row.try_get("is_suspended")?,
+                tags,
+                memory_state,
+            });
+        }
+
+        Ok(items)
+    }
+
     pub async fn update_learning_item(&self, item: &LearningItem) -> Result<LearningItem> {
         let _item_type_str = format!("{:?}", item.item_type).to_lowercase();
         let state_str = format!("{:?}", item.state).to_lowercase();

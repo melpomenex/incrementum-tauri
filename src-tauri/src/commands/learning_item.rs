@@ -2,6 +2,7 @@
 
 use tauri::State;
 use crate::database::Repository;
+use crate::commands::review::RepositoryExt;
 use crate::error::Result;
 use crate::generator::LearningItemGenerator;
 use crate::models::{LearningItem, ItemType};
@@ -62,5 +63,23 @@ pub async fn get_learning_items(
     repo: State<'_, Repository>,
 ) -> Result<Vec<LearningItem>> {
     let items = repo.get_learning_items_by_document(&document_id).await?;
+    Ok(items)
+}
+
+#[tauri::command]
+pub async fn get_learning_item(
+    item_id: String,
+    repo: State<'_, Repository>,
+) -> Result<Option<LearningItem>> {
+    let item = repo.get_learning_item(&item_id).await?;
+    Ok(item)
+}
+
+#[tauri::command]
+pub async fn get_learning_items_by_extract(
+    extract_id: String,
+    repo: State<'_, Repository>,
+) -> Result<Vec<LearningItem>> {
+    let items = repo.get_learning_items_by_extract(&extract_id).await?;
     Ok(items)
 }

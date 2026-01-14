@@ -21,6 +21,12 @@ export interface Document {
   isArchived: boolean;
   isFavorite: boolean;
   metadata?: DocumentMetadata;
+  nextReadingDate?: string;
+  readingCount?: number;
+  stability?: number;
+  difficulty?: number;
+  reps?: number;
+  totalTimeSpent?: number;
 }
 
 export interface DocumentMetadata {

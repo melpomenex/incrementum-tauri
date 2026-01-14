@@ -199,6 +199,14 @@ interface SmartQueueSettings {
 }
 
 /**
+ * Scroll Queue Settings
+ */
+interface ScrollQueueSettings {
+  flashcardPercentage: number; // 0-100, percentage of queue that should be flashcards
+  extractsCountAsFlashcards: boolean; // Whether extracts count towards the flashcard percentage
+}
+
+/**
  * Main Settings Interface
  */
 export interface Settings {
@@ -214,6 +222,7 @@ export interface Settings {
   privacy: PrivacySettings;
   audioTranscription: AudioTranscriptionSettings;
   smartQueue: SmartQueueSettings;
+  scrollQueue: ScrollQueueSettings;
 }
 
 /**
@@ -336,6 +345,10 @@ export const defaultSettings: Settings = {
     autoRefresh: false,
     refreshInterval: 60,
     mode: 'normal',
+  },
+  scrollQueue: {
+    flashcardPercentage: 30, // 30% of queue should be flashcards by default
+    extractsCountAsFlashcards: true, // Extracts count towards the flashcard percentage
   },
 };
 

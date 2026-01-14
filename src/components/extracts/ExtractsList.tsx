@@ -7,6 +7,7 @@ import { useUndoableOperations } from "../../api/undoable";
 import { cn } from "../../utils";
 import { EditExtractDialog } from "./EditExtractDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { GeneratedCardsPopover } from "../common/GeneratedCardsPopover";
 
 interface ExtractsListProps {
   documentId: string;
@@ -477,16 +478,29 @@ export function ExtractsList({ documentId }: ExtractsListProps) {
             {/* Learning Items Section */}
             <div className="mt-3 pt-3 border-t border-border">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">
-                  {generatedCounts[extract.id] ? (
-                    <span className="flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-primary" />
-                      {generatedCounts[extract.id]} card{generatedCounts[extract.id] !== 1 ? "s" : ""} generated
-                    </span>
-                  ) : (
-                    <span>No cards generated yet</span>
+                <GeneratedCardsPopover
+                  extractId={extract.id}
+                  extractTitle={extract.content.slice(0, 100)}
+                  initialCount={generatedCounts[extract.id]}
+                  renderTrigger={({ onClick, isOpen, count }) => (
+                    <button
+                      onClick={onClick}
+                      className={cn(
+                        "text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1",
+                        count && "cursor-pointer hover:underline"
+                      )}
+                    >
+                      {count ? (
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-primary" />
+                          {count} card{count !== 1 ? "s" : ""} generated
+                        </span>
+                      ) : (
+                        <span>No cards generated yet</span>
+                      )}
+                    </button>
                   )}
-                </div>
+                />
                 <button
                   onClick={() => handleGenerateCards(extract.id)}
                   disabled={generatingIds.has(extract.id)}

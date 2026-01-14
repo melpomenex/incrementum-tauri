@@ -21,6 +21,10 @@ export interface LearningItem {
   state: "New" | "Learning" | "Review" | "Relearning";
   is_suspended: boolean;
   tags: string[];
+  memory_state?: {
+    stability: number;
+    difficulty: number;
+  };
 }
 
 export interface CreateLearningItemInput {
@@ -41,6 +45,20 @@ export async function getDueItems(): Promise<LearningItem[]> {
  */
 export async function getLearningItems(documentId: string): Promise<LearningItem[]> {
   return await invokeCommand<LearningItem[]>("get_learning_items", { documentId });
+}
+
+/**
+ * Get a single learning item by ID
+ */
+export async function getLearningItem(itemId: string): Promise<LearningItem | null> {
+  return await invokeCommand<LearningItem | null>("get_learning_item", { itemId });
+}
+
+/**
+ * Get all learning items for an extract
+ */
+export async function getLearningItemsByExtract(extractId: string): Promise<LearningItem[]> {
+  return await invokeCommand<LearningItem[]>("get_learning_items_by_extract", { extractId });
 }
 
 /**

@@ -152,6 +152,8 @@ pub fn run() {
             commands::create_learning_item,
             commands::generate_learning_items_from_extract,
             commands::get_learning_items,
+            commands::get_learning_item,
+            commands::get_learning_items_by_extract,
             // Category commands
             commands::get_categories,
             commands::create_category,
