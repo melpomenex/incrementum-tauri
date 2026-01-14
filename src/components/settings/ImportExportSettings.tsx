@@ -155,7 +155,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
         <div className="space-y-4">
           {/* Export options */}
           <div className="p-4 bg-muted/30 rounded-lg">
-            <h4 className="text-sm font-medium mb-3">Data to Export</h4>
+            <h4 className="text-sm font-medium mb-3 text-foreground">Data to Export</h4>
             <div className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -167,7 +167,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   }}
                   className="rounded"
                 />
-                <span className="text-sm">Documents</span>
+                <span className="text-sm text-foreground">Documents</span>
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -180,7 +180,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   }}
                   className="rounded"
                 />
-                <span className="text-sm">Extracts</span>
+                <span className="text-sm text-foreground">Extracts</span>
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -193,7 +193,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   }}
                   className="rounded"
                 />
-                <span className="text-sm">Flashcards & Progress</span>
+                <span className="text-sm text-foreground">Flashcards & Progress</span>
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -206,7 +206,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   }}
                   className="rounded"
                 />
-                <span className="text-sm">Settings</span>
+                <span className="text-sm text-foreground">Settings</span>
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -219,7 +219,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   }}
                   className="rounded"
                 />
-                <span className="text-sm">Statistics & Analytics</span>
+                <span className="text-sm text-foreground">Statistics & Analytics</span>
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -232,14 +232,14 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   }}
                   className="rounded"
                 />
-                <span className="text-sm">Media Files (PDFs, images, etc.)</span>
+                <span className="text-sm text-foreground">Media Files (PDFs, images, etc.)</span>
               </label>
             </div>
           </div>
 
           {/* Export format selection */}
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium">Format:</span>
+            <span className="text-sm font-medium text-foreground">Format:</span>
             <div className="flex gap-2">
               <button
                 onClick={() => handleExport("json")}
@@ -277,18 +277,18 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
         <div className="space-y-4">
           {/* File selection */}
           <div>
-            <label className="block text-sm font-medium mb-2">Select Import File</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Select Import File</label>
             <div className="flex items-center gap-3">
               <input
                 type="file"
                 accept=".json,.csv,.incrementum,.apkg,.zip,.7z"
                 onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-muted file:text-muted-foreground hover:file:bg-muted/80"
+                className="flex-1 text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-muted file:text-muted-foreground hover:file:bg-muted/80"
               />
               {importFile && (
                 <button
                   onClick={() => setImportFile(null)}
-                  className="p-2 hover:bg-muted rounded"
+                  className="p-2 hover:bg-muted rounded text-foreground"
                 >
                   Clear
                 </button>
@@ -303,7 +303,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
 
           {/* Import options */}
           <div className="p-4 bg-muted/30 rounded-lg">
-            <h4 className="text-sm font-medium mb-3">Import Options</h4>
+            <h4 className="text-sm font-medium mb-3 text-foreground">Import Options</h4>
             <div className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -311,7 +311,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   defaultChecked
                   className="rounded"
                 />
-                <span className="text-sm">Skip duplicates (based on ID)</span>
+                <span className="text-sm text-foreground">Skip duplicates (based on ID)</span>
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -320,7 +320,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   defaultChecked
                   className="rounded"
                 />
-                <span className="text-sm">Merge with existing data</span>
+                <span className="text-sm text-foreground">Merge with existing data</span>
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -328,7 +328,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                   type="checkbox"
                   className="rounded"
                 />
-                <span className="text-sm">Create backup before import</span>
+                <span className="text-sm text-foreground">Create backup before import</span>
               </label>
             </div>
           </div>
@@ -364,7 +364,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
           </p>
 
           <div className="p-4 bg-muted/30 rounded-lg">
-            <h4 className="text-sm font-medium mb-2">What will be imported:</h4>
+            <h4 className="text-sm font-medium mb-2 text-foreground">What will be imported:</h4>
             <ul className="text-sm text-muted-foreground space-y-1">
               <li>• All documents with metadata</li>
               <li>• Extracts and highlights</li>
@@ -407,14 +407,14 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
             description="How often to create automatic backups"
           >
             <select
-              className="px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              className="px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
               onChange={onChange}
               defaultValue="daily"
             >
-              <option value="hourly">Hourly</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="hourly" className="text-foreground">Hourly</option>
+              <option value="daily" className="text-foreground">Daily</option>
+              <option value="weekly" className="text-foreground">Weekly</option>
+              <option value="monthly" className="text-foreground">Monthly</option>
             </select>
           </SettingsRow>
 
@@ -429,7 +429,7 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
                 onChange={onChange}
                 className="w-48 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              <button className="px-3 py-2 bg-background border border-border rounded-md hover:bg-muted">
+              <button className="px-3 py-2 bg-background border border-border rounded-md hover:bg-muted text-foreground">
                 Browse
               </button>
             </div>

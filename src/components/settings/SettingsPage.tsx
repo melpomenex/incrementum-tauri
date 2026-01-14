@@ -100,7 +100,7 @@ export function SettingsPage() {
   return (
     <div className="flex h-full bg-background">
       {/* Sidebar */}
-      <div className="w-64 border-r border-border bg-muted/30">
+      <div className="w-64 border-r border-border bg-muted/30 text-foreground">
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2">
             <SettingsIcon className="w-5 h-5" />
@@ -118,7 +118,7 @@ export function SettingsPage() {
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
                   activeTab === tab.id
                     ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
+                    : "hover:bg-muted text-foreground"
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -134,7 +134,7 @@ export function SettingsPage() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-xl font-semibold text-foreground">
               {SETTINGS_TABS.find((t) => t.id === activeTab)?.label}
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
@@ -203,7 +203,7 @@ export function SettingsSection({
   return (
     <div className="mb-8">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold">{title}</h3>
+        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
         {description && (
           <p className="text-sm text-muted-foreground mt-1">{description}</p>
         )}
@@ -228,7 +228,7 @@ export function SettingsRow({
   return (
     <div className="flex items-start justify-between py-4 border-b border-border last:border-0">
       <div className="flex-1">
-        <p className="text-sm font-medium">{label}</p>
+        <p className="text-sm font-medium text-foreground">{label}</p>
         {description && (
           <p className="text-xs text-muted-foreground mt-1">{description}</p>
         )}

@@ -7,10 +7,10 @@ export function LearningSettings() {
     <div className="space-y-6">
       {/* Algorithm Selection */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Algorithm Selection</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Algorithm Selection</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="algorithm" className="block text-sm font-medium mb-2">
+            <label htmlFor="algorithm" className="block text-sm font-medium text-foreground mb-2">
               Spaced Repetition Algorithm
             </label>
             <select
@@ -21,7 +21,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, algorithm: e.target.value as any },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             >
               <option value="fsrs">FSRS-5 (Recommended)</option>
               <option value="sm2">SuperMemo 2 (SM-2)</option>
@@ -36,7 +36,7 @@ export function LearningSettings() {
 
           {settings.learning.algorithm === "fsrs" && (
             <div>
-              <label htmlFor="fsrs-retention" className="block text-sm font-medium mb-2">
+              <label htmlFor="fsrs-retention" className="block text-sm font-medium text-foreground mb-2">
                 Desired Retention: {Math.round(settings.learning.fsrsParams.desiredRetention * 100)}%
               </label>
               <input
@@ -68,10 +68,10 @@ export function LearningSettings() {
 
       {/* New Cards */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">New Cards</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">New Cards</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="newCardsPerDay" className="block text-sm font-medium mb-2">
+            <label htmlFor="newCardsPerDay" className="block text-sm font-medium text-foreground mb-2">
               New Cards per Day
             </label>
             <input
@@ -85,12 +85,12 @@ export function LearningSettings() {
                   learning: { ...settings.learning, newCardsPerDay: parseInt(e.target.value) || 0 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
           </div>
 
           <div>
-            <label htmlFor="initialInterval" className="block text-sm font-medium mb-2">
+            <label htmlFor="initialInterval" className="block text-sm font-medium text-foreground mb-2">
               Initial Interval (days)
             </label>
             <input
@@ -104,7 +104,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, initialInterval: parseInt(e.target.value) || 0 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
           </div>
         </div>
@@ -112,10 +112,10 @@ export function LearningSettings() {
 
       {/* Reviews */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Reviews</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Reviews</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="reviewsPerDay" className="block text-sm font-medium mb-2">
+            <label htmlFor="reviewsPerDay" className="block text-sm font-medium text-foreground mb-2">
               Reviews per Day Limit
             </label>
             <input
@@ -129,7 +129,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, reviewsPerDay: parseInt(e.target.value) || 0 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Set to 0 for unlimited reviews
@@ -137,7 +137,7 @@ export function LearningSettings() {
           </div>
 
           <div>
-            <label htmlFor="maxReviewTime" className="block text-sm font-medium mb-2">
+            <label htmlFor="maxReviewTime" className="block text-sm font-medium text-foreground mb-2">
               Max Review Time per Card (seconds)
             </label>
             <input
@@ -151,7 +151,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, maxReviewTime: parseInt(e.target.value) || 60 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
           </div>
         </div>
@@ -159,10 +159,10 @@ export function LearningSettings() {
 
       {/* Lapses */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Lapses (Forgotten Cards)</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Lapses (Forgotten Cards)</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="lapseSteps" className="block text-sm font-medium mb-2">
+            <label htmlFor="lapseSteps" className="block text-sm font-medium text-foreground mb-2">
               Lapse Steps (minutes)
             </label>
             <input
@@ -178,7 +178,7 @@ export function LearningSettings() {
                 })
               }
               placeholder="10, 20, 30"
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Comma-separated values in minutes (e.g., "10, 20, 30")
@@ -186,7 +186,7 @@ export function LearningSettings() {
           </div>
 
           <div>
-            <label htmlFor="lapseInterval" className="block text-sm font-medium mb-2">
+            <label htmlFor="lapseInterval" className="block text-sm font-medium text-foreground mb-2">
               Relearning Interval (days)
             </label>
             <input
@@ -200,7 +200,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, lapseInterval: parseInt(e.target.value) || 1 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
           </div>
         </div>
@@ -208,10 +208,10 @@ export function LearningSettings() {
 
       {/* Graduated Interval */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Graduated Interval</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Graduated Interval</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="graduatingInterval" className="block text-sm font-medium mb-2">
+            <label htmlFor="graduatingInterval" className="block text-sm font-medium text-foreground mb-2">
               Graduating Interval (days)
             </label>
             <input
@@ -225,7 +225,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, graduatingInterval: parseInt(e.target.value) || 1 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Interval at which a card graduates from learning to review
@@ -233,7 +233,7 @@ export function LearningSettings() {
           </div>
 
           <div>
-            <label htmlFor="easyInterval" className="block text-sm font-medium mb-2">
+            <label htmlFor="easyInterval" className="block text-sm font-medium text-foreground mb-2">
               Easy Interval (days)
             </label>
             <input
@@ -247,7 +247,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, easyInterval: parseInt(e.target.value) || 4 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Interval when "Easy" is pressed on new card
@@ -258,10 +258,10 @@ export function LearningSettings() {
 
       {/* Leech Threshold */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Leech Cards</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Leech Cards</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="leechThreshold" className="block text-sm font-medium mb-2">
+            <label htmlFor="leechThreshold" className="block text-sm font-medium text-foreground mb-2">
               Leech Threshold (lapses)
             </label>
             <input
@@ -275,7 +275,7 @@ export function LearningSettings() {
                   learning: { ...settings.learning, leechThreshold: parseInt(e.target.value) || 8 },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Cards with more lapses will be tagged as leeches and suspended
@@ -286,9 +286,9 @@ export function LearningSettings() {
 
       {/* Timezone */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Timezone</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Timezone</h3>
         <div>
-          <label htmlFor="timezone" className="block text-sm font-medium mb-2">
+          <label htmlFor="timezone" className="block text-sm font-medium text-foreground mb-2">
             Your Timezone
           </label>
           <select
@@ -299,7 +299,7 @@ export function LearningSettings() {
                 learning: { ...settings.learning, timezone: e.target.value },
               })
             }
-            className="w-full px-3 py-2 rounded-md border border-border bg-background"
+            className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
           >
             <option value="auto">Auto-detect</option>
             <option value="America/New_York">Eastern Time</option>

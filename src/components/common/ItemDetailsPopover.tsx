@@ -266,14 +266,14 @@ export function ItemDetailsPopover({
             {(tags.length > 0 || target.category) && (
               <div className="space-y-1">
                 {target.category && (
-                  <div className="text-xs text-muted-foreground">Category: {target.category}</div>
+                  <div className="text-xs text-foreground/80">Category: {target.category}</div>
                 )}
                 {tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {tags.map((tag) => (
                       <span
                         key={tag}
-                        className="px-2 py-0.5 rounded bg-muted text-xs text-muted-foreground"
+                        className="px-2 py-0.5 rounded bg-muted/60 text-xs text-foreground border border-border/50"
                       >
                         {tag}
                       </span>

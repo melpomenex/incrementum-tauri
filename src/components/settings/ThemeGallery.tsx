@@ -255,8 +255,13 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-black/5 transition-colors"
-            style={{ color: theme.colors.textSecondary }}
+            className="p-2 rounded-lg transition-colors"
+            style={{
+              color: theme.colors.textSecondary,
+              backgroundColor: 'transparent'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.variant === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <X className="w-5 h-5" />
           </button>
@@ -366,8 +371,13 @@ export function ThemeGalleryButton({ onSelect }: { onSelect?: (themeId: ThemeId)
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-black/5 transition-colors"
-        style={{ color: theme.colors.textSecondary }}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors"
+        style={{
+          color: theme.colors.textSecondary,
+          backgroundColor: 'transparent'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.variant === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         <Maximize2 className="w-4 h-4" />
         <span className="text-sm">Open Gallery</span>

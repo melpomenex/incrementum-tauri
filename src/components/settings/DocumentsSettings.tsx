@@ -9,10 +9,10 @@ export function DocumentsSettings() {
     <div className="space-y-6">
       {/* Import Settings */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Document Import</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Document Import</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="defaultCategory" className="block text-sm font-medium mb-2">
+            <label htmlFor="defaultCategory" className="block text-sm font-medium text-foreground mb-2">
               Default Category
             </label>
             <input
@@ -25,13 +25,13 @@ export function DocumentsSettings() {
                 })
               }
               placeholder="Uncategorized"
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">Auto-process on import</p>
+              <p className="font-medium text-foreground">Auto-process on import</p>
               <p className="text-xs text-muted-foreground">
                 Automatically extract and segment imported documents
               </p>
@@ -53,7 +53,7 @@ export function DocumentsSettings() {
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">Detect duplicates</p>
+              <p className="font-medium text-foreground">Detect duplicates</p>
               <p className="text-xs text-muted-foreground">
                 Check for duplicate documents by content hash
               </p>
@@ -77,10 +77,10 @@ export function DocumentsSettings() {
 
       {/* PDF Settings */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">PDF Documents</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">PDF Documents</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="pdfZoom" className="block text-sm font-medium mb-2">
+            <label htmlFor="pdfZoom" className="block text-sm font-medium text-foreground mb-2">
               Default Zoom Level
             </label>
             <select
@@ -94,20 +94,20 @@ export function DocumentsSettings() {
                   },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             >
-              <option value={0.5}>50%</option>
-              <option value={0.75}>75%</option>
-              <option value={1.0}>100%</option>
-              <option value={1.25}>125%</option>
-              <option value={1.5}>150%</option>
-              <option value={2.0}>200%</option>
+              <option value="{0.5}" className="text-foreground">50%</option>
+              <option value="{0.75}" className="text-foreground">75%</option>
+              <option value="{1.0}" className="text-foreground">100%</option>
+              <option value="{1.25}" className="text-foreground">125%</option>
+              <option value="{1.5}" className="text-foreground">150%</option>
+              <option value="{2.0}" className="text-foreground">200%</option>
             </select>
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">Two-page spread</p>
+              <p className="font-medium text-foreground">Two-page spread</p>
               <p className="text-xs text-muted-foreground">
                 Show two pages side by side by default
               </p>
@@ -134,10 +134,10 @@ export function DocumentsSettings() {
 
       {/* EPUB Settings */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">EPUB Documents</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">EPUB Documents</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="epubFontSize" className="block text-sm font-medium mb-2">
+            <label htmlFor="epubFontSize" className="block text-sm font-medium text-foreground mb-2">
               Default Font Size
             </label>
             <input
@@ -154,12 +154,12 @@ export function DocumentsSettings() {
                   },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
           </div>
 
           <div>
-            <label htmlFor="epubFontFamily" className="block text-sm font-medium mb-2">
+            <label htmlFor="epubFontFamily" className="block text-sm font-medium text-foreground mb-2">
               Font Family
             </label>
             <select
@@ -173,17 +173,17 @@ export function DocumentsSettings() {
                   },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             >
-              <option value="serif">Serif</option>
-              <option value="sans-serif">Sans-serif</option>
-              <option value="monospace">Monospace</option>
+              <option value="serif" className="text-foreground">Serif</option>
+              <option value="sans-serif" className="text-foreground">Sans-serif</option>
+              <option value="monospace" className="text-foreground">Monospace</option>
             </select>
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">Auto-scroll</p>
+              <p className="font-medium text-foreground">Auto-scroll</p>
               <p className="text-xs text-muted-foreground">
                 Automatically scroll to keep current position visible
               </p>
@@ -210,10 +210,10 @@ export function DocumentsSettings() {
 
       {/* Auto-Segmentation */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Auto-Segmentation</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Auto-Segmentation</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="segmentationMethod" className="block text-sm font-medium mb-2">
+            <label htmlFor="segmentationMethod" className="block text-sm font-medium text-foreground mb-2">
               Segmentation Method
             </label>
             <select
@@ -227,12 +227,12 @@ export function DocumentsSettings() {
                   },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             >
-              <option value="semantic">Semantic (AI-powered)</option>
-              <option value="paragraph">Paragraph-based</option>
-              <option value="fixed">Fixed-length</option>
-              <option value="smart">Smart (adaptive)</option>
+              <option value="semantic" className="text-foreground">Semantic (AI-powered)</option>
+              <option value="paragraph" className="text-foreground">Paragraph-based</option>
+              <option value="fixed" className="text-foreground">Fixed-length</option>
+              <option value="smart" className="text-foreground">Smart (adaptive)</option>
             </select>
             <p className="text-xs text-muted-foreground mt-1">
               How to split documents into extracts
@@ -240,7 +240,7 @@ export function DocumentsSettings() {
           </div>
 
           <div>
-            <label htmlFor="segmentLength" className="block text-sm font-medium mb-2">
+            <label htmlFor="segmentLength" className="block text-sm font-medium text-foreground mb-2">
               Target Segment Length (words)
             </label>
             <input
@@ -257,7 +257,7 @@ export function DocumentsSettings() {
                   },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Approximate words per extract
@@ -265,7 +265,7 @@ export function DocumentsSettings() {
           </div>
 
           <div>
-            <label htmlFor="overlapLength" className="block text-sm font-medium mb-2">
+            <label htmlFor="overlapLength" className="block text-sm font-medium text-foreground mb-2">
               Overlap Length (words)
             </label>
             <input
@@ -282,7 +282,7 @@ export function DocumentsSettings() {
                   },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Overlap between segments for context
@@ -293,7 +293,7 @@ export function DocumentsSettings() {
 
       {/* OCR Settings */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">OCR (Optical Character Recognition)</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">OCR (Optical Character Recognition)</h3>
         <OCRSettings
           settings={settings.documents.ocr}
           onUpdateSettings={(updates) =>
@@ -307,11 +307,11 @@ export function DocumentsSettings() {
 
       {/* Storage */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Storage & Cache</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Storage & Cache</h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">Cache document content</p>
+              <p className="font-medium text-foreground">Cache document content</p>
               <p className="text-xs text-muted-foreground">
                 Store processed documents locally for faster access
               </p>
@@ -333,7 +333,7 @@ export function DocumentsSettings() {
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">Auto-cleanup cache</p>
+              <p className="font-medium text-foreground">Auto-cleanup cache</p>
               <p className="text-xs text-muted-foreground">
                 Remove cached documents older than 30 days
               </p>
