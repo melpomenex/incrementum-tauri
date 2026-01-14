@@ -87,6 +87,153 @@ jobs:
           name: Incrementum dev-${{ github.sha }}
           tag_name: dev-${{ github.sha }}
 
+  build-appimage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.83.0
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Increase Rust stack size
+        run: echo "RUST_MIN_STACK=33554432" >> $GITHUB_ENV
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri AppImage (without custom-protocol)
+        run: |
+          cd src-tauri
+          cargo tauri build --bundles appimage --no-default-features
+        env:
+          TAURI_BUNDLE_APPIMAGE: "true"
+
+      - name: Upload AppImage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: incrementum-appimage
+          path: src-tauri/target/release/bundle/appimage/*
+          if-no-files-found: warn
+
+      - name: Upload AppImage to release (on push to main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/bundle/appimage/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          name: Incrementum dev-${{ github.sha }}
+          tag_name: dev-${{ github.sha }}
+
+  build-arch:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Arch dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf npm nodejs rust cargo
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri application
+        run: |
+          cd src-tauri
+          cargo build --release
+        env:
+          RUST_MIN_STACK: 33554432
+
+      - name: Create Pacman package
+        run: |
+          PKG_VERSION=$(grep '^version' src-tauri/Cargo.toml | head -1 | awk -F'"' '{print $2}')
+          PKG_RELEASE=1
+
+          mkdir -p arch-pkg/incrementum-${PKG_VERSION}-${PKG_RELEASE}/src
+          mkdir -p arch-pkg/incrementum-${PKG_VERSION}-${PKG_RELEASE}/pkg
+
+          # Create PKGBUILD
+          cat > arch-pkg/PKGBUILD << 'EOF'
+          pkgname=incrementum
+          pkgver=$(grep '^version' src-tauri/Cargo.toml | head -1 | awk -F'"' '{print $2}')
+          pkgrel=1
+          pkgdesc="Incrementum - Spaced repetition and incremental reading for effective learning"
+          arch=('x86_64')
+          url="https://github.com/melpomenex/incrementum-tauri"
+          license=('MIT')
+          depends=('webkit2gtk-4.1' 'gtk3' 'libappindicator-gtk3' 'librsvg' 'gcc-libs' 'glibc')
+          makedepends=('cargo')
+          source=("$pkgname-$pkgver::git+https://github.com/melpomenex/incrementum-tauri.git#tag=v$pkgver")
+          sha256sums=('SKIP')
+
+          build() {
+            cd "$pkgname-$pkgver"
+            npm ci
+            npm run build
+            cd src-tauri
+            cargo build --release
+          }
+
+          package() {
+            cd "$pkgname-$pkgver"
+            install -Dm755 "src-tauri/target/release/incrementum-tauri" "$pkgdir/usr/bin/incrementum"
+            install -Dm644 "src-tauri/icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/incrementum.png"
+            install -Dm644 "src-tauri/incrementum.desktop" "$pkgdir/usr/share/applications/incrementum.desktop" || true
+          }
+          EOF
+
+          # Build the package
+          cd arch-pkg
+          makepkg -s --noconfirm
+
+      - name: Upload Pacman artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: incrementum-arch
+          path: arch-pkg/*.pkg.tar.zst
+          if-no-files-found: warn
+
+      - name: Upload Pacman to release (on push to main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: arch-pkg/*.pkg.tar.zst
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          name: Incrementum dev-${{ github.sha }}
+          tag_name: dev-${{ github.sha }}
+
   test:
     runs-on: ubuntu-latest
     steps:
