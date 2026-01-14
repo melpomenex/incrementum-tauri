@@ -224,6 +224,18 @@ pub async fn update_document(
 }
 
 #[tauri::command]
+pub async fn update_document_content(
+    id: String,
+    content: String,
+    repo: State<'_, Repository>,
+) -> Result<Document> {
+    repo.update_document_content(&id, &content, None, None, None).await?;
+    repo.get_document(&id)
+        .await?
+        .ok_or_else(|| crate::error::IncrementumError::NotFound(format!("Document {}", id)))
+}
+
+#[tauri::command]
 pub async fn update_document_priority(
     id: String,
     rating: i32,

@@ -128,6 +128,7 @@ pub fn run() {
             commands::get_document,
             commands::create_document,
             commands::update_document,
+            commands::update_document_content,
             commands::update_document_priority,
             commands::delete_document,
             commands::import_document,

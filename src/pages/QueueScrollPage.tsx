@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Brain } from "lucide-react";
+import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink } from "lucide-react";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
 import { useDocumentStore } from "../stores/documentStore";
 import { DocumentViewer } from "../components/viewer/DocumentViewer";
 import { FlashcardScrollItem } from "../components/review/FlashcardScrollItem";
+import { ScrollModeArticleEditor } from "../components/review/ScrollModeArticleEditor";
 import { rateDocument } from "../api/algorithm";
 import { getDueItems, type LearningItem } from "../api/learning-items";
 import { getDueExtracts, submitExtractReview } from "../api/extract-review";
@@ -25,6 +26,7 @@ interface ScrollItem {
   type: "document" | "rss" | "flashcard" | "extract";
   documentId?: string;
   documentTitle: string;
+  isImportedWebArticle?: boolean;
   rssItem?: RSSFeedItem;
   rssFeed?: RSSFeed;
   learningItem?: LearningItem;
@@ -64,6 +66,14 @@ export function QueueScrollPage() {
   const scrollCooldown = 500; // ms between scroll actions
   const startTimeRef = useRef(Date.now());
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleExtractUpdate = useCallback((extractId: string, updates: { content: string; notes?: string }) => {
+    setScrollItems(prev => prev.map((item) => (
+      item.type === "extract" && item.extract?.id === extractId
+        ? { ...item, extract: { ...item.extract, content: updates.content, notes: updates.notes } }
+        : item
+    )));
+  }, []);
 
   // Filter documents (exclude YouTube videos - they crash in scroll mode)
   // Memoize to prevent infinite loop since this is a dependency of the useEffect below
@@ -128,12 +138,17 @@ export function QueueScrollPage() {
     }));
 
     // Create document items
-    const docItems: ScrollItem[] = documentQueueItems.map((item) => ({
-      id: item.id,
-      type: "document" as const,
-      documentId: item.documentId,
-      documentTitle: item.documentTitle,
-    }));
+    const docItems: ScrollItem[] = documentQueueItems.map((item) => {
+      const doc = documents.find(d => d.id === item.documentId);
+      const isImportedWebArticle = !!doc?.filePath && /^https?:\/\//.test(doc.filePath);
+      return {
+        id: item.id,
+        type: "document" as const,
+        documentId: item.documentId,
+        documentTitle: item.documentTitle,
+        isImportedWebArticle,
+      };
+    });
 
     // Load RSS unread items
     const rssUnread = getUnreadItems();
@@ -463,6 +478,14 @@ export function QueueScrollPage() {
               </div>
             );
           }
+          if (renderedItem.isImportedWebArticle && doc) {
+            return (
+              <ScrollModeArticleEditor
+                key={renderedItem.documentId}
+                document={doc}
+              />
+            );
+          }
           return (
             <DocumentViewer
               key={renderedItem.documentId}
@@ -522,6 +545,7 @@ export function QueueScrollPage() {
             onRate={handleRating}
             onCreateCloze={(text, range) => setActiveExtractForCloze({ id: renderedItem.extract!.id, text, range })}
             onCreateQA={() => setActiveExtractForQA(renderedItem.extract!.id)}
+            onUpdate={(updates) => handleExtractUpdate(renderedItem.extract!.id, updates)}
           />
         ) : (
           // Fallback for no item

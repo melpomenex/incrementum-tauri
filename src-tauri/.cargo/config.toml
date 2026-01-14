@@ -1,0 +1,5 @@
+[build]
+incremental = false
+
+[env]
+RUST_MIN_STACK = "33554432"

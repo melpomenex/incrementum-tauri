@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Eye, EyeOff, AlertCircle, Star, CheckCircle, Sparkles, Scissors, MessageSquare, FileText, Highlighter } from "lucide-react";
+import { AlertCircle, Star, CheckCircle, Sparkles, Scissors, MessageSquare, FileText, PencilLine, Loader2 } from "lucide-react";
 import type { Extract } from "../../api/extracts";
+import { updateExtract } from "../../api/extracts";
 import { cn } from "../../utils";
 
 interface ExtractScrollItemProps {
@@ -9,6 +10,7 @@ interface ExtractScrollItemProps {
     onRate: (rating: number) => void;
     onCreateCloze: (selectedText: string, range: [number, number]) => void;
     onCreateQA: () => void;
+    onUpdate?: (updates: { content: string; notes?: string }) => void;
 }
 
 /**
@@ -20,10 +22,31 @@ export function ExtractScrollItem({
     documentTitle,
     onRate,
     onCreateCloze,
-    onCreateQA
+    onCreateQA,
+    onUpdate
 }: ExtractScrollItemProps) {
-    const [showControls, setShowControls] = useState(false);
-    const contentRef = useRef<HTMLDivElement>(null);
+    const [content, setContent] = useState(extract.content);
+    const [notes, setNotes] = useState(extract.notes ?? "");
+    const [saveStatus, setSaveStatus] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+    const contentRef = useRef<HTMLTextAreaElement>(null);
+    const lastSavedRef = useRef({ content: extract.content, notes: extract.notes ?? "" });
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        setContent(extract.content);
+        setNotes(extract.notes ?? "");
+        lastSavedRef.current = { content: extract.content, notes: extract.notes ?? "" };
+        setSaveStatus("idle");
+    }, [extract.id, extract.content, extract.notes]);
 
     // Keyboard shortcuts: 1-4 to rate, C for Cloze, Q for QA
     useEffect(() => {
@@ -53,28 +76,113 @@ export function ExtractScrollItem({
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onRate, onCreateQA]);
+    }, [onRate, onCreateQA, onCreateCloze]);
 
-    const handleCreateCloze = () => {
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
-            // If no selection, maybe notify user? For now just ignore
+    useEffect(() => {
+        if (content === lastSavedRef.current.content && notes === lastSavedRef.current.notes) {
             return;
         }
 
-        const range = selection.getRangeAt(0);
-        const text = selection.toString();
+        setSaveStatus("dirty");
 
-        // Find offset relative to contentRef
-        // This is simplified and might need robust handling for complex DOMs
-        // For now assuming content is rendered as simple text or minimal HTML
-        // We'll pass the simple text and let the popup handler refine it
-        onCreateCloze(text, [0, text.length]); // Placeholder range, real logic in popup or parent
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+
+        saveTimeoutRef.current = setTimeout(async () => {
+            setSaveStatus("saving");
+            try {
+                await updateExtract({ id: extract.id, content, note: notes });
+                if (!isMountedRef.current) return;
+                lastSavedRef.current = { content, notes };
+                onUpdate?.({ content, notes });
+                setSaveStatus("saved");
+                if (statusTimeoutRef.current) {
+                    clearTimeout(statusTimeoutRef.current);
+                }
+                statusTimeoutRef.current = setTimeout(() => {
+                    if (isMountedRef.current) {
+                        setSaveStatus("idle");
+                    }
+                }, 2000);
+            } catch (error) {
+                if (!isMountedRef.current) return;
+                console.error("Failed to save extract edits:", error);
+                setSaveStatus("error");
+            }
+        }, 800);
+
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, [content, notes, extract.id, onUpdate]);
+
+    useEffect(() => {
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+            if (statusTimeoutRef.current) {
+                clearTimeout(statusTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    const handleCreateCloze = () => {
+        const textarea = contentRef.current;
+        if (!textarea) return;
+
+        const start = textarea.selectionStart ?? 0;
+        const end = textarea.selectionEnd ?? 0;
+        if (start === end) return;
+
+        const selectedText = textarea.value.slice(start, end).trim();
+        if (!selectedText) return;
+
+        onCreateCloze(selectedText, [start, end]);
     };
 
     const stateLabel = extract.review_count === 0
         ? "New Extract"
         : "Review";
+
+    const renderSaveStatus = () => {
+        if (saveStatus === "saving") {
+            return (
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Saving...
+                </span>
+            );
+        }
+        if (saveStatus === "saved") {
+            return (
+                <span className="flex items-center gap-2 text-xs text-emerald-500">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Saved
+                </span>
+            );
+        }
+        if (saveStatus === "error") {
+            return (
+                <span className="flex items-center gap-2 text-xs text-red-500">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Save failed
+                </span>
+            );
+        }
+        if (saveStatus === "dirty") {
+            return (
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <PencilLine className="w-3.5 h-3.5" />
+                    Unsaved
+                </span>
+            );
+        }
+        return null;
+    };
 
     return (
         <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-gradient-to-b from-background to-muted/30">
@@ -94,9 +202,12 @@ export function ExtractScrollItem({
                 )}
             </div>
 
-            <div className="absolute top-6 right-6 text-sm text-muted-foreground max-w-md truncate">
-                From: <span className="font-medium text-foreground">{documentTitle}</span>
-                {extract.page_number && <span className="ml-2 opacity-70">Pg. {extract.page_number}</span>}
+            <div className="absolute top-6 right-6 text-sm text-muted-foreground max-w-md flex items-center gap-4">
+                <span className="truncate">
+                    From: <span className="font-medium text-foreground">{documentTitle}</span>
+                    {extract.page_number && <span className="ml-2 opacity-70">Pg. {extract.page_number}</span>}
+                </span>
+                {renderSaveStatus()}
             </div>
 
             {/* Extract Container */}
@@ -121,19 +232,30 @@ export function ExtractScrollItem({
                     </button>
                 </div>
 
-                {/* Content */}
-                <div
-                    ref={contentRef}
-                    className="bg-card border border-border rounded-2xl p-10 shadow-xl min-h-[300px] max-h-[60vh] overflow-y-auto text-lg leading-relaxed text-foreground whitespace-pre-wrap selection:bg-primary/30 selection:text-primary-foreground relative"
-                    dangerouslySetInnerHTML={{ __html: extract.content }}
-                />
+                {/* Content Editor */}
+                <div className="bg-card border border-border rounded-2xl shadow-xl min-h-[300px] max-h-[60vh] overflow-y-auto">
+                    <textarea
+                        ref={contentRef}
+                        value={content}
+                        onChange={(event) => setContent(event.target.value)}
+                        placeholder="Edit extract content in markdown..."
+                        className="w-full min-h-[300px] p-10 bg-transparent text-lg leading-relaxed text-foreground outline-none resize-none"
+                    />
+                </div>
 
-                {extract.notes && (
-                    <div className="bg-muted/50 border border-border/50 rounded-xl p-4 text-sm text-muted-foreground">
-                        <div className="font-semibold text-xs uppercase tracking-wider mb-1 opacity-70">Notes</div>
-                        {extract.notes}
-                    </div>
-                )}
+                {/* Notes Editor */}
+                <div className={cn(
+                    "bg-muted/50 border border-border/50 rounded-xl p-4",
+                    "text-sm text-muted-foreground"
+                )}>
+                    <div className="font-semibold text-xs uppercase tracking-wider mb-2 opacity-70">Notes</div>
+                    <textarea
+                        value={notes}
+                        onChange={(event) => setNotes(event.target.value)}
+                        placeholder="Add notes for future review..."
+                        className="w-full min-h-[90px] bg-transparent text-sm text-foreground outline-none resize-none"
+                    />
+                </div>
 
                 {/* Rating Buttons */}
                 <div className="flex items-center justify-center gap-4 mt-2">

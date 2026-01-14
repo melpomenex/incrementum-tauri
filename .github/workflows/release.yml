@@ -29,11 +29,16 @@ jobs:
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.83.0
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+
+      - name: Increase Rust stack size
+        run: echo "RUST_MIN_STACK=33554432" >> $GITHUB_ENV
 
       - name: Sync node version and setup cache
         uses: actions/setup-node@v4
@@ -58,7 +63,7 @@ jobs:
           releaseBody: 'See https://github.com/melpomenex/incrementum-tauri/releases/tag/${{ steps.get_version.outputs.VERSION }} for release notes.'
           releaseDraft: false
           prerelease: false
-          tauriScript: npm run tauri
+          tauriScript: npm run tauri build
 
   create-update-manifest:
     needs: release

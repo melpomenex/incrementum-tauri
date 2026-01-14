@@ -32,11 +32,16 @@ jobs:
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.83.0
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+
+      - name: Increase Rust stack size
+        run: echo "RUST_MIN_STACK=33554432" >> $GITHUB_ENV
 
       - name: Sync node version and setup cache
         uses: actions/setup-node@v4
@@ -55,7 +60,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tauriScript: npm run tauri
+          tauriScript: npm run tauri build
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -92,11 +97,16 @@ jobs:
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.83.0
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+
+      - name: Increase Rust stack size
+        run: echo "RUST_MIN_STACK=33554432" >> $GITHUB_ENV
 
       - name: Sync node version and setup cache
         uses: actions/setup-node@v4

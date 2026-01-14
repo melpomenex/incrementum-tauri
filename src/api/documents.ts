@@ -32,6 +32,13 @@ export async function updateDocument(
   return await invokeCommand<Document>("update_document", { id, updates });
 }
 
+export async function updateDocumentContent(
+  id: string,
+  content: string
+): Promise<Document> {
+  return await invokeCommand<Document>("update_document_content", { id, content });
+}
+
 export async function updateDocumentPriority(
   id: string,
   rating: number,

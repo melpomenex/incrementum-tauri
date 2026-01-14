@@ -63,6 +63,13 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(doc);
     },
 
+    update_document_content: async (args) => {
+        const id = args.id as string;
+        const content = args.content as string;
+        const doc = await db.updateDocument(id, { content });
+        return toCamelCase(doc);
+    },
+
     update_document_priority: async (args) => {
         const id = args.id as string;
         const rating = args.rating as number;
