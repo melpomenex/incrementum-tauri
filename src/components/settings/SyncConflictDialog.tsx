@@ -125,8 +125,8 @@ export function SyncConflictDialog({
         <div className="p-6 border-b border-border">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              <div className="p-2 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-300" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
@@ -170,8 +170,8 @@ export function SyncConflictDialog({
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {applied ? (
             <div className="flex flex-col items-center justify-center py-8">
-              <div className="p-3 bg-green-50 dark:bg-green-950 rounded-full mb-3">
-                <Check className="w-6 h-6 text-green-600 dark:text-green-400" />
+              <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-full mb-3">
+                <Check className="w-6 h-6 text-green-600 dark:text-green-300" />
               </div>
               <p className="text-foreground font-medium">Conflicts resolved!</p>
               <p className="text-sm text-muted-foreground">
@@ -201,7 +201,7 @@ export function SyncConflictDialog({
                       </div>
                     </div>
                     {isNewerLocal && (
-                      <span className="text-xs px-2 py-1 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded">
+                      <span className="text-xs px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded">
                         Local is newer
                       </span>
                     )}

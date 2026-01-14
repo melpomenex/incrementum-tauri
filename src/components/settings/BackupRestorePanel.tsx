@@ -433,9 +433,9 @@ export function BackupRestorePanel({
 
       {/* Conflicts Section */}
       {restoreConflicts.length > 0 && (
-        <div className="p-4 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+        <div className="p-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg">
           <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-300" />
             Restore Conflicts
           </h4>
           <p className="text-sm text-muted-foreground mb-3">
@@ -495,7 +495,7 @@ export function BackupRestorePanel({
                 </span>
               </div>
             </div>
-            <p className="text-sm text-yellow-600 dark:text-yellow-400 mb-4">
+            <p className="text-sm text-yellow-600 dark:text-yellow-300 mb-4">
               <strong>Warning:</strong> Restoring will replace your current data.
               Consider creating a backup first.
             </p>
@@ -531,16 +531,16 @@ export function BackupRestorePanel({
 
       {/* Success Message */}
       {success && (
-        <div className="p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+        <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg">
           <div className="flex items-start gap-3">
-            <Check className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
+            <Check className="w-5 h-5 text-green-600 dark:text-green-300 mt-0.5" />
             <div className="flex-1">
               <h4 className="font-medium text-foreground mb-1">Success</h4>
               <p className="text-sm text-muted-foreground">{success}</p>
             </div>
             <button
               onClick={() => setSuccess(null)}
-              className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300"
+              className="text-green-600 dark:text-green-300 hover:text-green-800 dark:hover:text-green-200"
             >
               Dismiss
             </button>

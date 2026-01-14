@@ -179,7 +179,7 @@ export function SyncStatusIndicator({
           onClick={handleSyncNow}
           disabled={syncState === "syncing"}
           className={`p-2 rounded-lg transition-colors ${syncState === "syncing"
-              ? "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400"
+              ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300"
               : "bg-background hover:bg-muted text-muted-foreground"
             } disabled:opacity-50 disabled:cursor-not-allowed`}
           title={
@@ -207,7 +207,7 @@ export function SyncStatusIndicator({
             setSyncState("idle");
             setError(null);
           }}
-          className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 rounded"
+          className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
           title="Dismiss error"
         >
           <X className="w-4 h-4" />
