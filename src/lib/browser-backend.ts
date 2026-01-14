@@ -5,6 +5,7 @@
 
 import * as db from './database.js';
 import { getBrowserFile } from './browser-file-store';
+import { parseAnkiPackage, convertAnkiToLearningItems } from '../utils/ankiParserBrowser';
 
 type CommandHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -388,15 +389,128 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(doc);
     },
 
-    // Anki Import (requires sql.js/jszip in browser, which is a larger task)
-    import_anki_package_to_learning_items: async () => {
-        throw new Error("Anki import is not yet supported in the web version. Please use the desktop application.");
+    // Anki Import (browser implementation using jszip and sql.js)
+    import_anki_package_to_learning_items: async (args) => {
+        const filePath = args.apkgPath as string;
+
+        // Get the file from the browser file store
+        const file = getBrowserFile(filePath);
+        if (!file) {
+            throw new Error('File not found. Please select the file again.');
+        }
+
+        return await importAnkiPackage(file);
     },
 
-    import_anki_package_bytes_to_learning_items: async () => {
-        throw new Error("Anki import is not yet supported in the web version. Please use the desktop application.");
+    import_anki_package_bytes_to_learning_items: async (args) => {
+        const apkgBytes = args.apkgBytes as number[];
+        const uint8Array = new Uint8Array(apkgBytes);
+
+        return await importAnkiPackage(uint8Array);
+    },
+
+    // RSS feed fetch with CORS proxy support
+    fetch_rss_feed_url: async (args) => {
+        const feedUrl = args.feedUrl as string;
+
+        // Try direct fetch first (might work for CORS-enabled feeds)
+        let response: Response;
+        let xmlText: string;
+
+        try {
+            response = await fetch(feedUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            xmlText = await response.text();
+        } catch (directError) {
+            // Try with CORS proxy
+            const corsProxy = 'https://api.allorigins.win/raw?url=';
+            try {
+                response = await fetch(corsProxy + encodeURIComponent(feedUrl));
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                xmlText = await response.text();
+            } catch (proxyError) {
+                throw new Error(`Failed to fetch feed: ${proxyError}`);
+            }
+        }
+
+        // Parse the feed
+        const feed = await import('../api/rss').then(m => m.parseFeed(xmlText, feedUrl));
+
+        if (!feed) {
+            throw new Error('Failed to parse feed');
+        }
+
+        // Convert to backend format (snake_case)
+        return {
+            id: feed.id,
+            title: feed.title,
+            description: feed.description,
+            link: feed.link,
+            feed_url: feed.feedUrl,
+            image_url: feed.imageUrl || feed.icon,
+            language: feed.language,
+            category: feed.category,
+            items: feed.items.map(item => ({
+                id: item.id,
+                title: item.title,
+                description: item.description,
+                content: item.content,
+                link: item.link,
+                pub_date: item.pubDate,
+                author: item.author,
+                categories: item.categories,
+                guid: item.guid,
+            }))
+        };
     },
 };
+
+/**
+ * Import an Anki package (shared helper)
+ */
+async function importAnkiPackage(fileOrBytes: File | Uint8Array) {
+    // Parse the .apkg file
+    const decks = await parseAnkiPackage(fileOrBytes);
+
+    // Convert to Incrementum format
+    const { documents, learningItems } = convertAnkiToLearningItems(decks);
+
+    // Store documents
+    const docIds: string[] = [];
+    for (const doc of documents) {
+        const createdDoc = await db.createDocument({
+            title: doc.title,
+            content: doc.content,
+            file_path: `anki://${doc.title}`,
+            file_type: doc.fileType,
+        });
+        docIds.push(createdDoc.id);
+
+        // Add tags and category to document (stored in metadata)
+        await db.updateDocument(createdDoc.id, {
+            category: doc.category,
+        });
+    }
+
+    // Create learning items
+    const items = [];
+    for (const item of learningItems) {
+        const createdItem = await db.createLearningItem({
+            document_id: item.documentId,
+            item_type: item.itemType,
+            question: item.question,
+            answer: item.answer,
+        });
+
+        items.push(toCamelCase(createdItem));
+    }
+
+    return items;
+}
 
 /**
  * Execute a browser command

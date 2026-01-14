@@ -28,7 +28,13 @@ import {
   getStatusLabel,
   getTimeEstimateRange,
   isScheduledItem,
+  type SessionCustomizationOptions,
 } from "../../utils/reviewUx";
+import {
+  SessionCustomizeModal,
+  DEFAULT_CUSTOMIZATION,
+  type SessionCustomization,
+} from "./SessionCustomizeModal";
 
 type QueueMode = "reading" | "review";
 
@@ -65,6 +71,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   const [isInspectorOpen, setInspectorOpen] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
+  const [isCustomizeModalOpen, setCustomizeModalOpen] = useState(false);
+  const [sessionCustomization, setSessionCustomization] = useState<SessionCustomization>(DEFAULT_CUSTOMIZATION);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Debug: Check if scroll mode is available
@@ -105,7 +113,16 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
 
   const allSelected = selectableItems.length > 0 && selectableItems.every((item) => selectedIds.has(item.id));
 
-  const sessionBlocks = useMemo(() => buildSessionBlocks(visibleItems), [visibleItems]);
+  const sessionBlocks = useMemo(() => {
+    const options: SessionCustomizationOptions = {
+      maxItems: sessionCustomization.maxItems,
+      blockTimeBudgets: sessionCustomization.blockTimeBudgets,
+      filters: sessionCustomization.filters,
+      itemTypes: sessionCustomization.itemTypes,
+      priorityPreset: preset,
+    };
+    return buildSessionBlocks(visibleItems, options);
+  }, [visibleItems, sessionCustomization, preset]);
   const selectedItem = useMemo(
     () => visibleItems.find((item) => item.id === selectedId) ?? null,
     [visibleItems, selectedId]
@@ -234,7 +251,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
           <div className="flex items-center gap-2">
             <button
               onClick={handleStartOptimalSession}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 flex items-center gap-2"
+              className="px-4 py-2 bg-primary text-white rounded-md hover:opacity-90 flex items-center gap-2"
+              style={{ color: 'var(--color-primary-foreground, white)' }}
             >
               <Play className="w-4 h-4" />
               Start Optimal Session
@@ -249,10 +267,13 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                 Scroll Mode
               </button>
             )}
-            <button className="px-4 py-2 bg-muted text-foreground rounded-md hover:bg-muted/80">
+            <button
+              onClick={() => setCustomizeModalOpen(true)}
+              className="px-4 py-2 bg-muted text-foreground rounded-md hover:bg-muted/80"
+            >
               Customize Session
             </button>
-            <button className="px-4 py-2 bg-background border border-border rounded-md hover:bg-muted/60">
+            <button className="px-4 py-2 bg-background border border-border rounded-md hover:bg-muted/60 text-foreground">
               Manual Browse
             </button>
           </div>
@@ -576,13 +597,13 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                 <div className="space-y-2">
                   <div className="text-xs text-muted-foreground">Recovery actions</div>
                   <div className="flex flex-col gap-2">
-                    <button className="px-3 py-2 bg-background border border-border rounded text-sm">
+                    <button className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground">
                       Compress intervals
                     </button>
-                    <button className="px-3 py-2 bg-background border border-border rounded text-sm">
+                    <button className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground">
                       Reschedule intelligently
                     </button>
-                    <button className="px-3 py-2 bg-background border border-border rounded text-sm">
+                    <button className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground">
                       Downgrade frequency
                     </button>
                   </div>
@@ -591,7 +612,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                 <div className="space-y-2">
                   <button
                     onClick={() => setShowAdvanced((prev) => !prev)}
-                    className="px-3 py-2 bg-muted rounded text-sm flex items-center gap-2"
+                    className="px-3 py-2 bg-muted rounded text-sm flex items-center gap-2 text-foreground"
                   >
                     <Keyboard className="w-4 h-4" />
                     {showAdvanced ? "Hide advanced" : "Show advanced"}
@@ -619,6 +640,16 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
           </aside>
         )}
       </div>
+
+      <SessionCustomizeModal
+        isOpen={isCustomizeModalOpen}
+        onClose={() => setCustomizeModalOpen(false)}
+        customization={sessionCustomization}
+        onChange={setSessionCustomization}
+        onApply={() => setCustomizeModalOpen(false)}
+        availableTags={Array.from(new Set(items.flatMap((item) => item.tags || [])))}
+        availableCategories={Array.from(new Set(items.map((item) => item.category).filter(Boolean)))}
+      />
     </div>
   );
 }
@@ -642,12 +673,12 @@ function StatusPill({ status }: { status: ReturnType<typeof getQueueStatus> }) {
   const label = getStatusLabel(status);
   const styles =
     status === "drifted"
-      ? "bg-slate-500/15 text-slate-600"
+      ? "bg-slate-500/15 text-slate-200 dark:text-slate-300"
       : status === "review"
-      ? "bg-indigo-500/15 text-indigo-600"
+      ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
       : status === "learning"
-      ? "bg-amber-500/15 text-amber-600"
-      : "bg-emerald-500/15 text-emerald-600";
+      ? "bg-amber-500/15 text-amber-600 dark:text-amber-300"
+      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300";
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${styles}`}>{label}</span>
   );

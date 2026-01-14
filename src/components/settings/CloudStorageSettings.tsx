@@ -555,8 +555,8 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
               sync across multiple devices.
             </p>
             <ul className="text-xs text-muted-foreground space-y-1">
-              <li>• <strong>Backup Only:</strong> One-way backup to cloud storage</li>
-              <li>• <strong>Two-Way Sync:</strong> Sync changes between devices</li>
+              <li>• <strong className="text-foreground">Backup Only:</strong> One-way backup to cloud storage</li>
+              <li>• <strong className="text-foreground">Two-Way Sync:</strong> Sync changes between devices</li>
               <li>• All data is encrypted before uploading</li>
               <li>• Supports incremental backups to save bandwidth</li>
             </ul>

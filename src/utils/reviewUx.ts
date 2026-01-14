@@ -25,6 +25,34 @@ export type SessionBlock = {
   safeStopCount: number;
 };
 
+export type SessionBlockTimeBudgets = {
+  overdue: number;
+  maintenance: number;
+  explore: number;
+  empty: number;
+};
+
+export type SessionFilters = {
+  tags: string[];
+  categories: string[];
+  priorityRange: { min: number; max: number };
+  excludeSuspended: boolean;
+};
+
+export type SessionItemTypes = {
+  documents: boolean;
+  extracts: boolean;
+  learningItems: boolean;
+};
+
+export type SessionCustomizationOptions = {
+  maxItems?: number;
+  blockTimeBudgets?: SessionBlockTimeBudgets;
+  filters?: SessionFilters;
+  itemTypes?: SessionItemTypes;
+  priorityPreset?: PriorityPreset;
+};
+
 const DEFAULT_TIME_PER_ITEM = 2;
 
 const priorityPresets: Record<PriorityPreset, PriorityVector> = {
@@ -120,25 +148,80 @@ export function formatMinutesRange(range: { min: number; max: number }): string 
   return `${range.min}-${range.max} min`;
 }
 
-export function buildSessionBlocks(items: QueueItem[]): SessionBlock[] {
-  const overdue = items.filter((item) => getQueueStatus(item) === "drifted");
-  const learning = items.filter((item) => item.itemType === "learning-item");
-  const reading = items.filter((item) => item.itemType !== "learning-item");
+export function buildSessionBlocks(items: QueueItem[], options?: SessionCustomizationOptions): SessionBlock[] {
+  const filteredItems = applyFilters(items, options);
+  const prioritizedItems = applyMaxItems(filteredItems, options?.maxItems);
+  const timeBudgets = options?.blockTimeBudgets || { overdue: 10, maintenance: 15, explore: 20, empty: 15 };
+
+  const overdue = prioritizedItems.filter((item) => getQueueStatus(item) === "drifted");
+  const learning = prioritizedItems.filter((item) => item.itemType === "learning-item");
+  const reading = prioritizedItems.filter((item) => item.itemType !== "learning-item");
 
   const blocks: SessionBlock[] = [];
   if (overdue.length > 0) {
-    blocks.push(buildBlock("overdue", "Overdue Rescue", overdue, 10));
+    blocks.push(buildBlock("overdue", "Overdue Rescue", overdue, timeBudgets.overdue));
   }
   if (learning.length > 0) {
-    blocks.push(buildBlock("maintenance", "High-Retention Maintenance", learning, 15));
+    blocks.push(buildBlock("maintenance", "High-Retention Maintenance", learning, timeBudgets.maintenance));
   }
   if (reading.length > 0) {
-    blocks.push(buildBlock("explore", "New Material Exploration", reading, 20));
+    blocks.push(buildBlock("explore", "New Material Exploration", reading, timeBudgets.explore));
   }
   if (blocks.length === 0) {
-    blocks.push(buildBlock("empty", "Focus Block", items, 15));
+    blocks.push(buildBlock("empty", "Focus Block", prioritizedItems, timeBudgets.empty));
   }
   return blocks;
+}
+
+function applyFilters(items: QueueItem[], options?: SessionCustomizationOptions): QueueItem[] {
+  let filtered = [...items];
+
+  // Apply item type filter
+  if (options?.itemTypes) {
+    filtered = filtered.filter((item) => {
+      if (item.itemType === "document") return options.itemTypes!.documents;
+      if (item.itemType === "extract") return options.itemTypes!.extracts;
+      if (item.itemType === "learning-item") return options.itemTypes!.learningItems;
+      return true;
+    });
+  }
+
+  // Apply tags filter
+  if (options?.filters?.tags && options.filters.tags.length > 0) {
+    filtered = filtered.filter((item) =>
+      options.filters!.tags.some((tag) => item.tags?.includes(tag))
+    );
+  }
+
+  // Apply category filter
+  if (options?.filters?.categories && options.filters.categories.length > 0) {
+    filtered = filtered.filter((item) =>
+      options.filters!.categories.includes(item.category || "")
+    );
+  }
+
+  // Apply priority range filter
+  if (options?.filters?.priorityRange) {
+    const { min, max } = options.filters.priorityRange;
+    const preset = options.priorityPreset || "maximize-retention";
+    filtered = filtered.filter(
+      (item) => getPriorityScore(item, preset) >= min && getPriorityScore(item, preset) <= max
+    );
+  }
+
+  // Apply exclude suspended filter
+  if (options?.filters?.excludeSuspended) {
+    filtered = filtered.filter((item) => item.status !== "suspended");
+  }
+
+  return filtered;
+}
+
+function applyMaxItems(items: QueueItem[], maxItems?: number): QueueItem[] {
+  if (maxItems && maxItems > 0) {
+    return items.slice(0, maxItems);
+  }
+  return items;
 }
 
 function buildBlock(id: string, title: string, items: QueueItem[], timeBudgetMinutes: number): SessionBlock {
