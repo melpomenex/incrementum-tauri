@@ -38,19 +38,3 @@
     color: var(--color-muted-foreground);
   }
 }
-
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-background: #0a0f1a;
-    --color-foreground: #f0f4f8;
-
-    --color-muted: #1e293b;
-    --color-muted-foreground: #b0c4de;
-
-    --color-card: #141b2d;
-    --color-card-foreground: #f0f4f8;
-
-    --color-border: #2d3b52;
-    --color-input: #1e293b;
-  }
-}
