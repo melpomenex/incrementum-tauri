@@ -26,7 +26,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
       // For cloze cards, hide the clozed portion
       const parts = card.cloze_text.split(/\[\[c(\d+)::(.*?)\]\]/g);
       return (
-        <div className="text-lg leading-relaxed">
+        <div className="text-lg leading-relaxed text-foreground">
           {parts.map((part, idx) => {
             if (idx % 3 === 1) return null; // Skip the index
             if (idx % 3 === 2) {
@@ -41,7 +41,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
                 );
               }
               return (
-                <span key={idx} className="bg-primary/30 px-2 py-0.5 rounded text-primary font-bold">
+                <span key={idx} className="bg-muted px-2 py-0.5 rounded text-foreground font-bold border border-border/50">
                   [...]
                 </span>
               );
@@ -53,7 +53,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
     }
 
     return (
-      <div className="text-lg leading-relaxed">
+      <div className="text-lg leading-relaxed text-foreground">
         <span dangerouslySetInnerHTML={{ __html: card.question }} />
       </div>
     );
@@ -64,7 +64,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
 
     return (
       <div className="mt-6 pt-6 border-t border-border">
-        <div className="text-sm uppercase tracking-wide text-muted-foreground mb-2 font-medium">
+        <div className="text-sm uppercase tracking-wide text-foreground/80 mb-2 font-medium">
           Answer
         </div>
         <div className="text-base leading-relaxed text-foreground">
@@ -79,16 +79,16 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
       {/* Card Type Badge */}
       <div className="flex items-center gap-2 mb-4">
         <span className="text-2xl">{getItemIcon(card.item_type)}</span>
-        <span className="text-sm uppercase tracking-wide text-muted-foreground font-medium">
+        <span className="text-sm uppercase tracking-wide text-foreground/80 font-medium">
           {card.item_type}
         </span>
         {card.tags.length > 0 && (
           <>
-            <span className="text-muted-foreground">•</span>
+            <span className="text-foreground/60">•</span>
             {card.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded"
+                className="px-2 py-0.5 text-xs bg-muted/60 text-foreground border border-border/50 rounded"
               >
                 {tag}
               </span>
@@ -101,7 +101,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
       <div className="bg-card border border-border rounded-lg p-6 shadow-sm transition-all duration-300">
         {/* Question */}
         <div className="mb-2">
-          <div className="text-sm uppercase tracking-wide text-muted-foreground mb-3 font-medium">
+          <div className="text-sm uppercase tracking-wide text-foreground/80 mb-3 font-medium">
             {card.item_type === "cloze" ? "Complete the sentence" : "Question"}
           </div>
           {renderQuestion()}
@@ -141,7 +141,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
         <div className="mt-6 flex justify-center">
           <button
             onClick={onShowAnswer}
-            className="px-8 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-all hover:scale-105 active:scale-95 font-medium text-lg shadow-md"
+            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-lg transition-all hover:scale-105 active:scale-95 font-medium text-lg shadow-md"
           >
             Show Answer
           </button>

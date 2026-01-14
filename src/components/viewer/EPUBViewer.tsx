@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import ePub from "epubjs";
 import { cn } from "../../utils";
+import { useThemeStore } from "../common/ThemeSystem";
 
 interface EPUBViewerProps {
   fileData: Uint8Array;
@@ -32,6 +33,9 @@ export function EPUBViewer({
   });
   const fontSizeRef = useRef(fontSize); // Track current font size for content hook
   const [showFontSizeControl, setShowFontSizeControl] = useState(false);
+
+  // Get current theme colors
+  const theme = useThemeStore((state) => state.theme);
 
   // Keep fontSizeRef in sync with fontSize
   useEffect(() => {
@@ -77,6 +81,7 @@ export function EPUBViewer({
     localStorage.setItem(FONT_SIZE_KEY, clampedSize.toString());
 
     if (rendition) {
+      const textColor = theme.colors.foreground;
       // Apply font size and consistent styling to the rendition
       rendition.themes.default({
         body: {
@@ -84,23 +89,24 @@ export function EPUBViewer({
           "line-height": "1.6 !important",
           "margin": "0 !important",
           "padding": "0 !important",
-          "color": "inherit !important",
+          "color": `${textColor} !important`,
+          "background": `${theme.colors.background} !important`,
         },
         p: {
           "line-height": "1.6 !important",
           "margin": "1em 0 !important",
-        },
-        div: {
-          "line-height": "inherit !important",
+          "color": `${textColor} !important`,
         },
         "*": {
+          "color": `${textColor} !important`,
+          "background-color": "transparent !important",
           "box-sizing": "border-box !important",
           "max-width": "100% !important",
         },
       });
       rendition.themes.select("default");
     }
-  }, [rendition]);
+  }, [rendition, theme.colors.foreground, theme.colors.background]);
 
   // Increase font size
   const increaseFontSize = useCallback(() => {
@@ -268,6 +274,8 @@ export function EPUBViewer({
             // Now inject our consistent styling
             const style = contents.document.createElement("style");
             style.id = "epub-override-styles";
+            const textColor = theme.colors.foreground;
+            const bgColor = theme.colors.background;
             style.textContent = `
               * {
                 box-sizing: border-box !important;
@@ -279,8 +287,8 @@ export function EPUBViewer({
                 width: 100% !important;
                 height: 100% !important;
                 line-height: 1.6 !important;
-                color: inherit !important;
-                background: transparent !important;
+                color: ${textColor} !important;
+                background: ${bgColor} !important;
                 max-width: 100% !important;
                 overflow: hidden !important;
                 /* Let epubjs handle scrolling through the scrolled-doc flow */
@@ -289,11 +297,16 @@ export function EPUBViewer({
                 font-size: ${fontSizeRef.current}% !important;
                 padding-bottom: 80px !important;
               }
+              * {
+                color: ${textColor} !important;
+                background-color: transparent !important;
+              }
               p {
                 line-height: 1.6 !important;
                 margin: 1em 0 !important;
                 font-size: inherit !important;
                 max-width: 100% !important;
+                color: ${textColor} !important;
               }
               h1, h2, h3, h4, h5, h6 {
                 line-height: 1.3 !important;
@@ -301,17 +314,21 @@ export function EPUBViewer({
                 font-weight: 600 !important;
                 font-size: inherit !important;
                 max-width: 100% !important;
+                color: ${textColor} !important;
               }
               div, section, article, nav, aside, main, header, footer {
                 line-height: inherit !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 max-width: 100% !important;
+                color: ${textColor} !important;
+                background: transparent !important;
               }
               span {
                 line-height: inherit !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                color: ${textColor} !important;
               }
               img {
                 max-width: 100% !important;
@@ -326,7 +343,8 @@ export function EPUBViewer({
               }
               td, th {
                 padding: 0.5em !important;
-                border: 1px solid currentColor !important;
+                border: 1px solid ${textColor} !important;
+                color: ${textColor} !important;
               }
               ul, ol {
                 margin: 1em 0 !important;
@@ -334,10 +352,12 @@ export function EPUBViewer({
               }
               li {
                 margin: 0.5em 0 !important;
+                color: ${textColor} !important;
               }
               a {
-                color: inherit !important;
+                color: ${theme.colors.primary} !important;
                 text-decoration: underline !important;
+                background-color: transparent !important;
               }
               /* Ensure consistent text rendering */
               * {
@@ -351,22 +371,24 @@ export function EPUBViewer({
           });
 
           // Set up themes for font size control and consistent styling
+          const textColor = theme.colors.foreground;
           rendition.themes.register("default", {
             body: {
               "font-size": `${fontSizeRef.current}% !important`,
               "line-height": "1.6 !important",
               "margin": "0 !important",
               "padding": "0 !important",
-              "color": "inherit !important",
+              "color": `${textColor} !important`,
+              "background": `${theme.colors.background} !important`,
             },
             p: {
               "line-height": "1.6 !important",
               "margin": "1em 0 !important",
-            },
-            div: {
-              "line-height": "inherit !important",
+              "color": `${textColor} !important`,
             },
             "*": {
+              "color": `${textColor} !important`,
+              "background-color": "transparent !important",
               "box-sizing": "border-box !important",
               "max-width": "100% !important",
             },
@@ -455,6 +477,36 @@ export function EPUBViewer({
       }
     };
   }, [fileData, onLoad, documentId]);
+
+  // Re-apply styles when theme changes
+  useEffect(() => {
+    if (!rendition) return;
+
+    const textColor = theme.colors.foreground;
+    // Re-apply the theme with new colors
+    rendition.themes.default({
+      body: {
+        "font-size": `${fontSize}% !important`,
+        "line-height": "1.6 !important",
+        "margin": "0 !important",
+        "padding": "0 !important",
+        "color": `${textColor} !important`,
+        "background": `${theme.colors.background} !important`,
+      },
+      p: {
+        "line-height": "1.6 !important",
+        "margin": "1em 0 !important",
+        "color": `${textColor} !important`,
+      },
+      "*": {
+        "color": `${textColor} !important`,
+        "background-color": "transparent !important",
+        "box-sizing": "border-box !important",
+        "max-width": "100% !important",
+      },
+    });
+    rendition.themes.select("default");
+  }, [rendition, theme.colors.foreground, theme.colors.background, fontSize]);
 
   const handlePrevPage = () => {
     if (rendition) {
