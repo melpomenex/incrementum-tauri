@@ -65,25 +65,35 @@ export function QueueScrollPage() {
   const startTimeRef = useRef(Date.now());
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Filter documents (not learning items or extracts or YouTube videos)
+  // Filter documents (exclude YouTube videos - they crash in scroll mode)
   // Memoize to prevent infinite loop since this is a dependency of the useEffect below
   const documentQueueItems = useMemo(() => allQueueItems.filter((item) => {
     if (item.itemType !== "document") return false;
 
-    // Filter out YouTube videos - they don't make sense in scroll mode
     const doc = documents.find(d => d.id === item.documentId);
-    if (doc && doc.fileType === "youtube") return false;
+
+    // Skip if document not loaded yet (shouldn't happen after loadDocuments() awaits)
+    if (!doc) return false;
+
+    // Exclude YouTube videos - they don't make sense in scroll mode and can crash
+    if (doc.fileType === "youtube") return false;
+    if (doc.filePath && (doc.filePath.includes("youtube.com") || doc.filePath.includes("youtu.be"))) {
+      return false;
+    }
 
     return true;
   }), [allQueueItems, documents]);
 
   // Load queue, documents, and due flashcards/extracts on mount
+  // IMPORTANT: Await loadDocuments() to prevent race condition in YouTube filter
   useEffect(() => {
-    loadQueue();
-    loadDocuments();
+    const loadAllData = async () => {
+      // Load documents first and wait for completion
+      // This ensures the YouTube filter has all documents loaded before computing
+      await loadDocuments();
+      loadQueue();
 
-    // Load due learning items and extracts
-    const loadReviewItems = async () => {
+      // Load due learning items and extracts
       try {
         const [dueItems, extracts] = await Promise.all([
           getDueItems(),
@@ -96,7 +106,7 @@ export function QueueScrollPage() {
         console.error("Failed to load review items:", error);
       }
     };
-    loadReviewItems();
+    loadAllData();
   }, [loadQueue, loadDocuments]);
 
   // Initialize renderedIndex on mount
@@ -439,13 +449,28 @@ export function QueueScrollPage() {
           isTransitioning ? "opacity-0" : "opacity-100"
         )}
       >
-        {renderedItem?.type === "document" ? (
-          <DocumentViewer
-            key={renderedItem.documentId}
-            documentId={renderedItem.documentId!}
-            disableHoverRating={true}
-          />
-        ) : renderedItem?.type === "flashcard" && renderedItem.learningItem ? (
+        {renderedItem?.type === "document" ? (() => {
+          // Safety check: skip YouTube videos in scroll mode (they can crash)
+          const doc = documents.find(d => d.id === renderedItem.documentId);
+          if (doc?.fileType === "youtube" || doc?.filePath?.includes("youtube.com") || doc?.filePath?.includes("youtu.be")) {
+            return (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center text-muted-foreground">
+                  <div className="text-4xl mb-4">📺</div>
+                  <p>YouTube videos are not supported in scroll mode</p>
+                  <p className="text-sm mt-2">Please view this video from the Documents page</p>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <DocumentViewer
+              key={renderedItem.documentId}
+              documentId={renderedItem.documentId!}
+              disableHoverRating={true}
+            />
+          );
+        })() : renderedItem?.type === "flashcard" && renderedItem.learningItem ? (
           <FlashcardScrollItem
             key={renderedItem.learningItem.id}
             learningItem={renderedItem.learningItem}
