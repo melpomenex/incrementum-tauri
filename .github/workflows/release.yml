@@ -72,7 +72,6 @@ jobs:
           releaseBody: 'See https://github.com/melpomenex/incrementum-tauri/releases/tag/${{ steps.get_version.outputs.VERSION }} for release notes.'
           releaseDraft: false
           prerelease: false
-          tauriScript: npm run tauri build
 
   create-update-manifest:
     needs: release
