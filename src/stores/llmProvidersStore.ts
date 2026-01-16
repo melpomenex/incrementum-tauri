@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { generateId } from '../utils/id';
 
 export interface LLMProviderConfig {
   id: string;
@@ -29,7 +30,7 @@ export const useLLMProvidersStore = create<LLMProvidersState>()(
       addProvider: (provider) => {
         const newProvider: LLMProviderConfig = {
           ...provider,
-          id: crypto.randomUUID(),
+          id: generateId(),
         };
         console.log("Adding provider:", { ...newProvider, apiKey: newProvider.apiKey ? "***" : "EMPTY" });
         set((state) => ({

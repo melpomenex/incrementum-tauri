@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { generateId } from '../utils/id';
 
 export interface MCPServerConfig {
   id: string;
@@ -35,7 +36,7 @@ export const useMCPServersStore = create<MCPServersState>()(
 
         const newServer: MCPServerConfig = {
           ...server,
-          id: crypto.randomUUID(),
+          id: generateId(),
         };
         set((state) => ({
           servers: [...state.servers, newServer],

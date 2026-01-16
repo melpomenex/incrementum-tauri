@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ComponentType } from "react";
+import { generateId } from "../utils/id";
 
 export type TabType =
   | "dashboard"
@@ -64,7 +65,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   // Add a new tab
   addTab: (tab) => {
-    const id = crypto.randomUUID();
+    const id = generateId();
     const newTab: Tab = { ...tab, id };
 
     set((state) => {
@@ -94,7 +95,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   // Add a new tab in background (without focusing it)
   addTabInBackground: (tab) => {
-    const id = crypto.randomUUID();
+    const id = generateId();
     const newTab: Tab = { ...tab, id };
 
     set((state) => {

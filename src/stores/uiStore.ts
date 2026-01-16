@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { generateId } from "../utils/id";
 import { ViewName, Toast } from "../types";
 
 interface UIState {
@@ -71,7 +72,7 @@ export const useUIStore = create<UIState>((set) => ({
         ...state.toasts,
         {
           ...toast,
-          id: crypto.randomUUID(),
+          id: generateId(),
         },
       ],
     })),
