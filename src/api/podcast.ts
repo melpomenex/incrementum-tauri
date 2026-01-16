@@ -84,17 +84,17 @@ export function parsePodcastXML(xmlText: string, feedUrl: string): PodcastFeed |
   // Extract channel data
   const title = getElementText(channel, "title") || "Unknown Podcast";
   const description =
-    getElementText(channel, "itunes:summary") ||
+    getElementText(channel, "itunes\\:summary") ||
     getElementText(channel, "description") ||
     "";
   const imageUrl =
-    getAttributeText(channel.querySelector("itunes:image"), "href") ||
-    getElementText(channel, "itunes:image") ||
+    getAttributeText(channel.querySelector("itunes\\:image"), "href") ||
+    getElementText(channel, "itunes\\:image") ||
     getElementText(channel, "image > url") ||
     "";
   const language = getElementText(channel, "language");
   const author =
-    getElementText(channel, "itunes:author") ||
+    getElementText(channel, "itunes\\:author") ||
     getElementText(channel, "managingEditor") ||
     "";
   const link = getElementText(channel, "link") || feedUrl;
@@ -123,7 +123,7 @@ export function parsePodcastXML(xmlText: string, feedUrl: string): PodcastFeed |
       id: getElementText(item, "guid") || `${feedUrl}-${index}`,
       title: getElementText(item, "title") || `Episode ${index + 1}`,
       description:
-        getElementText(item, "itunes:summary") ||
+        getElementText(item, "itunes\\:summary") ||
         getElementText(item, "description") ||
         "",
       pubDate: getElementText(item, "pubDate") || "",
@@ -131,8 +131,8 @@ export function parsePodcastXML(xmlText: string, feedUrl: string): PodcastFeed |
       audioType: enclosure.getAttribute("type") || "audio/mpeg",
       fileSize: parseInt(enclosure.getAttribute("length") || "0") || undefined,
       imageUrl:
-        getAttributeText(item.querySelector("itunes:image"), "href") ||
-        getElementText(item, "itunes:image") ||
+        getAttributeText(item.querySelector("itunes\\:image"), "href") ||
+        getElementText(item, "itunes\\:image") ||
         imageUrl,
       link: getElementText(item, "link"),
       guid: getElementText(item, "guid"),
@@ -141,7 +141,7 @@ export function parsePodcastXML(xmlText: string, feedUrl: string): PodcastFeed |
     };
 
     // Parse duration if present (iTunes format)
-    const durationText = getElementText(item, "itunes:duration");
+    const durationText = getElementText(item, "itunes\\:duration");
     if (durationText) {
       episode.duration = parseITunesDuration(durationText);
     }

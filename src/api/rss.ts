@@ -99,7 +99,7 @@ function parseRSS(xmlDoc: Document, feedUrl: string): Feed | null {
   const link = getElementText(channel, "link") || feedUrl;
   const imageUrl =
     getElementText(channel, "image > url") ||
-    getElementText(channel, "itunes:image") ||
+    getElementText(channel, "itunes\\:image") ||
     "";
   const language = getElementText(channel, "language");
   const category = getElementText(channel, "category");
