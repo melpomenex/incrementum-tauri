@@ -265,7 +265,7 @@ export function convertAnkiToLearningItems(decks: AnkiDeck[]): {
       const note = deck.notes.find(n => n.id === card.noteId);
       if (!note) continue;
 
-      // Find question and answer fields
+      // Find question and answer fields with a safe fallback
       const questionField = note.fields.find(f =>
         f.name.toLowerCase().includes('front') ||
         f.name.toLowerCase().includes('question') ||
@@ -277,12 +277,18 @@ export function convertAnkiToLearningItems(decks: AnkiDeck[]): {
         f.name.toLowerCase().includes('answer')
       );
 
-      if (questionField && answerField) {
+      const fallbackQuestion = note.fields[0];
+      const fallbackAnswer = note.fields[1];
+
+      const questionValue = questionField?.value ?? fallbackQuestion?.value;
+      const answerValue = answerField?.value ?? fallbackAnswer?.value ?? '';
+
+      if (questionValue) {
         learningItems.push({
           documentId: docId,
           itemType: 'flashcard',
-          question: questionField.value,
-          answer: answerField.value,
+          question: questionValue,
+          answer: answerValue,
           tags: [...note.tags, 'anki-import', note.modelName, deck.name]
         });
       }
