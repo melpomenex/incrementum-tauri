@@ -82,6 +82,26 @@ export async function parseAnkiPackage(file: File | Uint8Array): Promise<AnkiDec
 function parseAnkiDatabase(db: Database, zip: JSZip): AnkiDeck[] {
   // Get models (note types)
   const models: Map<number, { name: string; fields: string[] }> = new Map();
+  const normalizeModelFields = (raw: unknown): Array<{ name?: string }> => {
+    if (!raw) {
+      return [];
+    }
+    if (Array.isArray(raw)) {
+      return raw as Array<{ name?: string }>;
+    }
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? (parsed as Array<{ name?: string }>) : [];
+      } catch {
+        return [];
+      }
+    }
+    if (typeof raw === "object") {
+      return [];
+    }
+    return [];
+  };
 
   // The models are stored in JSON in the 'models' column of the 'col' table
   const colData = db.exec('SELECT models FROM col');
@@ -91,9 +111,11 @@ function parseAnkiDatabase(db: Database, zip: JSZip): AnkiDeck[] {
       const m = model as any;
       const fieldNames: string[] = [];
       if (m.flds) {
-        const fields = JSON.parse(m.flds);
+        const fields = normalizeModelFields(m.flds);
         for (const field of fields) {
-          fieldNames.push(field.name);
+          if (field?.name) {
+            fieldNames.push(field.name);
+          }
         }
       }
       models.set(parseInt(id, 10), {
