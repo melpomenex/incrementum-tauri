@@ -407,7 +407,34 @@ const commandHandlers: Record<string, CommandHandler> = {
         const apkgBytes = args.apkgBytes as number[];
         const uint8Array = new Uint8Array(apkgBytes);
 
-        return await importAnkiPackage(uint8Array);
+        console.log('[Browser] Starting Anki import, byte array length:', apkgBytes.length);
+        try {
+            const result = await importAnkiPackage(uint8Array);
+            console.log('[Browser] Anki import successful, result type:', Array.isArray(result) ? 'array' : typeof result, 'length:', Array.isArray(result) ? result.length : 'N/A');
+
+            // Verify result is serializable before returning
+            let serialized: string;
+            try {
+                serialized = JSON.stringify(result);
+            } catch (e) {
+                console.error('[Browser] Result is not JSON serializable:', e);
+                throw new Error('Import result is not serializable');
+            }
+
+            // Parse back to ensure clean plain objects
+            try {
+                return JSON.parse(serialized);
+            } catch (e) {
+                console.error('[Browser] Failed to parse serialized result:', e, 'serialized:', serialized.substring(0, 200));
+                throw new Error('Failed to parse import result');
+            }
+        } catch (error) {
+            console.error('[Browser] Anki import error:', error);
+            if (error instanceof Error) {
+                throw error;
+            }
+            throw new Error(String(error));
+        }
     },
 
     // RSS feed fetch with CORS proxy support
@@ -532,9 +559,8 @@ async function importAnkiPackage(fileOrBytes: File | Uint8Array) {
             answer: item.answer,
         });
 
-        // Convert to plain object to ensure proper serialization
-        const camelItem = toCamelCase(createdItem);
-        items.push(JSON.parse(JSON.stringify(camelItem)));
+        // Convert to camelCase and return as plain object
+        items.push(toCamelCase(createdItem));
     }
 
     return items;
