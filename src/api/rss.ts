@@ -681,10 +681,14 @@ function getApiBaseUrl(): string {
 }
 
 /**
- * Check if running in web mode (not Tauri)
+ * Check if HTTP RSS backend is available (web dev server)
  */
-function isWebMode(): boolean {
-  return !("__TAURI__" in window);
+function shouldUseHttpBackend(): boolean {
+  if ("__TAURI__" in window) {
+    return false;
+  }
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
 }
 
 /**
@@ -973,7 +977,7 @@ export async function setRssPreferencesViaHttp(
  * Unified getRssPreferences - works in both Tauri and Web mode
  */
 export async function getRssPreferencesAuto(feedId?: string): Promise<RssUserPreference> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     return await getRssPreferencesViaHttp(feedId);
   }
   // In Tauri mode, return defaults for now
@@ -1004,7 +1008,7 @@ export async function setRssPreferencesAuto(
   preferences: RssUserPreferenceUpdate,
   feedId?: string
 ): Promise<RssUserPreference> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     return await setRssPreferencesViaHttp(preferences, feedId);
   }
   // In Tauri mode, save to localStorage for now
@@ -1030,7 +1034,7 @@ export async function setRssPreferencesAuto(
  * Unified getSubscribedFeeds - works in both Tauri and Web mode
  */
 export async function getSubscribedFeedsAuto(): Promise<Feed[]> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     return await getFeedsViaHttp();
   }
   return getSubscribedFeeds();
@@ -1040,7 +1044,7 @@ export async function getSubscribedFeedsAuto(): Promise<Feed[]> {
  * Unified subscribeToFeed - works in both Tauri and Web mode
  */
 export async function subscribeToFeedAuto(feed: Feed): Promise<void> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     await createFeedViaHttp(feed.feedUrl);
     return;
   }
@@ -1051,7 +1055,7 @@ export async function subscribeToFeedAuto(feed: Feed): Promise<void> {
  * Unified unsubscribeFromFeed - works in both Tauri and Web mode
  */
 export async function unsubscribeFromFeedAuto(feedId: string): Promise<void> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     await deleteFeedViaHttp(feedId);
     return;
   }
@@ -1062,7 +1066,7 @@ export async function unsubscribeFromFeedAuto(feedId: string): Promise<void> {
  * Unified markItemRead - works in both Tauri and Web mode
  */
 export async function markItemReadAuto(feedId: string, itemId: string, read: boolean = true): Promise<void> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     await markArticleReadViaHttp(itemId, read);
     return;
   }
@@ -1073,7 +1077,7 @@ export async function markItemReadAuto(feedId: string, itemId: string, read: boo
  * Unified markFeedRead - works in both Tauri and Web mode
  */
 export async function markFeedReadAuto(feedId: string): Promise<void> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     // In web mode, mark all articles for this feed as read
     const articles = await getArticlesViaHttp(feedId, 1000);
     await Promise.all(articles.map(a => markArticleReadViaHttp(a.id, true)));
@@ -1086,7 +1090,7 @@ export async function markFeedReadAuto(feedId: string): Promise<void> {
  * Unified toggleItemFavorite - works in both Tauri and Web mode
  */
 export async function toggleItemFavoriteAuto(feedId: string, itemId: string): Promise<void> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     // In web mode, toggle queued status for favorite
     await fetch(`${getApiBaseUrl()}/api/rss/articles/${itemId}/queued`, {
       method: 'POST',
@@ -1100,7 +1104,7 @@ export async function toggleItemFavoriteAuto(feedId: string, itemId: string): Pr
  * Unified importOPML - works in both Tauri and Web mode
  */
 export async function importOpmlAuto(opmlContent: string): Promise<Feed[]> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     const result = await importOpmlViaHttp(opmlContent);
     // Return empty array since the backend handles the import
     return [];
@@ -1112,7 +1116,7 @@ export async function importOpmlAuto(opmlContent: string): Promise<Feed[]> {
  * Unified exportOPML - works in both Tauri and Web mode
  */
 export async function exportOpmlAuto(): Promise<string> {
-  if (isWebMode()) {
+  if (shouldUseHttpBackend()) {
     return await exportOpmlViaHttp();
   }
   return exportOPML();
