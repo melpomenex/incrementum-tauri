@@ -81,33 +81,30 @@ export async function parseAnkiPackage(file: File | Uint8Array): Promise<AnkiDec
  */
 function parseAnkiDatabase(db: Database, zip: JSZip): AnkiDeck[] {
   // Get models (note types)
-  const modelsResult = db.exec('SELECT id, name, flds FROM col');
   const models: Map<number, { name: string; fields: string[] }> = new Map();
 
-  if (modelsResult.length > 0 && modelsResult[0].values.length > 0) {
-    // The models are stored in JSON in the 'models' column of the 'col' table
-    const colData = db.exec('SELECT models FROM col');
-    if (colData.length > 0 && colData[0].values.length > 0) {
-      const modelsJson = JSON.parse(colData[0].values[0][0] as string);
-      for (const [id, model] of Object.entries(modelsJson)) {
-        const m = model as any;
-        const fieldNames: string[] = [];
-        if (m.flds) {
-          const fields = JSON.parse(m.flds);
-          for (const field of fields) {
-            fieldNames.push(field.name);
-          }
+  // The models are stored in JSON in the 'models' column of the 'col' table
+  const colData = db.exec('SELECT models FROM col');
+  if (colData.length > 0 && colData[0].values.length > 0) {
+    const modelsJson = JSON.parse(colData[0].values[0][0] as string);
+    for (const [id, model] of Object.entries(modelsJson)) {
+      const m = model as any;
+      const fieldNames: string[] = [];
+      if (m.flds) {
+        const fields = JSON.parse(m.flds);
+        for (const field of fields) {
+          fieldNames.push(field.name);
         }
-        models.set(parseInt(id), {
-          name: m.name,
-          fields: fieldNames
-        });
       }
+      models.set(parseInt(id, 10), {
+        name: m.name,
+        fields: fieldNames
+      });
     }
   }
 
   // Get notes
-  const notesResult = db.exec('SELECT id, guid, mid, tags, flds, ctime FROM notes');
+  const notesResult = db.exec('SELECT id, guid, mid, tags, flds, mod FROM notes');
   const notes: AnkiNote[] = [];
 
   if (notesResult.length > 0) {
