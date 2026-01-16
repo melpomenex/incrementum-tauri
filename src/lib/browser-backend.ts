@@ -16,7 +16,8 @@ function toCamelCase(obj: any): any {
     }
     if (Array.isArray(obj)) {
         return obj.map(v => toCamelCase(v));
-    } else if (obj.constructor === Object) {
+    } else if (typeof obj === 'object' && obj !== null) {
+        // Handle both plain objects and IndexedDB result objects
         return Object.keys(obj).reduce((result, key) => {
             const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
             result[camelKey] = toCamelCase(obj[key]);
@@ -531,7 +532,9 @@ async function importAnkiPackage(fileOrBytes: File | Uint8Array) {
             answer: item.answer,
         });
 
-        items.push(toCamelCase(createdItem));
+        // Convert to plain object to ensure proper serialization
+        const camelItem = toCamelCase(createdItem);
+        items.push(JSON.parse(JSON.stringify(camelItem)));
     }
 
     return items;
