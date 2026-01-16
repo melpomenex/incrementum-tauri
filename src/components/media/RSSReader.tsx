@@ -20,12 +20,18 @@ import {
   Feed,
   FeedItem,
   getSubscribedFeeds,
+  getSubscribedFeedsAuto,
   fetchFeed,
   subscribeToFeed,
+  subscribeToFeedAuto,
   unsubscribeFromFeed,
+  unsubscribeFromFeedAuto,
   markItemRead,
+  markItemReadAuto,
   markFeedRead,
+  markFeedReadAuto,
   toggleItemFavorite,
+  toggleItemFavoriteAuto,
   getUnreadItems,
   getFavoriteItems,
   searchFeedItems,
@@ -33,9 +39,16 @@ import {
   createFolder,
   addFeedToFolder,
   importOPML,
+  importOpmlAuto,
   exportOPML,
+  exportOpmlAuto,
   formatFeedDate,
+  createFeedViaHttp,
+  setRssPreferencesAuto,
+  getRssPreferencesAuto,
+  type RssUserPreference,
 } from "../../api/rss";
+import { RSSCustomizationPanel, RSSUserPreferenceUpdate } from "./RSSCustomizationPanel";
 
 type ViewMode = "all" | "unread" | "favorites" | "search";
 type SortOrder = "date" | "title";
@@ -48,13 +61,42 @@ export function RSSReader() {
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showCustomization, setShowCustomization] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [folders, setFolders] = useState(getFeedFolders());
+  const [preferences, setPreferences] = useState<RssUserPreference | null>(null);
+
+  // Apply preferences when saved
+  const handleSavePreferences = async (newPreferences: RSSUserPreferenceUpdate) => {
+    try {
+      const saved = await setRssPreferencesAuto(newPreferences, selectedFeed?.id);
+      setPreferences(saved);
+      console.log("Preferences saved successfully:", saved);
+    } catch (error) {
+      console.error("Failed to save preferences:", error);
+    }
+  };
+
+  // Load preferences on mount or when feed changes
+  useEffect(() => {
+    (async () => {
+      if (selectedFeed) {
+        try {
+          const loaded = await getRssPreferencesAuto(selectedFeed.id);
+          setPreferences(loaded);
+        } catch (error) {
+          console.error("Failed to load preferences:", error);
+        }
+      }
+    })();
+  }, [selectedFeed]);
 
   // Load feeds on mount
   useEffect(() => {
-    loadFeeds();
+    (async () => {
+      await loadFeeds();
+    })();
   }, []);
 
   // Update items when feeds or view mode changes
@@ -70,8 +112,9 @@ export function RSSReader() {
     }
   }, [viewMode, selectedFeed, feeds, searchQuery]);
 
-  const loadFeeds = () => {
-    setFeeds(getSubscribedFeeds());
+  const loadFeeds = async () => {
+    const feeds = await getSubscribedFeedsAuto();
+    setFeeds(feeds);
     setFolders(getFeedFolders());
   };
 
@@ -82,8 +125,8 @@ export function RSSReader() {
     try {
       const feed = await fetchFeed(newFeedUrl);
       if (feed) {
-        subscribeToFeed(feed);
-        loadFeeds();
+        await subscribeToFeedAuto(feed);
+        await loadFeeds();
         setSelectedFeed(feed);
         setShowAddDialog(false);
         setNewFeedUrl("");
@@ -124,34 +167,34 @@ export function RSSReader() {
     }
   };
 
-  const handleRemoveFeed = (feedId: string) => {
+  const handleRemoveFeed = async (feedId: string) => {
     if (confirm("Are you sure you want to unsubscribe from this feed?")) {
-      unsubscribeFromFeed(feedId);
-      loadFeeds();
+      await unsubscribeFromFeedAuto(feedId);
+      await loadFeeds();
       if (selectedFeed?.id === feedId) {
         setSelectedFeed(null);
       }
     }
   };
 
-  const handleItemClick = (feed: Feed, item: FeedItem) => {
-    markItemRead(feed.id, item.id, true);
-    loadFeeds();
+  const handleItemClick = async (feed: Feed, item: FeedItem) => {
+    await markItemReadAuto(feed.id, item.id, true);
+    await loadFeeds();
     setSelectedItem(item);
   };
 
-  const handleToggleFavorite = (feed: Feed, item: FeedItem) => {
-    toggleItemFavorite(feed.id, item.id);
-    loadFeeds();
+  const handleToggleFavorite = async (feed: Feed, item: FeedItem) => {
+    await toggleItemFavoriteAuto(feed.id, item.id);
+    await loadFeeds();
   };
 
-  const handleMarkAllRead = (feedId: string) => {
-    markFeedRead(feedId);
-    loadFeeds();
+  const handleMarkAllRead = async (feedId: string) => {
+    await markFeedReadAuto(feedId);
+    await loadFeeds();
   };
 
-  const handleExportOPML = () => {
-    const opml = exportOPML();
+  const handleExportOPML = async () => {
+    const opml = await exportOpmlAuto();
     const blob = new Blob([opml], { type: "application/xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -169,12 +212,11 @@ export function RSSReader() {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
           const content = event.target?.result as string;
-          const importedFeeds = importOPML(content);
-          importedFeeds.forEach((feed) => subscribeToFeed(feed));
-          loadFeeds();
-          alert(`Imported ${importedFeeds.length} feeds`);
+          const importedFeeds = await importOpmlAuto(content);
+          await loadFeeds();
+          alert(`Imported feeds successfully`);
         };
         reader.readAsText(file);
       }
@@ -216,6 +258,13 @@ export function RSSReader() {
                 title="Export OPML"
               >
                 <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowCustomization(true)}
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                title="Customize view"
+              >
+                <Settings className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -512,6 +561,14 @@ export function RSSReader() {
           </div>
         </div>
       )}
+
+      {/* Customization Panel */}
+      <RSSCustomizationPanel
+        feedId={selectedFeed?.id}
+        isOpen={showCustomization}
+        onClose={() => setShowCustomization(false)}
+        onSave={handleSavePreferences}
+      />
     </div>
   );
 }

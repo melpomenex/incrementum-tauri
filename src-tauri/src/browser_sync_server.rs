@@ -8,14 +8,28 @@ use crate::ai::{AIConfig, AIProvider, LLMProviderType};
 use crate::ai::summarizer::Summarizer;
 use crate::ai::qa::QuestionAnswerer;
 use crate::ai::flashcard_generator::{FlashcardGenerator, FlashcardGenerationOptions};
+use crate::commands::rss::{
+    fetch_rss_feed_url,
+    RssFeed,
+    RssUserPreference,
+    RssUserPreferenceUpdate,
+    create_rss_feed_http,
+    get_rss_feeds_http,
+    get_rss_feed_http,
+    update_rss_feed_http,
+    delete_rss_feed_http,
+    get_rss_articles_http,
+    mark_rss_article_read_http,
+    toggle_rss_article_queued_http,
+};
 use crate::database::Repository;
 use crate::error::AppError;
 use crate::models::{Document, FileType, Extract};
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Json, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -177,6 +191,80 @@ pub struct AIStatusResponse {
     pub model: Option<String>,
 }
 
+/// RSS feed creation request
+#[derive(Debug, Deserialize)]
+pub struct CreateFeedRequest {
+    pub url: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub update_interval: Option<i32>,
+    #[serde(default)]
+    pub auto_queue: Option<bool>,
+}
+
+/// RSS feed update request
+#[derive(Debug, Deserialize)]
+pub struct UpdateFeedRequest {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub update_interval: Option<i32>,
+    #[serde(default)]
+    pub auto_queue: Option<bool>,
+    #[serde(default)]
+    pub is_active: Option<bool>,
+}
+
+/// RSS feed response with unread count
+#[derive(Debug, Clone, Serialize)]
+pub struct FeedResponse {
+    #[serde(flatten)]
+    pub feed: RssFeed,
+    pub unread_count: i32,
+}
+
+/// OPML import request
+#[derive(Debug, Deserialize)]
+pub struct OpmlImportRequest {
+    pub opml_content: String,
+}
+
+/// OPML export response
+#[derive(Debug, Serialize)]
+pub struct OpmlExportResponse {
+    pub opml_content: String,
+}
+
+/// Document progress update request
+#[derive(Debug, Deserialize)]
+pub struct UpdateProgressRequest {
+    pub current_page: Option<i32>,
+}
+
+/// Document response
+#[derive(Debug, Serialize)]
+pub struct DocumentResponse {
+    pub id: String,
+    pub title: String,
+    pub file_path: String,
+    pub file_type: String,
+    pub current_page: Option<i32>,
+    pub total_pages: Option<i32>,
+    pub content: Option<String>,
+    pub category: Option<String>,
+    pub tags: Vec<String>,
+    pub date_added: String,
+    pub date_modified: String,
+}
+
 /// Global server handle for shutdown
 static SERVER_HANDLE: Mutex<Option<tokio::task::JoinHandle<()>>> = Mutex::const_new(None);
 
@@ -207,11 +295,25 @@ pub async fn start_server(
         ai_config: Arc::new(Mutex::new(ai_config)),
     };
 
-    // Build router with AI endpoints
+    // Build router with AI, RSS, and Document endpoints
     let app = Router::new()
+        // Extension/AI endpoints
         .route("/", post(handle_extension_request))
         .route("/ai/process", post(handle_ai_request))
         .route("/ai/status", get(handle_ai_status))
+        // RSS feed endpoints
+        .route("/api/rss/feeds", post(handle_create_feed).get(handle_list_feeds))
+        .route("/api/rss/feeds/:id", get(handle_get_feed).put(handle_update_feed).delete(handle_delete_feed))
+        .route("/api/rss/feeds/:id/articles", get(handle_get_feed_articles))
+        .route("/api/rss/articles/:id", post(handle_mark_article))
+        .route("/api/rss/articles/:id/queued", post(handle_toggle_article_queued))
+        .route("/api/rss/fetch", get(handle_fetch_feed_url))
+        .route("/api/rss/opml/import", post(handle_opml_import))
+        .route("/api/rss/opml/export", get(handle_opml_export))
+        .route("/api/rss/preferences", get(handle_get_preferences).put(handle_set_preferences))
+        // Document progress endpoints
+        .route("/api/documents/:id", get(handle_get_document))
+        .route("/api/documents/:id/progress", post(handle_update_progress))
         .layer(CorsLayer::permissive())
         .layer(RequestBodyLimitLayer::new(MAX_PAYLOAD_SIZE))
         .with_state(state);
@@ -826,6 +928,482 @@ async fn handle_ai_status(
     };
 
     (StatusCode::OK, Json(response)).into_response()
+}
+
+/// ============================================================================
+/// RSS API Handlers
+/// ============================================================================
+
+/// Handle RSS feed creation
+async fn handle_create_feed(
+    State(state): State<ServerState>,
+    Json(payload): Json<CreateFeedRequest>,
+) -> Response {
+    match create_rss_feed_http(
+        payload.url,
+        payload.title,
+        payload.description,
+        payload.category,
+        payload.update_interval,
+        payload.auto_queue,
+        &state.repo,
+    ).await {
+        Ok(feed) => {
+            let unread_count = state.repo.get_rss_feed_unread_count(&feed.id).await.unwrap_or(0);
+            let response = FeedResponse {
+                feed,
+                unread_count,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            error!("Failed to create RSS feed: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle listing all RSS feeds
+async fn handle_list_feeds(
+    State(state): State<ServerState>,
+) -> Response {
+    match get_rss_feeds_http(&state.repo).await {
+        Ok(feeds) => {
+            let mut responses = Vec::new();
+            for feed in feeds {
+                let unread_count = state.repo.get_rss_feed_unread_count(&feed.id).await.unwrap_or(0);
+                responses.push(FeedResponse {
+                    feed,
+                    unread_count,
+                });
+            }
+            (StatusCode::OK, Json(responses)).into_response()
+        }
+        Err(e) => {
+            error!("Failed to list RSS feeds: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle getting a specific RSS feed
+async fn handle_get_feed(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    match get_rss_feed_http(&id, &state.repo).await {
+        Ok(Some(feed)) => {
+            let unread_count = state.repo.get_rss_feed_unread_count(&feed.id).await.unwrap_or(0);
+            let response = FeedResponse {
+                feed,
+                unread_count,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "Feed not found"),
+        Err(e) => {
+            error!("Failed to get RSS feed: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle updating an RSS feed
+async fn handle_update_feed(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(payload): Json<UpdateFeedRequest>,
+) -> Response {
+    match update_rss_feed_http(
+        &id,
+        payload.title,
+        payload.description,
+        payload.category,
+        payload.update_interval,
+        payload.auto_queue,
+        payload.is_active,
+        &state.repo,
+    ).await {
+        Ok(feed) => {
+            let unread_count = state.repo.get_rss_feed_unread_count(&feed.id).await.unwrap_or(0);
+            let response = FeedResponse {
+                feed,
+                unread_count,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            error!("Failed to update RSS feed: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle deleting an RSS feed
+async fn handle_delete_feed(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    match delete_rss_feed_http(&id, &state.repo).await {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"success": true}))).into_response(),
+        Err(e) => {
+            error!("Failed to delete RSS feed: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle getting articles for a feed
+async fn handle_get_feed_articles(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let limit = params.get("limit").and_then(|l| l.parse::<i32>().ok());
+    let feed_id = if id == "all" { None } else { Some(id.clone()) };
+
+    match get_rss_articles_http(feed_id.as_deref(), limit, &state.repo).await {
+        Ok(articles) => (StatusCode::OK, Json(articles)).into_response(),
+        Err(e) => {
+            error!("Failed to get RSS articles: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle marking an article as read/unread
+async fn handle_mark_article(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let is_read = params.get("read")
+        .and_then(|r| r.parse::<bool>().ok())
+        .unwrap_or(true);
+
+    match mark_rss_article_read_http(&id, is_read, &state.repo).await {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"success": true}))).into_response(),
+        Err(e) => {
+            error!("Failed to mark article: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle toggling article queued status
+async fn handle_toggle_article_queued(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    match toggle_rss_article_queued_http(&id, &state.repo).await {
+        Ok(queued) => (StatusCode::OK, Json(serde_json::json!({"success": true, "queued": queued}))).into_response(),
+        Err(e) => {
+            error!("Failed to toggle article queued: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle fetching and parsing a feed URL (without subscribing)
+async fn handle_fetch_feed_url(
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let url = match params.get("url") {
+        Some(u) => u.clone(),
+        None => return error_response(StatusCode::BAD_REQUEST, "Missing url parameter"),
+    };
+
+    match fetch_rss_feed_url(url).await {
+        Ok(parsed_feed) => (StatusCode::OK, Json(parsed_feed)).into_response(),
+        Err(e) => {
+            error!("Failed to fetch feed URL: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle OPML import
+async fn handle_opml_import(
+    State(state): State<ServerState>,
+    Json(payload): Json<OpmlImportRequest>,
+) -> Response {
+    // Parse OPML content
+    let parsed_feeds = match parse_opml_content(&payload.opml_content) {
+        Ok(feeds) => feeds,
+        Err(e) => {
+            return error_response(StatusCode::BAD_REQUEST, &format!("Failed to parse OPML: {}", e));
+        }
+    };
+
+    let mut imported_count = 0;
+    let mut errors = Vec::new();
+
+    for feed_data in parsed_feeds {
+        let title = feed_data.title.clone();
+        match create_rss_feed_http(
+            feed_data.url,
+            feed_data.title,
+            feed_data.description,
+            feed_data.category,
+            feed_data.update_interval,
+            feed_data.auto_queue,
+            &state.repo,
+        ).await {
+            Ok(_) => imported_count += 1,
+            Err(e) => errors.push(format!("Failed to import {}: {}", title, e)),
+        }
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "imported": imported_count,
+        "errors": errors
+    }))).into_response()
+}
+
+/// Handle OPML export
+async fn handle_opml_export(
+    State(state): State<ServerState>,
+) -> Response {
+    match get_rss_feeds_http(&state.repo).await {
+        Ok(feeds) => {
+            let opml_content = generate_opml_content(&feeds);
+            let response = OpmlExportResponse { opml_content };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            error!("Failed to export feeds: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Parsed feed data from OPML
+#[derive(Debug)]
+struct OpmlFeedData {
+    url: String,
+    title: String,
+    description: Option<String>,
+    category: Option<String>,
+    update_interval: Option<i32>,
+    auto_queue: Option<bool>,
+}
+
+/// Parse OPML content and extract feed data
+fn parse_opml_content(content: &str) -> Result<Vec<OpmlFeedData>, String> {
+    use roxmltree::Document;
+
+    let doc = Document::parse(content)
+        .map_err(|e| format!("Failed to parse OPML XML: {}", e))?;
+
+    let mut feeds = Vec::new();
+
+    // Find all outline elements (RSS feeds in OPML)
+    for node in doc.descendants() {
+        if node.tag_name().name() == "outline" {
+            if let Some(url) = node.attribute("xmlUrl").or_else(|| node.attribute("htmlUrl")) {
+                let title = node.attribute("title")
+                    .or_else(|| node.attribute("text"))
+                    .unwrap_or("Unknown Feed")
+                    .to_string();
+
+                feeds.push(OpmlFeedData {
+                    url: url.to_string(),
+                    title,
+                    description: node.attribute("description").map(|s| s.to_string()),
+                    category: node.attribute("category").map(|s| s.to_string()),
+                    update_interval: None,
+                    auto_queue: None,
+                });
+            }
+        }
+    }
+
+    Ok(feeds)
+}
+
+/// Generate OPML content from feeds
+fn generate_opml_content(feeds: &[RssFeed]) -> String {
+    let mut opml = String::from(r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Incrementum RSS Feeds</title>
+    <dateCreated>"#);
+
+    opml.push_str(&chrono::Utc::now().to_rfc3339());
+    opml.push_str(r#"</dateCreated>
+  </head>
+  <body>
+"#);
+
+    for feed in feeds {
+        opml.push_str(r#"    <outline type="rss""#);
+        opml.push_str(&format!(" xmlUrl=\"{}\"", feed.url));
+        opml.push_str(&format!(" title=\"{}\"", escape_xml(&feed.title)));
+        opml.push_str(&format!(" text=\"{}\"", escape_xml(&feed.title)));
+        if let Some(desc) = &feed.description {
+            opml.push_str(&format!(" description=\"{}\"", escape_xml(desc)));
+        }
+        if let Some(category) = &feed.category {
+            opml.push_str(&format!(" category=\"{}\"", escape_xml(category)));
+        }
+        opml.push_str("/>\n");
+    }
+
+    opml.push_str(r#"  </body>
+</opml>"#);
+
+    opml
+}
+
+/// Escape XML special characters
+fn escape_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+// ============================================================================
+// RSS User Preferences API Handlers
+// ============================================================================
+
+/// Request to get RSS user preferences
+#[derive(Debug, Deserialize)]
+pub struct GetPreferencesRequest {
+    pub feed_id: Option<String>,
+    pub user_id: Option<String>,
+}
+
+/// Handle getting RSS user preferences
+async fn handle_get_preferences(
+    State(state): State<ServerState>,
+    Query(params): Query<GetPreferencesRequest>,
+) -> Response {
+    let feed_id = params.feed_id.as_deref();
+    let user_id = params.user_id.as_deref();
+
+    match state.repo.get_rss_user_preferences(feed_id, user_id).await {
+        Ok(Some(prefs)) => (StatusCode::OK, Json(prefs)).into_response(),
+        Ok(None) => {
+            // Return default preferences if none exist
+            let defaults = RssUserPreference {
+                id: uuid::Uuid::new_v4().to_string(),
+                user_id: user_id.map(|s| s.to_string()),
+                feed_id: feed_id.map(|s| s.to_string()),
+                keyword_include: None,
+                keyword_exclude: None,
+                author_whitelist: None,
+                author_blacklist: None,
+                category_filter: None,
+                view_mode: Some("card".to_string()),
+                theme_mode: Some("system".to_string()),
+                density: Some("normal".to_string()),
+                column_count: Some(2),
+                show_thumbnails: Some(true),
+                excerpt_length: Some(150),
+                show_author: Some(true),
+                show_date: Some(true),
+                show_feed_icon: Some(true),
+                sort_by: Some("date".to_string()),
+                sort_order: Some("desc".to_string()),
+                date_created: chrono::Utc::now().to_rfc3339(),
+                date_modified: chrono::Utc::now().to_rfc3339(),
+            };
+            (StatusCode::OK, Json(defaults)).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get RSS preferences: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle setting RSS user preferences
+async fn handle_set_preferences(
+    State(state): State<ServerState>,
+    Query(params): Query<GetPreferencesRequest>,
+    Json(prefs): Json<RssUserPreferenceUpdate>,
+) -> Response {
+    let feed_id = params.feed_id.as_deref();
+    let user_id = params.user_id.as_deref();
+
+    match state.repo.set_rss_user_preferences(feed_id, user_id, prefs).await {
+        Ok(updated_prefs) => (StatusCode::OK, Json(updated_prefs)).into_response(),
+        Err(e) => {
+            error!("Failed to set RSS preferences: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+// ============================================================================
+// Document Progress API Handlers
+// ============================================================================
+
+/// Handle getting a document by ID
+async fn handle_get_document(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    use crate::database::Repository;
+
+    match state.repo.get_document(&id).await {
+        Ok(Some(doc)) => {
+            let response = DocumentResponse {
+                id: doc.id,
+                title: doc.title,
+                file_path: doc.file_path,
+                file_type: format!("{:?}", doc.file_type),
+                current_page: doc.current_page,
+                total_pages: doc.total_pages,
+                content: doc.content,
+                category: doc.category,
+                tags: doc.tags,
+                date_added: doc.date_added.to_rfc3339(),
+                date_modified: doc.date_modified.to_rfc3339(),
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "Document not found"),
+        Err(e) => {
+            error!("Failed to get document: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// Handle updating document progress
+async fn handle_update_progress(
+    State(state): State<ServerState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(payload): Json<UpdateProgressRequest>,
+) -> Response {
+    use crate::database::Repository;
+
+    match state.repo.update_document_progress(&id, payload.current_page).await {
+        Ok(updated_doc) => {
+            let response = DocumentResponse {
+                id: updated_doc.id,
+                title: updated_doc.title,
+                file_path: updated_doc.file_path,
+                file_type: format!("{:?}", updated_doc.file_type),
+                current_page: updated_doc.current_page,
+                total_pages: updated_doc.total_pages,
+                content: updated_doc.content,
+                category: updated_doc.category,
+                tags: updated_doc.tags,
+                date_added: updated_doc.date_added.to_rfc3339(),
+                date_modified: updated_doc.date_modified.to_rfc3339(),
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            error!("Failed to update progress: {}", e);
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
 }
 
 /// Tauri commands

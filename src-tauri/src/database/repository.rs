@@ -1283,6 +1283,224 @@ impl Repository {
 
         Ok(())
     }
+
+    // ============================================================================
+    // RSS Feed operations
+    // ============================================================================
+
+    /// Get the count of unread articles for a specific RSS feed
+    pub async fn get_rss_feed_unread_count(&self, feed_id: &str) -> Result<i32> {
+        let row = sqlx::query("SELECT COUNT(*) as count FROM rss_articles WHERE feed_id = ?1 AND is_read = 0")
+            .bind(feed_id)
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(row.get("count"))
+    }
+
+    // ============================================================================
+    // RSS User Preferences operations
+    // ============================================================================
+
+    /// Get RSS user preferences for a specific feed or user
+    pub async fn get_rss_user_preferences(
+        &self,
+        feed_id: Option<&str>,
+        user_id: Option<&str>,
+    ) -> Result<Option<crate::commands::rss::RssUserPreference>> {
+        let row = match (feed_id, user_id) {
+            (Some(fid), Some(uid)) => {
+                sqlx::query(
+                    "SELECT * FROM rss_user_preferences WHERE feed_id = ?1 AND user_id = ?2 LIMIT 1"
+                )
+                .bind(fid)
+                .bind(uid)
+                .fetch_optional(&self.pool)
+                .await?
+            }
+            (Some(fid), None) => {
+                sqlx::query(
+                    "SELECT * FROM rss_user_preferences WHERE feed_id = ?1 LIMIT 1"
+                )
+                .bind(fid)
+                .fetch_optional(&self.pool)
+                .await?
+            }
+            (None, Some(uid)) => {
+                sqlx::query(
+                    "SELECT * FROM rss_user_preferences WHERE user_id = ?1 LIMIT 1"
+                )
+                .bind(uid)
+                .fetch_optional(&self.pool)
+                .await?
+            }
+            (None, None) => {
+                sqlx::query("SELECT * FROM rss_user_preferences LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?
+            }
+        };
+
+        Ok(row.map(|r| self.row_to_rss_user_preference(r)))
+    }
+
+    /// Set or update RSS user preferences
+    pub async fn set_rss_user_preferences(
+        &self,
+        feed_id: Option<&str>,
+        user_id: Option<&str>,
+        prefs: crate::commands::rss::RssUserPreferenceUpdate,
+    ) -> Result<crate::commands::rss::RssUserPreference> {
+        let now = Utc::now().to_rfc3339();
+
+        // Check if preferences already exist
+        let existing = self.get_rss_user_preferences(feed_id, user_id).await?;
+
+        let pref = if let Some(existing) = existing {
+            // Update existing preferences
+            let id = existing.id;
+            sqlx::query(
+                r#"
+                UPDATE rss_user_preferences SET
+                    keyword_include = COALESCE(?1, keyword_include),
+                    keyword_exclude = COALESCE(?2, keyword_exclude),
+                    author_whitelist = COALESCE(?3, author_whitelist),
+                    author_blacklist = COALESCE(?4, author_blacklist),
+                    category_filter = COALESCE(?5, category_filter),
+                    view_mode = COALESCE(?6, view_mode),
+                    theme_mode = COALESCE(?7, theme_mode),
+                    density = COALESCE(?8, density),
+                    column_count = COALESCE(?9, column_count),
+                    show_thumbnails = COALESCE(?10, show_thumbnails),
+                    excerpt_length = COALESCE(?11, excerpt_length),
+                    show_author = COALESCE(?12, show_author),
+                    show_date = COALESCE(?13, show_date),
+                    show_feed_icon = COALESCE(?14, show_feed_icon),
+                    sort_by = COALESCE(?15, sort_by),
+                    sort_order = COALESCE(?16, sort_order),
+                    date_modified = ?17
+                WHERE id = ?18
+                "#,
+            )
+            .bind(&prefs.keyword_include)
+            .bind(&prefs.keyword_exclude)
+            .bind(&prefs.author_whitelist)
+            .bind(&prefs.author_blacklist)
+            .bind(&prefs.category_filter)
+            .bind(&prefs.view_mode)
+            .bind(&prefs.theme_mode)
+            .bind(&prefs.density)
+            .bind(prefs.column_count)
+            .bind(prefs.show_thumbnails)
+            .bind(prefs.excerpt_length)
+            .bind(prefs.show_author)
+            .bind(prefs.show_date)
+            .bind(prefs.show_feed_icon)
+            .bind(&prefs.sort_by)
+            .bind(&prefs.sort_order)
+            .bind(&now)
+            .bind(&id)
+            .execute(&self.pool)
+            .await?;
+
+            self.get_rss_user_preferences_by_id(&id).await?.unwrap()
+        } else {
+            // Create new preferences
+            let id = uuid::Uuid::new_v4().to_string();
+            sqlx::query(
+                r#"
+                INSERT INTO rss_user_preferences (
+                    id, user_id, feed_id,
+                    keyword_include, keyword_exclude, author_whitelist, author_blacklist, category_filter,
+                    view_mode, theme_mode, density, column_count,
+                    show_thumbnails, excerpt_length, show_author, show_date, show_feed_icon,
+                    sort_by, sort_order,
+                    date_created, date_modified
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+                "#,
+            )
+            .bind(&id)
+            .bind(user_id)
+            .bind(feed_id)
+            .bind(&prefs.keyword_include)
+            .bind(&prefs.keyword_exclude)
+            .bind(&prefs.author_whitelist)
+            .bind(&prefs.author_blacklist)
+            .bind(&prefs.category_filter)
+            .bind(&prefs.view_mode)
+            .bind(&prefs.theme_mode)
+            .bind(&prefs.density)
+            .bind(prefs.column_count)
+            .bind(prefs.show_thumbnails)
+            .bind(prefs.excerpt_length)
+            .bind(prefs.show_author)
+            .bind(prefs.show_date)
+            .bind(prefs.show_feed_icon)
+            .bind(&prefs.sort_by)
+            .bind(&prefs.sort_order)
+            .bind(&now)
+            .bind(&now)
+            .execute(&self.pool)
+            .await?;
+
+            self.get_rss_user_preferences_by_id(&id).await?.unwrap()
+        };
+
+        Ok(pref)
+    }
+
+    /// Get RSS user preferences by ID
+    async fn get_rss_user_preferences_by_id(
+        &self,
+        id: &str,
+    ) -> Result<Option<crate::commands::rss::RssUserPreference>> {
+        let row = sqlx::query("SELECT * FROM rss_user_preferences WHERE id = ?1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(row.map(|r| self.row_to_rss_user_preference(r)))
+    }
+
+    /// Get all RSS user preferences for a user
+    pub async fn get_all_rss_user_preferences(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<crate::commands::rss::RssUserPreference>> {
+        let rows = sqlx::query("SELECT * FROM rss_user_preferences WHERE user_id = ?1")
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows.into_iter().map(|r| self.row_to_rss_user_preference(r)).collect())
+    }
+
+    /// Helper to convert database row to RssUserPreference
+    fn row_to_rss_user_preference(&self, row: sqlx::sqlite::SqliteRow) -> crate::commands::rss::RssUserPreference {
+        crate::commands::rss::RssUserPreference {
+            id: row.get("id"),
+            user_id: row.try_get("user_id").ok(),
+            feed_id: row.try_get("feed_id").ok(),
+            keyword_include: row.try_get("keyword_include").ok(),
+            keyword_exclude: row.try_get("keyword_exclude").ok(),
+            author_whitelist: row.try_get("author_whitelist").ok(),
+            author_blacklist: row.try_get("author_blacklist").ok(),
+            category_filter: row.try_get("category_filter").ok(),
+            view_mode: row.try_get("view_mode").ok(),
+            theme_mode: row.try_get("theme_mode").ok(),
+            density: row.try_get("density").ok(),
+            column_count: row.try_get("column_count").ok(),
+            show_thumbnails: row.try_get("show_thumbnails").ok(),
+            excerpt_length: row.try_get("excerpt_length").ok(),
+            show_author: row.try_get("show_author").ok(),
+            show_date: row.try_get("show_date").ok(),
+            show_feed_icon: row.try_get("show_feed_icon").ok(),
+            sort_by: row.try_get("sort_by").ok(),
+            sort_order: row.try_get("sort_order").ok(),
+            date_created: row.get("date_created"),
+            date_modified: row.get("date_modified"),
+        }
+    }
 }
 
 // Helper struct for study statistics rows

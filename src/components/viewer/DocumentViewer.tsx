@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize } from "lucide-react";
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize, Share2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useDocumentStore, useTabsStore, useQueueStore } from "../../stores";
 import { PDFViewer } from "./PDFViewer";
@@ -8,6 +8,7 @@ import { EPUBViewer } from "./EPUBViewer";
 import { YouTubeViewer } from "./YouTubeViewer";
 import { ExtractsList } from "../extracts/ExtractsList";
 import { LearningCardsList } from "../learning/LearningCardsList";
+import { useToast } from "../common/Toast";
 import { CreateExtractDialog } from "../extracts/CreateExtractDialog";
 import { QueueNavigationControls } from "../queue/QueueNavigationControls";
 import { HoverRatingControls } from "../review/HoverRatingControls";
@@ -17,6 +18,7 @@ import * as documentsApi from "../../api/documents";
 import { rateDocument } from "../../api/algorithm";
 import type { ReviewRating } from "../../api/review";
 import { autoExtractWithCache, isAutoExtractEnabled } from "../../utils/documentAutoExtract";
+import { generateShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
 
 type ViewMode = "document" | "extracts" | "cards";
 
@@ -60,6 +62,7 @@ export function DocumentViewer({
   disableHoverRating = false,
   onSelectionChange,
 }: DocumentViewerProps) {
+  const toast = useToast();
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
   const { closeTab, tabs, updateTab } = useTabsStore();
   const { items: queueItems, loadQueue } = useQueueStore();
@@ -196,6 +199,43 @@ export function DocumentViewer({
       }
     }
   }, [documentId, documents, setCurrentDocument, loadDocumentData]);
+
+  // Parse URL fragment and restore state after document is loaded
+  useEffect(() => {
+    if (!currentDocument || !documentId) return;
+
+    const state = parseStateFromUrl();
+
+    // Restore page number from fragment
+    if (state.pos !== undefined) {
+      setPageNumber(state.pos);
+    }
+
+    // Restore scroll position from fragment
+    if (state.scroll !== undefined) {
+      // Scroll to percentage position
+      setTimeout(() => {
+        const scrollableElement = document.querySelector('[data-document-scroll-container]');
+        if (scrollableElement) {
+          const scrollHeight = scrollableElement.scrollHeight - scrollableElement.clientHeight;
+          const targetScroll = (state.scroll / 100) * scrollHeight;
+          scrollableElement.scrollTop = targetScroll;
+        } else {
+          // Fallback to window scroll
+          const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+          const targetScroll = (state.scroll / 100) * scrollHeight;
+          window.scrollTo(0, targetScroll);
+        }
+      }, 100);
+    }
+
+    // TODO: Restore highlights and extracts from fragment IDs
+    // This would require loading the specific highlights/extracts and displaying them
+    // For now, we just parse the state but don't restore highlights/extracts
+    if (state.highlights || state.extracts) {
+      console.log('[DocumentViewer] Shared state contains highlights/extracts:', state);
+    }
+  }, [currentDocument, documentId]);
 
   useEffect(() => {
     loadQueue();
@@ -395,6 +435,37 @@ export function DocumentViewer({
     }
   };
 
+  // Share document with current reading position
+  const handleShare = async () => {
+    if (!currentDocument) return;
+
+    // Build the document state with current position
+    const state: DocumentState = {};
+
+    // Add page position for documents
+    if (pageNumber && docType !== 'youtube') {
+      state.pos = pageNumber;
+    }
+
+    // Add timestamp for YouTube videos
+    if (docType === 'youtube') {
+      // YouTube videos store position differently - would need to get from player
+      // For now, we'll skip this as YouTubeViewer has its own share button
+    }
+
+    // Generate share URL
+    const baseUrl = window.location.origin;
+    const shareUrl = generateShareUrl(baseUrl, documentId, state);
+
+    // Copy to clipboard with toast notification
+    const success = await copyShareLink(shareUrl);
+    if (success) {
+      toast.success("Link copied!", "The document link has been copied to your clipboard.");
+    } else {
+      toast.error("Failed to copy", "Could not copy the link to clipboard.");
+    }
+  };
+
   if (!currentDocument) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -506,6 +577,15 @@ export function DocumentViewer({
             title="Create Extract"
           >
             <Lightbulb className="w-4 h-4" />
+          </button>
+
+          {/* Share Button */}
+          <button
+            onClick={handleShare}
+            className="p-2 rounded-md hover:bg-muted transition-colors relative"
+            title="Share document link"
+          >
+            <Share2 className="w-4 h-4" />
           </button>
 
           {/* View Mode Toggle */}

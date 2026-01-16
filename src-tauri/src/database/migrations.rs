@@ -443,6 +443,49 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_youtube_transcripts_document_id ON youtube_transcripts(document_id);
         "#,
     ),
+
+    // Migration 013: Add RSS user preferences for customization
+    Migration::new(
+        "013_add_rss_user_preferences",
+        r#"
+        -- RSS user preferences for customization
+        CREATE TABLE IF NOT EXISTS rss_user_preferences (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            feed_id TEXT,
+
+            -- Filter preferences
+            keyword_include TEXT,
+            keyword_exclude TEXT,
+            author_whitelist TEXT,
+            author_blacklist TEXT,
+            category_filter TEXT,
+
+            -- Display preferences
+            view_mode TEXT DEFAULT 'card', -- 'card', 'list', 'compact'
+            theme_mode TEXT DEFAULT 'system', -- 'system', 'light', 'dark'
+            density TEXT DEFAULT 'normal', -- 'compact', 'normal', 'comfortable'
+            column_count INTEGER DEFAULT 2,
+
+            -- Display options
+            show_thumbnails INTEGER DEFAULT 1,
+            excerpt_length INTEGER DEFAULT 150, -- characters
+            show_author INTEGER DEFAULT 1,
+            show_date INTEGER DEFAULT 1,
+            show_feed_icon INTEGER DEFAULT 1,
+
+            -- Sorting preferences
+            sort_by TEXT DEFAULT 'date', -- 'date', 'title', 'read_status', 'reading_time'
+            sort_order TEXT DEFAULT 'desc', -- 'asc', 'desc'
+
+            date_created TEXT NOT NULL,
+            date_modified TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_rss_prefs_user_id ON rss_user_preferences(user_id);
+        CREATE INDEX IF NOT EXISTS idx_rss_prefs_feed_id ON rss_user_preferences(feed_id);
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

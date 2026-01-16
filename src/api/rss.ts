@@ -665,3 +665,455 @@ export function formatFeedDate(dateString: string): string {
     return date.toLocaleDateString();
   }
 }
+
+// ============================================================================
+// HTTP API Functions (for Web Browser App)
+// ============================================================================
+
+/**
+ * Get the base URL for HTTP API calls
+ */
+function getApiBaseUrl(): string {
+  // Default to localhost for development
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? `${window.location.protocol}//${window.location.hostname}:8766`
+    : `${window.location.protocol}//${window.location.hostname}`;
+}
+
+/**
+ * Check if running in web mode (not Tauri)
+ */
+function isWebMode(): boolean {
+  return !("__TAURI__" in window);
+}
+
+/**
+ * HTTP-based RSS feed API response from backend
+ */
+interface BackendRssFeed {
+  id: string;
+  url: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  update_interval: number;
+  last_fetched: string | null;
+  is_active: boolean;
+  date_added: string;
+  auto_queue: boolean;
+}
+
+interface BackendRssArticle {
+  id: string;
+  feed_id: string;
+  url: string;
+  title: string;
+  author: string | null;
+  published_date: string | null;
+  content: string | null;
+  summary: string | null;
+  image_url: string | null;
+  is_queued: boolean;
+  is_read: boolean;
+  date_added: string;
+}
+
+/**
+ * Convert backend RSS feed format to frontend format
+ */
+function backendFeedToFrontend(feed: BackendRssFeed & { unread_count?: number }, items: BackendRssArticle[] = []): Feed {
+  return {
+    id: feed.id,
+    title: feed.title,
+    description: feed.description || "",
+    link: feed.url,
+    feedUrl: feed.url,
+    imageUrl: undefined,
+    language: undefined,
+    category: feed.category || undefined,
+    lastUpdated: feed.date_added,
+    lastFetched: feed.last_fetched || feed.date_added,
+    updateInterval: Math.floor(feed.update_interval / 60), // Convert seconds to minutes
+    items: items.map(item => ({
+      id: item.id,
+      title: item.title,
+      description: item.summary || "",
+      content: item.content || "",
+      link: item.url,
+      pubDate: item.published_date || item.date_added,
+      author: item.author || undefined,
+      categories: [],
+      guid: item.id,
+      read: item.is_read,
+      favorite: false,
+      feedId: feed.id,
+    })),
+    subscribeDate: feed.date_added,
+    unreadCount: feed.unread_count ?? 0,
+  };
+}
+
+/**
+ * Create an RSS feed subscription via HTTP API
+ */
+export async function createFeedViaHttp(feedUrl: string): Promise<Feed> {
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/fetch?url=${encodeURIComponent(feedUrl)}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch feed: ${response.statusText}`);
+  }
+
+  const parsedFeed = await response.json();
+
+  // Now create the subscription
+  const createResponse = await fetch(`${getApiBaseUrl()}/api/rss/feeds`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: feedUrl,
+      title: parsedFeed.title,
+      description: parsedFeed.description,
+      category: parsedFeed.category,
+      update_interval: 3600, // 1 hour
+      auto_queue: false,
+    }),
+  });
+
+  if (!createResponse.ok) {
+    throw new Error(`Failed to create feed: ${createResponse.statusText}`);
+  }
+
+  const createdFeed = await createResponse.json();
+  return backendFeedToFrontend(createdFeed);
+}
+
+/**
+ * Get all RSS feeds via HTTP API
+ */
+export async function getFeedsViaHttp(): Promise<Feed[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/feeds`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch feeds: ${response.statusText}`);
+  }
+
+  const feeds: Array<BackendRssFeed & { unread_count: number }> = await response.json();
+
+  // Fetch articles for each feed
+  const feedsWithItems = await Promise.all(
+    feeds.map(async (feed) => {
+      const articlesResponse = await fetch(`${getApiBaseUrl()}/api/rss/feeds/${feed.id}/articles?limit=50`);
+      if (articlesResponse.ok) {
+        const articles: BackendRssArticle[] = await articlesResponse.json();
+        return backendFeedToFrontend(feed, articles);
+      }
+      return backendFeedToFrontend(feed);
+    })
+  );
+
+  return feedsWithItems;
+}
+
+/**
+ * Get articles for a specific feed via HTTP API
+ */
+export async function getArticlesViaHttp(feedId: string, limit: number = 50): Promise<BackendRssArticle[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/feeds/${feedId}/articles?limit=${limit}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch articles: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Mark article as read/unread via HTTP API
+ */
+export async function markArticleReadViaHttp(articleId: string, isRead: boolean): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/articles/${articleId}?read=${isRead}`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to mark article: ${response.statusText}`);
+  }
+}
+
+/**
+ * Delete RSS feed via HTTP API
+ */
+export async function deleteFeedViaHttp(feedId: string): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/feeds/${feedId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete feed: ${response.statusText}`);
+  }
+}
+
+/**
+ * Import OPML via HTTP API
+ */
+export async function importOpmlViaHttp(opmlContent: string): Promise<{ imported: number; errors: string[] }> {
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/opml/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ opml_content: opmlContent }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to import OPML: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Export OPML via HTTP API
+ */
+export async function exportOpmlViaHttp(): Promise<string> {
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/opml/export`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to export OPML: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.opml_content;
+}
+
+/**
+ * RSS User Preference types
+ */
+export interface RssUserPreference {
+  id: string;
+  user_id?: string;
+  feed_id?: string;
+  keyword_include?: string | null;
+  keyword_exclude?: string | null;
+  author_whitelist?: string | null;
+  author_blacklist?: string | null;
+  category_filter?: string | null;
+  view_mode?: string | null;
+  theme_mode?: string | null;
+  density?: string | null;
+  column_count?: number | null;
+  show_thumbnails?: boolean | null;
+  excerpt_length?: number | null;
+  show_author?: boolean | null;
+  show_date?: boolean | null;
+  show_feed_icon?: boolean | null;
+  sort_by?: string | null;
+  sort_order?: string | null;
+  date_created: string;
+  date_modified: string;
+}
+
+export interface RssUserPreferenceUpdate {
+  keyword_include?: string | null;
+  keyword_exclude?: string | null;
+  author_whitelist?: string | null;
+  author_blacklist?: string | null;
+  category_filter?: string | null;
+  view_mode?: string | null;
+  theme_mode?: string | null;
+  density?: string | null;
+  column_count?: number | null;
+  show_thumbnails?: boolean | null;
+  excerpt_length?: number | null;
+  show_author?: boolean | null;
+  show_date?: boolean | null;
+  show_feed_icon?: boolean | null;
+  sort_by?: string | null;
+  sort_order?: string | null;
+}
+
+/**
+ * Get RSS user preferences via HTTP API
+ */
+export async function getRssPreferencesViaHttp(feedId?: string): Promise<RssUserPreference> {
+  const params = new URLSearchParams();
+  if (feedId) params.append('feed_id', feedId);
+
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/preferences?${params}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to get preferences: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Set RSS user preferences via HTTP API
+ */
+export async function setRssPreferencesViaHttp(
+  preferences: RssUserPreferenceUpdate,
+  feedId?: string
+): Promise<RssUserPreference> {
+  const params = new URLSearchParams();
+  if (feedId) params.append('feed_id', feedId);
+
+  const response = await fetch(`${getApiBaseUrl()}/api/rss/preferences?${params}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(preferences),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to set preferences: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Unified getRssPreferences - works in both Tauri and Web mode
+ */
+export async function getRssPreferencesAuto(feedId?: string): Promise<RssUserPreference> {
+  if (isWebMode()) {
+    return await getRssPreferencesViaHttp(feedId);
+  }
+  // In Tauri mode, return defaults for now
+  // TODO: Integrate with Tauri command once implemented
+  return {
+    id: 'default',
+    feed_id: feedId,
+    view_mode: 'card',
+    theme_mode: 'system',
+    density: 'normal',
+    column_count: 2,
+    show_thumbnails: true,
+    excerpt_length: 150,
+    show_author: true,
+    show_date: true,
+    show_feed_icon: true,
+    sort_by: 'date',
+    sort_order: 'desc',
+    date_created: new Date().toISOString(),
+    date_modified: new Date().toISOString(),
+  };
+}
+
+/**
+ * Unified setRssPreferences - works in both Tauri and Web mode
+ */
+export async function setRssPreferencesAuto(
+  preferences: RssUserPreferenceUpdate,
+  feedId?: string
+): Promise<RssUserPreference> {
+  if (isWebMode()) {
+    return await setRssPreferencesViaHttp(preferences, feedId);
+  }
+  // In Tauri mode, save to localStorage for now
+  // TODO: Integrate with Tauri command once implemented
+  const key = feedId ? `rss_prefs_${feedId}` : 'rss_prefs_global';
+  localStorage.setItem(key, JSON.stringify(preferences));
+
+  // Return a mock response
+  return {
+    id: 'default',
+    feed_id: feedId,
+    ...preferences,
+    date_created: new Date().toISOString(),
+    date_modified: new Date().toISOString(),
+  } as RssUserPreference;
+}
+
+// ============================================================================
+// Unified API Functions (works in both Tauri and Web mode)
+// ============================================================================
+
+/**
+ * Unified getSubscribedFeeds - works in both Tauri and Web mode
+ */
+export async function getSubscribedFeedsAuto(): Promise<Feed[]> {
+  if (isWebMode()) {
+    return await getFeedsViaHttp();
+  }
+  return getSubscribedFeeds();
+}
+
+/**
+ * Unified subscribeToFeed - works in both Tauri and Web mode
+ */
+export async function subscribeToFeedAuto(feed: Feed): Promise<void> {
+  if (isWebMode()) {
+    await createFeedViaHttp(feed.feedUrl);
+    return;
+  }
+  subscribeToFeed(feed);
+}
+
+/**
+ * Unified unsubscribeFromFeed - works in both Tauri and Web mode
+ */
+export async function unsubscribeFromFeedAuto(feedId: string): Promise<void> {
+  if (isWebMode()) {
+    await deleteFeedViaHttp(feedId);
+    return;
+  }
+  unsubscribeFromFeed(feedId);
+}
+
+/**
+ * Unified markItemRead - works in both Tauri and Web mode
+ */
+export async function markItemReadAuto(feedId: string, itemId: string, read: boolean = true): Promise<void> {
+  if (isWebMode()) {
+    await markArticleReadViaHttp(itemId, read);
+    return;
+  }
+  markItemRead(feedId, itemId, read);
+}
+
+/**
+ * Unified markFeedRead - works in both Tauri and Web mode
+ */
+export async function markFeedReadAuto(feedId: string): Promise<void> {
+  if (isWebMode()) {
+    // In web mode, mark all articles for this feed as read
+    const articles = await getArticlesViaHttp(feedId, 1000);
+    await Promise.all(articles.map(a => markArticleReadViaHttp(a.id, true)));
+    return;
+  }
+  markFeedRead(feedId);
+}
+
+/**
+ * Unified toggleItemFavorite - works in both Tauri and Web mode
+ */
+export async function toggleItemFavoriteAuto(feedId: string, itemId: string): Promise<void> {
+  if (isWebMode()) {
+    // In web mode, toggle queued status for favorite
+    await fetch(`${getApiBaseUrl()}/api/rss/articles/${itemId}/queued`, {
+      method: 'POST',
+    });
+    return;
+  }
+  toggleItemFavorite(feedId, itemId);
+}
+
+/**
+ * Unified importOPML - works in both Tauri and Web mode
+ */
+export async function importOpmlAuto(opmlContent: string): Promise<Feed[]> {
+  if (isWebMode()) {
+    const result = await importOpmlViaHttp(opmlContent);
+    // Return empty array since the backend handles the import
+    return [];
+  }
+  return importOPML(opmlContent);
+}
+
+/**
+ * Unified exportOPML - works in both Tauri and Web mode
+ */
+export async function exportOpmlAuto(): Promise<string> {
+  if (isWebMode()) {
+    return await exportOpmlViaHttp();
+  }
+  return exportOPML();
+}

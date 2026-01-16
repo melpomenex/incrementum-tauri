@@ -134,3 +134,82 @@ export async function fetchUrlContent(url: string): Promise<FetchedUrlContent> {
 export async function importYouTubeVideo(url: string): Promise<Document> {
   return await invokeCommand<Document>("import_youtube_video", { url });
 }
+
+// ============================================================================
+// HTTP API Functions (for Web Browser App)
+// ============================================================================
+
+/**
+ * Get the base URL for HTTP API calls
+ */
+function getApiBaseUrl(): string {
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? `${window.location.protocol}//${window.location.hostname}:8766`
+    : `${window.location.protocol}//${window.location.hostname}`;
+}
+
+/**
+ * Check if running in web mode (not Tauri)
+ */
+function isWebMode(): boolean {
+  return !("__TAURI__" in window);
+}
+
+/**
+ * HTTP-based document operations for web mode
+ */
+
+/**
+ * Get document by ID via HTTP API
+ */
+export async function getDocumentHttp(id: string): Promise<any | null> {
+  const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}`);
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
+    throw new Error(`Failed to get document: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Update document progress via HTTP API
+ */
+export async function updateDocumentProgressHttp(id: string, currentPage: number): Promise<any> {
+  const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}/progress`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      current_page: currentPage
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update progress: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Unified getDocument function that works in both Tauri and web mode
+ */
+export async function getDocumentAuto(id: string): Promise<any | null> {
+  if (isWebMode()) {
+    return await getDocumentHttp(id);
+  }
+  return await invokeCommand<Document | null>("get_document", { id });
+}
+
+/**
+ * Unified updateDocumentProgress function that works in both Tauri and web mode
+ */
+export async function updateDocumentProgressAuto(id: string, currentPage: number): Promise<any> {
+  if (isWebMode()) {
+    return await updateDocumentProgressHttp(id, currentPage);
+  }
+  return await invokeCommand<Document>("update_document_progress", { id, currentPage });
+}

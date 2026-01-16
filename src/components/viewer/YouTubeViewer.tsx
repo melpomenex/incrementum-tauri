@@ -4,10 +4,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Youtube, Clock, ExternalLink } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Youtube, Clock, ExternalLink, Share2 } from "lucide-react";
+import { useToast } from "../common/Toast";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
 import { getYouTubeEmbedURL, getYouTubeWatchURL, formatDuration } from "../../api/youtube";
+import { getDocumentAuto, updateDocumentProgressAuto } from "../../api/documents";
+import { generateShareUrl, generateYouTubeShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
 
 interface YouTubeViewerProps {
   videoId: string;
@@ -28,6 +31,7 @@ const AUTO_SAVE_INTERVAL = 5000;
 
 export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeViewerProps) {
   const playerRef = useRef<any>(null);
+  const toast = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -76,12 +80,23 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     loadTranscript();
   }, [loadTranscript]);
 
+  // Parse URL fragment to get initial timestamp
+  useEffect(() => {
+    const state = parseStateFromUrl();
+
+    // Check if URL has a timestamp parameter
+    if (state.time !== undefined) {
+      setStartTime(state.time);
+      console.log(`[YouTubeViewer] Restoring timestamp from URL: ${state.time}s`);
+    }
+  }, [videoId]);
+
   // Load saved position from document
   const loadSavedPosition = useCallback(async () => {
     if (!documentId) return;
 
     try {
-      const doc = await invoke<any>("get_document", { id: documentId });
+      const doc = await getDocumentAuto(documentId);
       if (doc && doc.current_page !== null && doc.current_page !== undefined) {
         const savedTime = doc.current_page;
         // For videos, current_page stores the timestamp in seconds
@@ -107,10 +122,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     }
 
     try {
-      await invoke("update_document_progress", {
-        id: documentId,
-        currentPage: Math.floor(time),
-      });
+      await updateDocumentProgressAuto(documentId, Math.floor(time));
       lastSavedTimeRef.current = time;
       console.log(`Saved video position: ${Math.floor(time)}s`);
     } catch (error) {
@@ -343,6 +355,20 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     URL.revokeObjectURL(url);
   };
 
+  // Share video with current timestamp
+  const handleShare = async () => {
+    // Generate YouTube share URL with current timestamp
+    const shareUrl = generateYouTubeShareUrl(videoId, currentTime);
+
+    // Copy to clipboard
+    const success = await copyShareLink(shareUrl);
+    if (success) {
+      toast.success("Link copied!", "The timestamped video link has been copied to your clipboard.");
+    } else {
+      toast.error("Failed to copy", "Could not copy the link to clipboard.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Video Player Container */}
@@ -428,6 +454,15 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
               {/* Right controls */}
               <div className="flex items-center gap-2">
+                {/* Share button */}
+                <button
+                  onClick={handleShare}
+                  className="text-white hover:text-red-400 transition-colors"
+                  title="Share with timestamp"
+                >
+                  <Share2 className="w-5 h-5" />
+                </button>
+
                 {/* YouTube link */}
                 <a
                   href={getYouTubeWatchURL(videoId)}
