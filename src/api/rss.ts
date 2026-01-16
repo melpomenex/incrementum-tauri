@@ -139,7 +139,7 @@ function parseRSSItem(item: Element): FeedItem | null {
     "";
   const link = getElementText(item, "link") || "";
   const pubDate = getElementText(item, "pubDate") || new Date().toISOString();
-  const author = getElementText(item, "author") || getElementText(item, "dc:creator");
+  const author = getElementText(item, "author") || getElementText(item, "dc\\:creator");
   const guid = getElementText(item, "guid");
 
   // Categories

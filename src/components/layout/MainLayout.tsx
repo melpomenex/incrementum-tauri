@@ -9,6 +9,7 @@ import { Tabs } from "../common/Tabs";
 import { DashboardTab, QueueTab, DocumentsTab, ReviewTab, AnalyticsTab, SettingsTab, WebBrowserTab } from "../tabs/TabRegistry";
 import { CommandCenter } from "../search/CommandCenter";
 import { captureAndSaveScreenshot } from "../../utils/screenshotCaptureFlow";
+import { MobileLayoutWrapper } from "../mobile/MobileLayoutWrapper";
 
 export function MainLayout() {
   const { tabs, addTab, loadTabs, activeTabId, setActiveTab, updateTab, closeTab, reopenLastClosedTab } = useTabsStore();
@@ -253,25 +254,27 @@ export function MainLayout() {
   }), [tabs, activeTabId, setActiveTab, closeTab, reopenLastClosedTab]);
 
   return (
-    <VimiumNavigationProvider
-      enabled={vimiumEnabled}
-      commands={vimiumCommands}
-      actions={vimiumActions}
-    >
-      <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-        {/* Toolbar - Fixed at top */}
-        <div className="flex-shrink-0">
-          <Toolbar />
-        </div>
+    <MobileLayoutWrapper>
+      <VimiumNavigationProvider
+        enabled={vimiumEnabled}
+        commands={vimiumCommands}
+        actions={vimiumActions}
+      >
+        <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+          {/* Toolbar - Fixed at top */}
+          <div className="flex-shrink-0">
+            <Toolbar />
+          </div>
 
-        {/* Tabbed Interface - Below toolbar - must grow to fill remaining height */}
-        <div className="flex-1 min-h-0" data-vimium-scroll>
-          <Tabs />
-        </div>
+          {/* Tabbed Interface - Below toolbar - must grow to fill remaining height */}
+          <div className="flex-1 min-h-0" data-vimium-scroll>
+            <Tabs />
+          </div>
 
-        {/* Global Command Center */}
-        <CommandCenter />
-      </div>
-    </VimiumNavigationProvider>
+          {/* Global Command Center */}
+          <CommandCenter />
+        </div>
+      </VimiumNavigationProvider>
+    </MobileLayoutWrapper>
   );
 }

@@ -1,0 +1,1099 @@
+/**
+ * Mobile PWA Styles
+ *
+ * Responsive styles for Progressive Web App mobile features
+ */
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+
+:root {
+  --mobile-breakpoint: 768px;
+  --tablet-breakpoint: 1024px;
+  --desktop-breakpoint: 1280px;
+}
+
+/* ==========================================================================
+   Mobile Reading Wrapper
+   ========================================================================== */
+
+.mobile-reading-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #0a0a0a;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-reading-wrapper.fullscreen {
+  z-index: 1000;
+}
+
+.mobile-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ==========================================================================
+   Mobile Header
+   ========================================================================== */
+
+.mobile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-header.visible {
+  opacity: 1;
+}
+
+.mobile-header.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mobile-header-btn {
+  background: transparent;
+  border: none;
+  color: #e4e4e7;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.mobile-header-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mobile-header-title {
+  flex: 1;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Mobile Footer Controls
+   ========================================================================== */
+
+.mobile-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-footer.visible {
+  opacity: 1;
+}
+
+.mobile-footer.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Page Navigation */
+
+.mobile-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.mobile-nav-btn {
+  background: rgba(99, 102, 241, 0.2);
+  border: none;
+  color: #e4e4e7;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items:;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.mobile-nav-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+.mobile-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.mobile-page-indicator {
+  flex: 1;
+  text-align: center;
+  color: #e4e4e7;
+}
+
+/* Quick Actions */
+
+.mobile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-action-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #e4e4e7;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.mobile-action-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Progress Indicator */
+
+.mobile-progress-indicator {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 16px;
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.progress-bar-mini {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.progress-fill-mini {
+  height: 100%;
+  background: #6366f1;
+  transition: width 0.3s ease;
+}
+
+.progress-text-mini {
+  display: block;
+  font-size: 12px;
+  color: #e4e4e7;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   Mobile Menu
+   ========================================================================== */
+
+.mobile-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1001;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px;
+}
+
+.mobile-menu {
+  background: #1a1a1a;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.mobile-menu-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mobile-menu-item:last-child {
+  border-bottom: none;
+}
+
+/* ==========================================================================
+   Mobile Bottom Navigation
+   ========================================================================== */
+
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  z-index: 1000;
+  user-select: none;
+}
+
+.mobile-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  color: #a1a1aa;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: color 0.2s;
+}
+
+.mobile-nav-item:hover {
+  color: #e4e4e7;
+}
+
+.mobile-nav-item.active {
+  color: #6366f1;
+}
+
+.mobile-nav-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.mobile-nav-badge {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-nav-label {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   Mobile Settings Panel
+   ========================================================================== */
+
+.mobile-settings-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100%;
+  max-width: 400px;
+  height: 100vh;
+  background: #1a1a1a;
+  z-index: 1001;
+  overflow-y: auto;
+}
+
+.mobile-settings-content {
+  padding: 20px;
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
+}
+
+.mobile-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.mobile-settings-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #e4e4e7;
+}
+
+.mobile-settings-close {
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.mobile-settings-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e4e4e7;
+}
+
+.mobile-settings-section {
+  margin-bottom: 24px;
+}
+
+.mobile-settings-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #a1a1aa;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Settings Components */
+
+.toggle-setting,
+.select-setting,
+.button-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.toggle-setting-info,
+.button-setting-info {
+  flex: 1;
+}
+
+.toggle-setting-label {
+  display: block;
+  font-size: 14px;
+  color: #e4e4e7;
+}
+
+.toggle-setting-desc {
+  display: block;
+  font-size: 12px;
+  color: #a1a1aa;
+  margin-top: 2px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.toggle-switch.on {
+  background: #6366f1;
+}
+
+.toggle-slider {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  transform: translateX(0);
+}
+
+.toggle-switch.on .toggle-slider {
+  transform: translateX(20px);
+}
+
+.select-setting-label {
+  display: block;
+  font-size: 14px;
+  color: #e4e4e7;
+  margin-bottom: 4px;
+}
+
+.select-setting-select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e4e4e7;
+  font-size: 14px;
+}
+
+.select-setting-select:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.button-setting {
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.button-setting-info {
+  flex: 1;
+}
+
+.button-setting-label {
+  display: block;
+  font-size: 14px;
+  color: #e4e4e7;
+}
+
+.button-setting-desc {
+  display: block;
+  font  size: 12px;
+  color: #a1a1aa;
+  margin-top: 2px;
+}
+
+/* PWA Status */
+
+.pwa-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.pwa-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwa-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.pwa-status-item.installed .pwa-status-dot {
+  background: #22c55e;
+}
+
+.pwa-status-item:not(.installed) .pwa-status-dot {
+  background: #a1a1aa;
+}
+
+.pwa-status-item.online .pwa-status-dot {
+  background: #22c55e;
+}
+
+.pwa-status-item.offline .pwa-status-dot {
+  background: #ef4444;
+}
+
+/* ==========================================================================
+   Touch Gesture Handler
+   ========================================================================== */
+
+.touch-gesture-container {
+  touch-action: pan-y; /* Allow vertical scrolling */
+  position: relative;
+}
+
+/* ==========================================================================
+   Mobile Progress Indicator (Compact)
+   ========================================================================== */
+
+.mobile-progress-indicator-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 12px;
+}
+
+.progress-bar-mini {
+  width: 60px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.progress-fill-mini {
+  height: 100%;
+  background: #6366f1;
+}
+
+.progress-text-mini {
+  font-size: 11px;
+  color: #e4e4e7;
+}
+
+.progress-jump-mini {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Mobile Page Selector
+   ========================================================================== */
+
+.mobile-page-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 12px;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 90%;
+}
+
+.page-selector-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #e4e7e7;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-selector-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.page-number {
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.page-number.current {
+  background: #6366f1;
+  color: white;
+  font-weight: 500;
+}
+
+.page-number:hover:not(.current) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e4e4e7;
+}
+
+.page-number.current:hover {
+  background: #6366f1;
+}
+
+/* ==========================================================================
+   Controls Hint
+   ========================================================================== */
+
+.mobile-controls-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  padding: 16px 24px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 8px;
+}
+
+.mobile-controls-hint::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  margin-top: -8px;
+}
+
+/* ==========================================================================
+   Responsive Adjustments
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: block !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Adjust main content padding for mobile */
+  main,
+  .content {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Hide desktop-specific elements */
+  .sidebar,
+  .desktop-header,
+  .toolbar {
+    display: none !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+/* ==========================================================================
+   PWA Install Prompt Styles
+   ========================================================================== */
+
+.pwa-install-prompt {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #6366f1;
+  color: white;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+}
+
+/* ==========================================================================
+   Orientation Adjustments
+   ========================================================================== */
+
+@media (orientation: landscape) {
+  .mobile-header {
+    padding: 8px 16px;
+  }
+
+  .mobile-footer {
+    padding: 8px 16px;
+  }
+
+  .mobile-bottom-nav {
+    padding: 4px 0;
+  }
+
+  .mobile-nav-label {
+    font-size: 10px;
+  }
+}
+
+/* ==========================================================================
+   Safe Area Insets for Mobile
+   ================================================================== */
+
+@supports (padding: env(safe-area-inset-top)) {
+  .mobile-header {
+    padding-top: env(safe-area-inset-top, 12px);
+  }
+
+  .mobile-footer {
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
+
+  .mobile-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* ==========================================================================
+   Utility Classes for Mobile
+   ========================================================================== */
+
+.hide-on-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .hide-on-mobile {
+    display: block;
+  }
+}
+
+.show-on-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .show-on-mobile {
+    display: block;
+  }
+}
+
+@media (min-width: 769px) {
+  .hide-on-mobile {
+    display: none;
+  }
+}
+
+.hide-on-desktop {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .hide-on-desktop {
+    display: block;
+  }
+}
+
+.show-on-desktop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .show-on-desktop {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .show-on-desktop {
+    display: block;
+  }
+}
+
+/* ==========================================================================
+   Pull-to-Refresh Styles
+   ========================================================================== */
+
+.pull-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.pull-indicator.visible {
+  opacity: 1;
+}
+
+.pull-arrow {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  border-color: rgba(255, 255, 255, 0.3);
+  border-style: solid;
+  border-top-width: 2px;
+  border-left-width: 0;
+  border-right-width: 0;
+  margin: 2px;
+}
+
+.pull-icon {
+  width: 24px;
+  height: 24px;
+  color: #e4e4e7;
+}
+
+.pull-icon-spin {
+  animation: spin 1s linear infinite;
+}
+
+.pull-icon-loading {
+  color: #6366f1;
+}
+
+.pull-icon-success {
+  color: #22c55e;
+}
+
+.pull-icon-error {
+  color: #ef4444;
+}
+
+.pull-text {
+  font-size: 12px;
+  color: #e4e4e7;
+  margin-top: 4px;
+  text-align: center;
+  font-weight: 500;
+}
+
+/* Refreshing overlay */
+.refresh-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 20;
+  backdrop-filter: blur(4px);
+}
+
+.refresh-loading .refresh-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.refresh-loading .refresh-text {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #e4e4e7;
+}
+
+.refresh-icon {
+  flex-shrink: 0;
+}
+
+.refresh-icon.spin {
+  animation: spin 1s linear infinite;
+}
+
+.refresh-icon-success {
+  color: #22c55e;
+}
+
+.refresh-icon-error {
+  color: #ef4444;
+}
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.slide-up-animation {
+  animation: slideUp 0.3s ease-out;
+}
+
+.fade-in-animation {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* ==========================================================================
+   Touch Action Utilities
+   ========================================================================== */
+
+.no-user-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -user-select: none;
+}
+
+.touch-action-manipulation {
+  touch-action: none;
+}
+
+.touch-action-pan-y {
+  touch-action: pan-y;
+  overscroll-behavior-y: none;
+}
+
+/* ==========================================================================
+   Pull-to-Refresh Utility Classes
+   ========================================================================== */
+
+.mobile-content-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 100%;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none;
+  /* Allow vertical scrolling only */
+}
+
+.mobile-content-wrapper-inner {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+  /* Prevent bounce on iOS */
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* ==========================================================================
+   Refresh Overlay
+   ========================================================================== */
+
+.mobile-refreshing-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 9999;
+}
+
+.mobile-refresh-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.mobile-refresh-icon.spin {
+  animation: spin 1s linear infinite;
+}
+
+.mobile-refresh-icon-success {
+  color: #22c55e;
+}
+
+.mobile-refresh-icon-error {
+  color: #ef4444;
+}
+
+.mobile-refresh-text {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #e4e4e7;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Pull-to-Refresh in Content
+   ========================================================================== */
+
+.pull-to-refresh-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.pull-indicator-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Responsive Adjustments for Pull-to-Refresh
+   ========================================================================== */
+
+@media (orientation: landscape) {
+  .pull-indicator {
+    height: 40px;
+  }
+
+  .pull-arrow {
+    width: 4px;
+    height: 4px;
+  }
+
+  .pull-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .pull-text {
+    font-size: 11px;
+    margin-top: 2px;
+  }
+}
+
+@media (min-width: 768px) {
+  .hide-on-mobile {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .hide-on-desktop {
+    display: none;
+  }
+}
+

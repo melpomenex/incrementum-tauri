@@ -1,9 +1,14 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
+import "./styles/mobile.css";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { initializePWA } from "./lib/pwa";
+
+// Mobile PWA Components
+import { MobileLayoutWrapper } from "./components/mobile/MobileLayoutWrapper";
 
 // Layout
 import { MainLayout } from "./components/layout/MainLayout";
@@ -92,6 +97,9 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
 }
 
 console.log('Starting Incrementum app...');
+
+// Initialize PWA (works in both Tauri and Web)
+initializePWA();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <ErrorBoundary>
