@@ -7,6 +7,7 @@
 
 import JSZip from 'jszip';
 import initSqlJs, { Database } from 'sql.js';
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 export interface AnkiField {
   name: string;
@@ -45,8 +46,8 @@ export interface AnkiDeck {
 export async function parseAnkiPackage(file: File | Uint8Array): Promise<AnkiDeck[]> {
   // Load sql.js WASM
   const SQL = await initSqlJs({
-    // Use the CDN for sql.js WASM file
-    locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`
+    // Use bundled wasm for offline/PWA compatibility
+    locateFile: () => sqlWasmUrl
   });
 
   // Read the ZIP file
