@@ -260,12 +260,7 @@ export function convertAnkiToLearningItems(decks: AnkiDeck[]): {
       tags: ['anki-import', deck.name]
     });
 
-    // Create learning items for each card
-    for (const card of deck.cards) {
-      const note = deck.notes.find(n => n.id === card.noteId);
-      if (!note) continue;
-
-      // Find question and answer fields with a safe fallback
+    const buildItemFromNote = (note: AnkiNote) => {
       const questionField = note.fields.find(f =>
         f.name.toLowerCase().includes('front') ||
         f.name.toLowerCase().includes('question') ||
@@ -283,14 +278,29 @@ export function convertAnkiToLearningItems(decks: AnkiDeck[]): {
       const questionValue = questionField?.value ?? fallbackQuestion?.value;
       const answerValue = answerField?.value ?? fallbackAnswer?.value ?? '';
 
-      if (questionValue) {
-        learningItems.push({
-          documentId: docId,
-          itemType: 'flashcard',
-          question: questionValue,
-          answer: answerValue,
-          tags: [...note.tags, 'anki-import', note.modelName, deck.name]
-        });
+      if (!questionValue) {
+        return;
+      }
+
+      learningItems.push({
+        documentId: docId,
+        itemType: 'flashcard',
+        question: questionValue,
+        answer: answerValue,
+        tags: [...note.tags, 'anki-import', note.modelName, deck.name]
+      });
+    };
+
+    // Prefer cards, but fall back to notes if cards are missing or obviously incomplete.
+    if (deck.cards.length >= deck.notes.length && deck.cards.length > 0) {
+      for (const card of deck.cards) {
+        const note = deck.notes.find(n => n.id === card.noteId);
+        if (!note) continue;
+        buildItemFromNote(note);
+      }
+    } else {
+      for (const note of deck.notes) {
+        buildItemFromNote(note);
       }
     }
   }
