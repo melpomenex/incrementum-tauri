@@ -41,6 +41,7 @@ interface PDFSettings {
 interface EPUBSettings {
   fontSize: number;
   fontFamily: "serif" | "sans-serif" | "monospace";
+  lineHeight: number;
   autoScroll: boolean;
 }
 
@@ -273,6 +274,7 @@ export const defaultSettings: Settings = {
     epubSettings: {
       fontSize: 16,
       fontFamily: "serif",
+      lineHeight: 1.6,
       autoScroll: true,
     },
     segmentation: {

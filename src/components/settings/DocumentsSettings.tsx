@@ -181,6 +181,32 @@ export function DocumentsSettings() {
             </select>
           </div>
 
+          <div>
+            <label htmlFor="epubLineHeight" className="block text-sm font-medium text-foreground mb-2">
+              Line Height
+            </label>
+            <input
+              type="number"
+              id="epubLineHeight"
+              min="1.2"
+              max="2.2"
+              step="0.1"
+              value={settings.documents.epubSettings.lineHeight}
+              onChange={(e) =>
+                updateSettings({
+                  documents: {
+                    ...settings.documents,
+                    epubSettings: {
+                      ...settings.documents.epubSettings,
+                      lineHeight: parseFloat(e.target.value) || 1.6,
+                    },
+                  },
+                })
+              }
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
+            />
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-foreground">Auto-scroll</p>
