@@ -455,7 +455,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
           ) : (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {sessionBlocks.map((block) => (
+                {sessionBlocks?.map((block) => (
                   <div key={block.id} className="bg-card border border-border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <h2 className="text-sm font-semibold text-foreground">{block.title}</h2>
@@ -467,15 +467,15 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                       Safe stop after item {block.safeStopCount}
                     </div>
                     <div className="space-y-2">
-                      {block.items.slice(0, 3).map((item) => (
+                      {block.items?.slice(0, 3).map((item) => (
                         <div key={item.id} className="text-xs text-muted-foreground flex items-center gap-2">
                           <span className="text-foreground">•</span>
                           <span className="line-clamp-1">{item.documentTitle}</span>
                         </div>
                       ))}
-                      {block.items.length > 3 && (
+                      {(block.items?.length ?? 0) > 3 && (
                         <div className="text-xs text-muted-foreground">
-                          +{block.items.length - 3} more
+                          +{(block.items?.length ?? 0) - 3} more
                         </div>
                       )}
                     </div>
@@ -486,7 +486,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Clock className="w-4 h-4" />
                 <span>
-                  Session estimate: {formatMinutesRange(getTimeEstimateRange(visibleItems[0]))} per item
+                  Session estimate: {visibleItems?.[0] ? formatMinutesRange(getTimeEstimateRange(visibleItems[0])) : 'N/A'} per item
                 </span>
                 <span>•</span>
                 <span>Press J/K to navigate, Enter to open, I to toggle inspector</span>
@@ -501,7 +501,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                     </label>
                   </div>
                 )}
-                {visibleItems.map((item) => {
+                {visibleItems?.map((item) => {
                   const isExpanded = expandedIds.has(item.id);
                   const status = getQueueStatus(item);
                   const priorityVector = getPriorityVector(item);
