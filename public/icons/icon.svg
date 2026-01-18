@@ -1,10 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a5b4fc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#818cf8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
     </linearGradient>
+    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4f46e5;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4f46e5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4338ca;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e1b4b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f0a1e;stop-opacity:1" />
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="80" fill="url(#grad)"/>
-  <text x="256" y="320" font-family="system-ui, sans-serif" font-size="280" font-weight="bold" text-anchor="middle" fill="white">I</text>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="url(#bgGrad)"/>
+
+  <!-- Ascending growth bars - representing incremental progress -->
+  <g transform="translate(0, 20)">
+    <!-- Bar 1 - smallest -->
+    <rect x="96" y="340" width="60" height="100" rx="12" fill="url(#grad1)">
+      <animate attributeName="opacity" values="0.7;1;0.7" dur="3s" repeatCount="indefinite" begin="0s"/>
+    </rect>
+
+    <!-- Bar 2 -->
+    <rect x="168" y="280" width="60" height="160" rx="12" fill="url(#grad2)">
+      <animate attributeName="opacity" values="0.7;1;0.7" dur="3s" repeatCount="indefinite" begin="0.3s"/>
+    </rect>
+
+    <!-- Bar 3 -->
+    <rect x="240" y="220" width="60" height="220" rx="12" fill="url(#grad3)">
+      <animate attributeName="opacity" values="0.7;1;0.7" dur="3s" repeatCount="indefinite" begin="0.6s"/>
+    </rect>
+
+    <!-- Bar 4 - tallest -->
+    <rect x="312" y="160" width="60" height="280" rx="12" fill="url(#grad4)">
+      <animate attributeName="opacity" values="0.7;1;0.7" dur="3s" repeatCount="indefinite" begin="0.9s"/>
+    </rect>
+
+    <!-- Growth arrow accent -->
+    <path d="M 390 280 Q 400 240 420 200 L 405 205 M 420 200 L 425 220" stroke="url(#grad1)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
+  </g>
 </svg>
