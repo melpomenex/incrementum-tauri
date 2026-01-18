@@ -15,7 +15,7 @@ export const defaultSettings: Settings = {
   },
 
   interface: {
-    theme: 'modern-dark',
+    theme: 'milky-matcha',
     denseMode: false,
     toolbarIconSize: 24,
     showStatistics: true,

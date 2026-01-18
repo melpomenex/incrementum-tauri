@@ -101,6 +101,18 @@ console.log('Starting Incrementum app...');
 // Initialize PWA (works in both Tauri and Web)
 initializePWA();
 
+// Initialize demo content for web/PWA (only in browser mode, not Tauri)
+if (!(window as any).__TAURI__) {
+  import('./lib/demoContent').then(({ checkAndImportDemoContent }) => {
+    checkAndImportDemoContent(null, null).catch((error) => {
+      console.log('[Demo Content] Auto-import check failed or skipped:', error);
+    });
+  }).catch(() => {
+    // Module may not be available in all build configurations
+    console.log('[Demo Content] Module not available');
+  });
+}
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>

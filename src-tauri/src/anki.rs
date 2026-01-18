@@ -389,6 +389,12 @@ pub async fn import_anki_package_to_learning_items(
     let decks = parse_apkg(&apkg_path).await?;
     let mut created_items = Vec::new();
     let mut imported_note_guids = std::collections::HashSet::new();
+    let mut skipped_count = 0usize;
+
+    for deck in &decks {
+        eprintln!("DEBUG: Processing deck '{}' with {} notes and {} cards",
+                  deck.name, deck.notes.len(), deck.cards.len());
+    }
 
     for deck in decks {
         let mut deck_doc = Document::new(
@@ -403,6 +409,8 @@ pub async fn import_anki_package_to_learning_items(
             if let Some(note) = deck.notes.iter().find(|note| note.id == card.note_id).cloned() {
                 // Skip if we've already imported this note (by GUID)
                 if !imported_note_guids.insert(note.guid.clone()) {
+                    skipped_count += 1;
+                    eprintln!("DEBUG: Skipping duplicate note GUID: {}", note.guid);
                     continue;
                 }
                 if let Some(item) = build_learning_item(&note, card, Some(&deck_doc.id), &deck.name) {
@@ -412,6 +420,9 @@ pub async fn import_anki_package_to_learning_items(
             }
         }
     }
+
+    eprintln!("DEBUG: Import complete - created {} items, skipped {} duplicates",
+              created_items.len(), skipped_count);
 
     Ok(created_items)
 }
@@ -424,6 +435,12 @@ pub async fn import_anki_package_bytes_to_learning_items(
     let decks = parse_apkg_from_bytes(apkg_bytes).await?;
     let mut created_items = Vec::new();
     let mut imported_note_guids = std::collections::HashSet::new();
+    let mut skipped_count = 0usize;
+
+    for deck in &decks {
+        eprintln!("DEBUG: Processing deck '{}' with {} notes and {} cards",
+                  deck.name, deck.notes.len(), deck.cards.len());
+    }
 
     for deck in decks {
         let mut deck_doc = Document::new(
@@ -438,6 +455,8 @@ pub async fn import_anki_package_bytes_to_learning_items(
             if let Some(note) = deck.notes.iter().find(|note| note.id == card.note_id).cloned() {
                 // Skip if we've already imported this note (by GUID)
                 if !imported_note_guids.insert(note.guid.clone()) {
+                    skipped_count += 1;
+                    eprintln!("DEBUG: Skipping duplicate note GUID: {}", note.guid);
                     continue;
                 }
                 if let Some(item) = build_learning_item(&note, card, Some(&deck_doc.id), &deck.name) {
@@ -447,6 +466,9 @@ pub async fn import_anki_package_bytes_to_learning_items(
             }
         }
     }
+
+    eprintln!("DEBUG: Import complete - created {} items, skipped {} duplicates",
+              created_items.len(), skipped_count);
 
     Ok(created_items)
 }

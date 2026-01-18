@@ -6,6 +6,11 @@
 import * as db from './database.js';
 import { getBrowserFile } from './browser-file-store';
 import { parseAnkiPackage, convertAnkiToLearningItems } from '../utils/ankiParserBrowser';
+import {
+    getDemoContentStatus,
+    importDemoContentManually,
+    checkAndImportDemoContent as checkAndImportDemoContentInternal,
+} from '../lib/demoContent';
 
 type CommandHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -494,6 +499,15 @@ const commandHandlers: Record<string, CommandHandler> = {
 
     download_book: async () => {
         throw new Error('Book download is not available in browser mode');
+    },
+
+    // Demo content commands
+    get_demo_content_status: async () => {
+        return await getDemoContentStatus();
+    },
+
+    import_demo_content_manually: async () => {
+        return await importDemoContentManually();
     },
 
     get_available_mirrors: async () => {

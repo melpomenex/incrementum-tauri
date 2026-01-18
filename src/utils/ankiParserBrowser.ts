@@ -249,7 +249,13 @@ export function convertAnkiToLearningItems(decks: AnkiDeck[]): {
   const documents: Array<{ title: string; content: string; fileType: string; category: string; tags: string[] }> = [];
   const learningItems: Array<{ documentId: string; itemType: string; question: string; answer: string; tags: string[] }> = [];
 
+  // Track imported note GUIDs to prevent duplicates
+  const importedNoteGuids = new Set<string>();
+  let skippedCount = 0;
+
   for (const deck of decks) {
+    console.log(`[DEBUG] Processing deck '${deck.name}' with ${deck.notes.length} notes and ${deck.cards.length} cards`);
+
     // Create a document for the deck
     const docId = `anki-deck-${deck.id}`;
     documents.push({
@@ -261,6 +267,14 @@ export function convertAnkiToLearningItems(decks: AnkiDeck[]): {
     });
 
     const buildItemFromNote = (note: AnkiNote) => {
+      // Skip if we've already imported this note (by GUID)
+      if (importedNoteGuids.has(note.guid)) {
+        skippedCount++;
+        console.log(`[DEBUG] Skipping duplicate note GUID: ${note.guid}`);
+        return;
+      }
+      importedNoteGuids.add(note.guid);
+
       const questionField = note.fields.find(f =>
         f.name.toLowerCase().includes('front') ||
         f.name.toLowerCase().includes('question') ||
@@ -304,6 +318,8 @@ export function convertAnkiToLearningItems(decks: AnkiDeck[]): {
       }
     }
   }
+
+  console.log(`[DEBUG] Import complete - created ${learningItems.length} items, skipped ${skippedCount} duplicates`);
 
   return { documents, learningItems };
 }

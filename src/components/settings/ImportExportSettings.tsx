@@ -2,7 +2,7 @@
  * Import/Export Settings Component
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invokeCommand } from "../../lib/tauri";
 import { Download, Upload, FileDown, FileUp, RefreshCw } from "lucide-react";
 import { SettingsSection, SettingsRow } from "./SettingsPage";
@@ -34,6 +34,20 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
 
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [demoContentStatus, setDemoContentStatus] = useState<string>("Loading...");
+
+  // Load demo content status on mount
+  useEffect(() => {
+    const loadDemoStatus = async () => {
+      try {
+        const status = await invokeCommand<string>("get_demo_content_status");
+        setDemoContentStatus(status);
+      } catch (error) {
+        setDemoContentStatus("Unable to load demo content status");
+      }
+    };
+    loadDemoStatus();
+  }, []);
 
   const handleExport = async (format: "json" | "csv" | "incrementum") => {
     setIsProcessing(true);
@@ -448,6 +462,49 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
               className="w-20 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </SettingsRow>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Demo Content"
+        description="Manage demo content for trying out the application"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Demo content is automatically imported on first run so you can try the application immediately.
+          </p>
+
+          <div className="p-4 bg-muted/30 rounded-lg">
+            <h4 className="text-sm font-medium mb-2 text-foreground">Demo Content Status</h4>
+            <p className="text-xs text-muted-foreground">
+              {demoContentStatus}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={async () => {
+                const result = await invokeCommand<string>("import_demo_content_manually");
+                alert(result);
+                // Refresh status
+                const status = await invokeCommand<string>("get_demo_content_status");
+                setDemoContentStatus(status);
+                onChange();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-md hover:bg-accent/90"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Check Demo Content
+            </button>
+          </div>
+
+          <div className="p-4 bg-muted/30 rounded-lg">
+            <h4 className="text-sm font-medium mb-2 text-foreground">Environment Variables</h4>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li><code>DEMO_CONTENT_DIR</code> - Custom demo content directory path</li>
+              <li><code>SKIP_DEMO_IMPORT=1</code> - Disable demo content auto-import</li>
+            </ul>
+          </div>
         </div>
       </SettingsSection>
     </>

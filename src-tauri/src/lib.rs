@@ -20,6 +20,7 @@ mod cloud;
 mod cloud_sync;
 mod backup;
 mod scheduler;
+mod demo;
 mod browser_sync_server;
 #[cfg(feature = "screenshot")]
 mod screenshot;
@@ -106,6 +107,9 @@ pub fn run() {
                 // Initialize browser sync server if auto-start is enabled
                 let repo_arc = std::sync::Arc::new(database::Repository::new(pool));
                 let _ = browser_sync_server::initialize_if_enabled(repo_arc, None).await;
+
+                // Check and import demo content on first run
+                let _ = demo::check_and_import_demo_content(&repo).await;
 
                 tracing_subscriber::fmt::init();
 
@@ -323,6 +327,9 @@ pub fn run() {
             // Anki import commands
             anki::import_anki_package_to_learning_items,
             anki::import_anki_package_bytes_to_learning_items,
+            // Demo content commands
+            demo::import_demo_content_manually,
+            demo::get_demo_content_status,
             // OCR commands
             commands::init_ocr,
             commands::ocr_image_file,
