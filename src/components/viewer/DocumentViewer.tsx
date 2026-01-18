@@ -55,12 +55,14 @@ interface DocumentViewerProps {
   documentId: string;
   disableHoverRating?: boolean;
   onSelectionChange?: (selection: string) => void;
+  onScrollPositionChange?: (state: { pageNumber: number; scrollPercent: number }) => void;
 }
 
 export function DocumentViewer({
   documentId,
   disableHoverRating = false,
   onSelectionChange,
+  onScrollPositionChange,
 }: DocumentViewerProps) {
   const toast = useToast();
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
@@ -76,6 +78,15 @@ export function DocumentViewer({
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const restoreScrollAttemptsRef = useRef(0);
+  const restoreScrollTimeoutRef = useRef<number | null>(null);
+  const restoreScrollDoneRef = useRef(false);
+  const scrollSaveTimeoutRef = useRef<number | null>(null);
+  const skipStoredScrollRef = useRef(false);
+
+  const scrollStorageKey = currentDocument?.id
+    ? `document-scroll-position:${currentDocument.id}`
+    : undefined;
 
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
@@ -93,6 +104,38 @@ export function DocumentViewer({
       setSelectedText("");
     }
   }, []);
+
+  const handleScrollPositionChange = useCallback(
+    (state: {
+      pageNumber: number;
+      scrollTop: number;
+      scrollHeight: number;
+      clientHeight: number;
+      scrollPercent: number;
+    }) => {
+      onScrollPositionChange?.({
+        pageNumber: state.pageNumber,
+        scrollPercent: state.scrollPercent,
+      });
+
+      if (!scrollStorageKey) return;
+      if (scrollSaveTimeoutRef.current !== null) return;
+
+      scrollSaveTimeoutRef.current = window.setTimeout(() => {
+        scrollSaveTimeoutRef.current = null;
+        const payload = {
+          pageNumber: state.pageNumber,
+          scrollPercent: state.scrollPercent,
+          scrollTop: state.scrollTop,
+          scrollHeight: state.scrollHeight,
+          clientHeight: state.clientHeight,
+          updatedAt: Date.now(),
+        };
+        localStorage.setItem(scrollStorageKey, JSON.stringify(payload));
+      }, 250);
+    },
+    [onScrollPositionChange, scrollStorageKey]
+  );
 
   // Timer for tracking reading time
   const startTimeRef = useRef(Date.now());
@@ -204,7 +247,9 @@ export function DocumentViewer({
   useEffect(() => {
     if (!currentDocument || !documentId) return;
 
+    skipStoredScrollRef.current = false;
     const state = parseStateFromUrl();
+    skipStoredScrollRef.current = state.scroll !== undefined;
 
     // Restore page number from fragment
     if (state.pos !== undefined) {
@@ -237,9 +282,72 @@ export function DocumentViewer({
     }
   }, [currentDocument, documentId]);
 
+  // Restore scroll position for this document
+  useEffect(() => {
+    restoreScrollDoneRef.current = false;
+    restoreScrollAttemptsRef.current = 0;
+    if (restoreScrollTimeoutRef.current !== null) {
+      clearTimeout(restoreScrollTimeoutRef.current);
+      restoreScrollTimeoutRef.current = null;
+    }
+  }, [currentDocument?.id, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "document") return;
+    if (isLoading) return;
+    if (!scrollStorageKey) return;
+    if (restoreScrollDoneRef.current) return;
+    if (skipStoredScrollRef.current) return;
+
+    const stored = localStorage.getItem(scrollStorageKey);
+    if (!stored) return;
+
+    let parsed: { scrollPercent?: number; pageNumber?: number } | null = null;
+    try {
+      parsed = JSON.parse(stored);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed) return;
+
+    const tryRestore = () => {
+      const container = document.querySelector(
+        "[data-document-scroll-container]"
+      ) as HTMLElement | null;
+      if (!container) {
+        restoreScrollAttemptsRef.current += 1;
+      } else {
+        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+        if (maxScroll > 0 && typeof parsed?.scrollPercent === "number") {
+          container.scrollTop = (parsed.scrollPercent / 100) * maxScroll;
+          restoreScrollDoneRef.current = true;
+          return;
+        }
+        restoreScrollAttemptsRef.current += 1;
+      }
+
+      if (restoreScrollAttemptsRef.current < 6) {
+        restoreScrollTimeoutRef.current = window.setTimeout(tryRestore, 200);
+      }
+    };
+
+    tryRestore();
+  }, [isLoading, scrollStorageKey, viewMode]);
+
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
+
+  useEffect(() => {
+    return () => {
+      if (restoreScrollTimeoutRef.current !== null) {
+        clearTimeout(restoreScrollTimeoutRef.current);
+      }
+      if (scrollSaveTimeoutRef.current !== null) {
+        clearTimeout(scrollSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Handle text selection
   useEffect(() => {
@@ -776,6 +884,7 @@ export function DocumentViewer({
               zoomMode={zoomMode}
               onPageChange={handlePageChange}
               onLoad={handleDocumentLoad}
+              onScrollPositionChange={handleScrollPositionChange}
             />
           </div>
         ) : docType === "epub" && fileData ? (

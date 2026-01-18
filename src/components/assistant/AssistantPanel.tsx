@@ -24,6 +24,11 @@ export interface AssistantContext {
   url?: string;
   documentId?: string;
   selection?: string;
+  contextWindowTokens?: number;
+  position?: {
+    pageNumber?: number;
+    scrollPercent?: number;
+  };
 }
 
 interface Message {
@@ -155,7 +160,7 @@ export function AssistantPanel({
   const getContextMessage = (ctx: AssistantContext): string => {
     switch (ctx.type) {
       case "document":
-        return `📄 Viewing document${ctx.documentId ? ` (ID: ${ctx.documentId})` : ""}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
+        return `📄 Viewing document${ctx.documentId ? ` (ID: ${ctx.documentId})` : ""}${ctx.position?.pageNumber ? ` • Page ${ctx.position.pageNumber}` : ""}${typeof ctx.position?.scrollPercent === "number" ? ` • ${ctx.position.scrollPercent.toFixed(1)}%` : ""}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
       case "web":
         return `🌐 Browsing: ${ctx.url || "Unknown page"}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
       default:
@@ -506,6 +511,9 @@ I also have context of what you're currently viewing, so feel free to ask questi
       // Build LLM context
       const llmContext = contextData.currentContext as AssistantContext;
       const contextWindow = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
+      const effectiveContextWindow = llmContext.contextWindowTokens && llmContext.contextWindowTokens > 0
+        ? llmContext.contextWindowTokens
+        : contextWindow;
 
       // Call the LLM API
       const response = await chatWithContext(
@@ -518,7 +526,7 @@ I also have context of what you're currently viewing, so feel free to ask questi
           url: llmContext.url,
           selection: llmContext.selection,
           content: llmContext.content,
-          contextWindowTokens: contextWindow,
+          contextWindowTokens: effectiveContextWindow,
         },
         provider.apiKey,
         provider.baseUrl && provider.baseUrl.trim() ? provider.baseUrl : undefined

@@ -19,6 +19,13 @@ interface PDFViewerProps {
   zoomMode?: ZoomMode;
   onPageChange?: (pageNumber: number) => void;
   onLoad?: (numPages: number, outline: any[]) => void;
+  onScrollPositionChange?: (state: {
+    pageNumber: number;
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+    scrollPercent: number;
+  }) => void;
 }
 
 type ZoomMode = "custom" | "fit-width" | "fit-page";
@@ -31,6 +38,7 @@ export function PDFViewer({
   zoomMode: externalZoomMode,
   onPageChange,
   onLoad,
+  onScrollPositionChange,
 }: PDFViewerProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pageContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -370,6 +378,16 @@ export function PDFViewer({
       if (currentPage !== pageNumber) {
         onPageChange?.(currentPage);
       }
+
+      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+      const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
+      onScrollPositionChange?.({
+        pageNumber: currentPage,
+        scrollTop,
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight,
+        scrollPercent,
+      });
     });
   };
 
@@ -501,6 +519,7 @@ export function PDFViewer({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseLeave}
+            data-document-scroll-container
           >
             {isLoading ? (
               <div className="flex items-center justify-center py-12">

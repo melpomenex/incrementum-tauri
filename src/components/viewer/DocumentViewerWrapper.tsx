@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DocumentViewer as BaseDocumentViewer } from "./DocumentViewer";
 import { AssistantPanel, type AssistantContext, type AssistantPosition } from "../assistant/AssistantPanel";
-import { useDocumentStore } from "../../stores";
+import { useDocumentStore, useSettingsStore } from "../../stores";
 import * as documentsApi from "../../api/documents";
 
 const ASSISTANT_POSITION_KEY = "assistant-panel-position";
@@ -16,7 +16,9 @@ interface DocumentViewerWithAssistantProps {
 export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps) {
   const [assistantInputActive, setAssistantInputActive] = useState(false);
   const [selection, setSelection] = useState("");
+  const [scrollState, setScrollState] = useState<{ pageNumber?: number; scrollPercent?: number }>({});
   const currentDocument = useDocumentStore((state) => state.currentDocument);
+  const contextWindowTokens = useSettingsStore((state) => state.settings.ai.maxTokens);
   const [documentContent, setDocumentContent] = useState<string | undefined>(undefined);
   const [assistantPosition, setAssistantPosition] = useState<AssistantPosition>(() => {
     const saved = localStorage.getItem(ASSISTANT_POSITION_KEY);
@@ -47,15 +49,33 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
     };
   }, [documentId]);
 
-  const assistantContext = useMemo<AssistantContext>(
-    () => ({
+  const assistantContext = useMemo<AssistantContext>(() => {
+    const baseContent = currentDocument?.content ?? documentContent;
+    const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
+    const maxChars = maxTokens * 4;
+
+    let trimmedContent = baseContent;
+    if (baseContent && baseContent.length > maxChars) {
+      if (selection && baseContent.includes(selection)) {
+        const selectionIndex = baseContent.indexOf(selection);
+        const windowBefore = Math.floor((maxChars - selection.length) / 2);
+        const start = Math.max(0, selectionIndex - windowBefore);
+        const end = Math.min(baseContent.length, start + maxChars);
+        trimmedContent = baseContent.slice(start, end);
+      } else {
+        trimmedContent = baseContent.slice(0, maxChars);
+      }
+    }
+
+    return {
       type: "document",
       documentId,
       selection: selection || undefined,
-      content: currentDocument?.content ?? documentContent,
-    }),
-    [currentDocument?.content, documentContent, documentId, selection]
-  );
+      content: trimmedContent,
+      contextWindowTokens: maxTokens,
+      position: scrollState,
+    };
+  }, [currentDocument?.content, documentContent, documentId, selection, contextWindowTokens, scrollState]);
 
   const handlePositionChange = (newPosition: AssistantPosition) => {
     setAssistantPosition(newPosition);
@@ -78,6 +98,7 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
         documentId={documentId}
         disableHoverRating={assistantInputActive}
         onSelectionChange={setSelection}
+        onScrollPositionChange={setScrollState}
       />
     </div>
   );
@@ -113,4 +134,3 @@ export function WebBrowserTab(_props: WebBrowserWithAssistantProps) {
     <BaseWebBrowserTab />
   );
 }
-
