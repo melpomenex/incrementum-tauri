@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Sparkles } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
 import type { Document } from "../../types/document";
@@ -366,18 +366,18 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     >
       {/* Header */}
       <div className="border-b border-border bg-card p-4">
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex flex-col items-start justify-between gap-3 mb-4 md:flex-row md:items-start md:gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Documents</h1>
             <p className="text-sm text-muted-foreground">
               {sortedDocuments.length} documents • prioritize your next action
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
             {enableYouTubeImport && (
               <button
                 onClick={() => setShowYouTubeImport(true)}
-                className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors flex items-center gap-2 text-sm"
+                className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
                 title="Import YouTube video"
               >
                 <Youtube className="w-4 h-4" />
@@ -386,7 +386,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
             )}
             <button
               onClick={() => setShowAnnaArchiveSearch(true)}
-              className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 text-sm"
+              className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
               title="Search and download books from Anna's Archive"
             >
               <BookOpen className="w-4 h-4" />
@@ -395,7 +395,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
             <button
               onClick={handleImport}
               disabled={isImporting}
-              className="px-3 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              className="px-3 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
             >
               {isImporting ? "Importing..." : "Import Document"}
             </button>
@@ -443,6 +443,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAnnaArchiveSearch(true)}
+              className="px-3 py-2 bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+              title="Search and download books from Anna's Archive"
+            >
+              <Sparkles className="w-4 h-4" />
+              Anna's Archive
+            </button>
             <select
               value={activeViewId ?? ""}
               onChange={(event) => handleApplyView(event.target.value)}
