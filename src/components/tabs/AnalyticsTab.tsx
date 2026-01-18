@@ -28,6 +28,14 @@ export function AnalyticsTab() {
     error,
     loadAll,
   } = useAnalyticsStore();
+  const formatPercent = (value?: number, digits = 1) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+    return `${value.toFixed(digits)}%`;
+  };
+  const formatNumber = (value?: number, digits = 2) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+    return value.toFixed(digits);
+  };
 
   useEffect(() => {
     loadAll();
@@ -97,7 +105,7 @@ export function AnalyticsTab() {
           />
           <StatCard
             title="Retention Rate"
-            value={`${dashboardStats.retention_rate.toFixed(1)}%`}
+            value={formatPercent(dashboardStats.retention_rate, 1)}
             icon={TrendingUp}
             color="purple"
             description="Average across all cards"
@@ -158,11 +166,11 @@ export function AnalyticsTab() {
           </div>
 
           {/* FSRS metrics */}
-          {memoryStats.average_stability > 0 && (
+          {Number.isFinite(memoryStats.average_stability) && memoryStats.average_stability > 0 && (
             <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 gap-4">
               <div className="text-center">
                 <p className="text-lg font-semibold text-foreground">
-                  {memoryStats.average_stability.toFixed(2)}
+                  {formatNumber(memoryStats.average_stability, 2)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Avg Stability (days)
@@ -170,7 +178,7 @@ export function AnalyticsTab() {
               </div>
               <div className="text-center">
                 <p className="text-lg font-semibold text-foreground">
-                  {memoryStats.average_difficulty.toFixed(2)}
+                  {formatNumber(memoryStats.average_difficulty, 2)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Avg Difficulty (1-10)
