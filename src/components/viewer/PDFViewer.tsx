@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
+import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs";
 import { List, ChevronLeft, ChevronRight, Maximize, Minimize } from "lucide-react";
 import { cn } from "../../utils";
 import "./PDFViewer.css";
@@ -35,6 +36,7 @@ export function PDFViewer({
   const textLayerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const textLayerBuilderRef = useRef<TextLayerBuilder | null>(null);
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -194,77 +196,28 @@ export function PDFViewer({
     await page.render(renderContext).promise;
     context.setTransform(1, 0, 0, 1, 0, 0);
 
-    // Render text layer for text selection
+    // Render text layer for text selection (PDF.js implementation)
     if (textLayer) {
       try {
-        const textContent = await page.getTextContent();
-        renderTextLayer(textContent, textLayer, viewport);
+        textLayerBuilderRef.current?.cancel();
+        textLayerBuilderRef.current = null;
+        textLayer.innerHTML = "";
+        textLayer.style.width = `${viewport.width}px`;
+        textLayer.style.height = `${viewport.height}px`;
+
+        const textLayerBuilder = new TextLayerBuilder({
+          pdfPage: page,
+          onAppend: (layer) => {
+            textLayer.appendChild(layer);
+          },
+        });
+
+        textLayerBuilderRef.current = textLayerBuilder;
+        await textLayerBuilder.render({ viewport });
       } catch (err) {
         console.warn("Text layer rendering failed:", err);
       }
     }
-  };
-
-  const renderTextLayer = (
-    textContent: any,
-    container: HTMLDivElement,
-    viewport: pdfjsLib.PageViewport
-  ) => {
-    // Clear existing content
-    container.innerHTML = "";
-
-    // Create text layer wrapper
-    const textLayerDiv = document.createElement("div");
-    textLayerDiv.className = "textLayer";
-    textLayerDiv.style.width = `${viewport.width}px`;
-    textLayerDiv.style.height = `${viewport.height}px`;
-
-    // Get the viewport scale
-    const scale = viewport.scale;
-
-    // Render each text item
-    textContent.items.forEach((item: any) => {
-      if (item.str.trim() === "") return;
-
-      const textDiv = document.createElement("span");
-      textDiv.textContent = item.str;
-      textDiv.className = "";
-
-      // PDF transform matrix: [scaleX, skewX, skewY, scaleY, translateX, translateY]
-      // Extract values from the transform matrix
-      const tx = item.transform[4]; // x offset in PDF coordinates
-      const ty = item.transform[5]; // y offset in PDF coordinates (origin at bottom-left)
-
-      // Calculate font size from the transform matrix scale components
-      const fontSize = Math.sqrt(
-        item.transform[0] * item.transform[0] +
-        item.transform[1] * item.transform[1]
-      );
-
-      // Convert PDF coordinates (bottom-left origin) to CSS coordinates (top-left origin)
-      // PDF Y increases upward, CSS Y increases downward
-      // viewport.viewBox gives us [x, y, width, height] of the PDF page
-      const pdfHeight = viewport.viewBox[3]; // Height in PDF units
-
-      // Transform: CSS_Y = (PDF_Height - PDF_Y) * scale
-      const cssX = tx * scale;
-      const cssY = (pdfHeight - ty) * scale;
-
-      // Apply transforms with proper scaling
-      textDiv.style.left = `${cssX}px`;
-      textDiv.style.top = `${cssY}px`;
-      textDiv.style.fontSize = `${fontSize * scale}px`;
-      textDiv.style.fontFamily = item.fontName || "sans-serif";
-
-      // Handle text direction
-      if (item.dir) {
-        textDiv.dir = item.dir;
-      }
-
-      textLayerDiv.appendChild(textDiv);
-    });
-
-    container.appendChild(textLayerDiv);
   };
 
 

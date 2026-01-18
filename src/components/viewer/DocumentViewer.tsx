@@ -69,7 +69,7 @@ export function DocumentViewer({
 
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
-  const [zoomMode, setZoomMode] = useState<"custom" | "fit-width" | "fit-page">("custom");
+  const [zoomMode, setZoomMode] = useState<"custom" | "fit-width" | "fit-page">("fit-width");
   const [fileData, setFileData] = useState<Uint8Array | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("document");
