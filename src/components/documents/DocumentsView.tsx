@@ -23,6 +23,7 @@ import {
 } from "../../utils/documentsView";
 import { filterByDeck } from "../../utils/studyDecks";
 import { importYouTubeVideo } from "../../api/documents";
+import { getDeviceInfo } from "../../lib/pwa";
 
 const MODE_STORAGE_KEY = "documentsViewMode";
 const SAVED_VIEWS_KEY = "documentsSavedViews";
@@ -80,7 +81,9 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   const [showNextAction, setShowNextAction] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [isInspectorOpen, setInspectorOpen] = useState(true);
+  const deviceInfo = getDeviceInfo();
+  const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
+  const [isInspectorOpen, setInspectorOpen] = useState(() => !isMobile);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   const [isDragging, setIsDragging] = useState(false);
@@ -540,8 +543,8 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 flex overflow-hidden documents-layout">
+        <div className="flex-1 overflow-auto p-4 documents-content">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-muted-foreground">Loading documents...</div>
@@ -708,7 +711,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
         </div>
 
         {isInspectorOpen && (
-          <aside className="w-80 border-l border-border bg-card p-4 overflow-auto">
+          <aside className="w-80 border-l border-border bg-card p-4 overflow-auto documents-inspector">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-foreground">Inspector</h2>
               <button

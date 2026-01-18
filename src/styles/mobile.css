@@ -758,6 +758,18 @@
     background: transparent !important;
     min-height: auto !important;
   }
+
+  .documents-layout {
+    flex-direction: column;
+  }
+
+  .documents-content {
+    padding: var(--mobile-density-space-3) !important;
+  }
+
+  .documents-inspector {
+    display: none !important;
+  }
 }
 
 @media (min-width: 769px) {
