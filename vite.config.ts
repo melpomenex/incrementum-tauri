@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import wasm from "vite-plugin-wasm";
 
 // @ts-expect-error process is a nodejs global
 const rawHost = process.env.TAURI_DEV_HOST;
@@ -17,7 +18,7 @@ export default defineConfig(async ({ mode }) => {
   );
   const isPWA = mode === "pwa" || (!isTauriBuild && isProd);
 
-  const plugins = [react(), tailwindcss()];
+  const plugins = [react(), tailwindcss(), wasm()];
 
   return {
     plugins,
