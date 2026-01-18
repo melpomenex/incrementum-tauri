@@ -47,8 +47,22 @@ const upload = multer({
 // All file routes require authentication
 filesRouter.use(authMiddleware);
 
+const checkPaidTier = async (req: AuthRequest, res: any, next: any) => {
+    try {
+        const pool = getPool();
+        const result = await pool.query('SELECT subscription_tier FROM users WHERE id = $1', [req.userId]);
+
+        if (result.rows.length === 0 || result.rows[0].subscription_tier === 'free') {
+            throw createError('File uploads require a paid subscription', 403, 'PAYMENT_REQUIRED');
+        }
+        next();
+    } catch (e) {
+        next(e);
+    }
+};
+
 // Upload a file
-filesRouter.post('/', upload.single('file'), async (req: AuthRequest, res, next) => {
+filesRouter.post('/', checkPaidTier, upload.single('file'), async (req: AuthRequest, res, next) => {
     try {
         if (!req.file) {
             throw createError('No file uploaded', 400, 'NO_FILE');

@@ -10,6 +10,8 @@ import {
   PreviewIntervals,
   ReviewStreak,
 } from "../api/review";
+import { useStudyDeckStore } from "./studyDeckStore";
+import { filterByDeck } from "../utils/studyDecks";
 
 interface ReviewState {
   // Data
@@ -71,14 +73,17 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const items = await getDueItems();
+      const { decks, activeDeckId } = useStudyDeckStore.getState();
+      const activeDeck = decks.find((deck) => deck.id === activeDeckId) ?? null;
+      const filteredItems = activeDeck ? filterByDeck(items, activeDeck) : items;
 
       // Start a review session on the backend
-      const sessionId = items.length > 0 ? await startReview() : "";
+      const sessionId = filteredItems.length > 0 ? await startReview() : "";
 
       set({
-        queue: items,
+        queue: filteredItems,
         currentIndex: 0,
-        currentCard: items[0] || null,
+        currentCard: filteredItems[0] || null,
         sessionStartTime: Date.now(),
         isLoading: false,
         reviewsCompleted: 0,

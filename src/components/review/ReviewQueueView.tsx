@@ -14,6 +14,7 @@ import {
   Target,
 } from "lucide-react";
 import { useQueueStore, type QueueFilterMode } from "../../stores/queueStore";
+import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import type { QueueItem } from "../../types/queue";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../common/ItemDetailsPopover";
 import {
@@ -31,6 +32,7 @@ import {
   isScheduledItem,
   type SessionCustomizationOptions,
 } from "../../utils/reviewUx";
+import { filterByDeck } from "../../utils/studyDecks";
 import {
   SessionCustomizeModal,
   DEFAULT_CUSTOMIZATION,
@@ -69,6 +71,10 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     loadDueDocumentsOnly,
     loadDueQueueItems,
   } = useQueueStore();
+  const { decks, activeDeckId } = useStudyDeckStore((state) => ({
+    decks: state.decks,
+    activeDeckId: state.activeDeckId,
+  }));
   const [queueMode, setQueueMode] = useState<QueueMode>("reading");
   const [preset, setPreset] = useState<PriorityPreset>("maximize-retention");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -103,9 +109,15 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     loadStats();
   }, [queueFilterMode, loadQueue, loadDueDocumentsOnly, loadDueQueueItems, loadStats]);
 
+  const activeDeck = useMemo(
+    () => decks.find((deck) => deck.id === activeDeckId) ?? null,
+    [decks, activeDeckId]
+  );
+
   const visibleItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    const queueItems = items.filter((item) => {
+    const deckFilteredItems = activeDeck ? filterByDeck(items, activeDeck) : items;
+    const queueItems = deckFilteredItems.filter((item) => {
       if (queueMode === "review") {
         return item.itemType === "learning-item" && isScheduledItem(item);
       }
@@ -122,7 +134,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
         })
       : queueItems;
     return [...searchedItems].sort((a, b) => getPriorityScore(b, preset) - getPriorityScore(a, preset));
-  }, [items, queueMode, preset, searchQuery]);
+  }, [items, queueMode, preset, searchQuery, activeDeck]);
 
   const selectableItems = useMemo(
     () => visibleItems.filter((item) => item.itemType === "learning-item"),
@@ -265,6 +277,11 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                 ? "Imported books, articles, and RSS feeds scheduled for incremental reading"
                 : "Flashcards and learning items scheduled for review"}
             </p>
+            {activeDeck && (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
+                Viewing deck: <span className="font-semibold">{activeDeck.name}</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button

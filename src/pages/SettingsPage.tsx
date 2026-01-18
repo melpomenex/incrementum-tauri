@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useSettingsStore } from "../stores/settingsStore";
+import { UserProfilePanel } from "../components/settings/UserProfilePanel";
 import { AISettings } from "../components/settings/AISettings";
 import { SyncSettings } from "../components/settings/SyncSettings";
 import { IntegrationSettings } from "../components/settings/IntegrationSettings";
 import { AudioTranscriptionSettings } from "../components/settings/AudioTranscriptionSettings";
 import { SmartQueuesSettings } from "../components/settings/SmartQueuesSettings";
 
-type SettingsTab = "general" | "ai" | "sync" | "integrations" | "audio-transcription" | "smart-queues" | "about";
+type SettingsTab = "profile" | "general" | "ai" | "sync" | "integrations" | "audio-transcription" | "smart-queues" | "about";
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -20,6 +21,7 @@ export function SettingsPage() {
         </div>
         <div className="p-2">
           {[
+            { id: "profile" as const, label: "Profile", icon: "👤" },
             { id: "general" as const, label: "General", icon: "⚙️" },
             { id: "ai" as const, label: "AI", icon: "🤖" },
             { id: "sync" as const, label: "Sync", icon: "☁️" },
@@ -46,6 +48,12 @@ export function SettingsPage() {
 
       {/* Settings Content */}
       <div className="flex-1 overflow-auto">
+        {activeTab === "profile" && (
+          <div className="p-6 max-w-2xl">
+            <h3 className="text-lg font-semibold text-foreground mb-4">User Profile</h3>
+            <UserProfilePanel />
+          </div>
+        )}
         {activeTab === "general" && <GeneralSettings />}
         {activeTab === "ai" && <AISettings />}
         {activeTab === "sync" && <SyncSettings />}

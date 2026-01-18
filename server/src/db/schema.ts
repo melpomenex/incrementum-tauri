@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  subscription_tier VARCHAR(20) DEFAULT 'free',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -127,6 +128,9 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
   last_sync_version BIGINT DEFAULT 0,
   last_sync_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrations
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'free';
 `;
 
 export async function migrate(): Promise<void> {

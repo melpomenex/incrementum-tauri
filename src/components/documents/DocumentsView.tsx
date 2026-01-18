@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Sparkles } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
+import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
 import type { Document } from "../../types/document";
 import {
@@ -20,6 +21,7 @@ import {
   parseDocumentSearch,
   sortDocuments,
 } from "../../utils/documentsView";
+import { filterByDeck } from "../../utils/studyDecks";
 import { importYouTubeVideo } from "../../api/documents";
 
 const MODE_STORAGE_KEY = "documentsViewMode";
@@ -63,6 +65,10 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     importFromFiles,
     updateDocument,
   } = useDocumentStore();
+  const { decks, activeDeckId } = useStudyDeckStore((state) => ({
+    decks: state.decks,
+    activeDeckId: state.activeDeckId,
+  }));
 
   const [mode, setMode] = useState<DocumentViewMode>(() => {
     if (typeof window === "undefined") return "grid";
@@ -125,10 +131,15 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   }, [savedViews]);
 
   const searchTokens = useMemo(() => parseDocumentSearch(debouncedSearch), [debouncedSearch]);
+  const activeDeck = useMemo(
+    () => decks.find((deck) => deck.id === activeDeckId) ?? null,
+    [decks, activeDeckId]
+  );
 
   const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => matchesDocumentSearch(doc, searchTokens));
-  }, [documents, searchTokens]);
+    const base = documents.filter((doc) => matchesDocumentSearch(doc, searchTokens));
+    return activeDeck ? filterByDeck(base, activeDeck) : base;
+  }, [documents, searchTokens, activeDeck]);
 
   const sortedDocuments = useMemo(() => {
     return sortDocuments(filteredDocuments, sortKey, sortDirection);
@@ -372,6 +383,11 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
             <p className="text-sm text-muted-foreground">
               {sortedDocuments.length} documents • prioritize your next action
             </p>
+            {activeDeck && (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
+                Viewing deck: <span className="font-semibold">{activeDeck.name}</span>
+              </div>
+            )}
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
             {enableYouTubeImport && (

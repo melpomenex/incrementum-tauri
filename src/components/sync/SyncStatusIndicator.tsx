@@ -68,7 +68,7 @@ export function SyncStatusIndicator() {
             {isAuthenticated ? (
                 syncState.isSyncing ? 'Syncing...' : 'Synced'
             ) : (
-                'Sign in to sync'
+                'Local Mode'
             )}
         </button>
     );

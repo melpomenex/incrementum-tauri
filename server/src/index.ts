@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import { authRouter } from './routes/auth.js';
+import { oauthRouter } from './routes/oauth.js';
 import { syncRouter } from './routes/sync.js';
 import { filesRouter } from './routes/files.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -31,6 +32,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/auth', authRouter);
+app.use('/auth', oauthRouter);
 app.use('/sync', syncRouter);
 app.use('/files', filesRouter);
 

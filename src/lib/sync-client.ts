@@ -9,7 +9,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface AuthResponse {
     token: string;
-    user: { id: string; email: string };
+    user: { id: string; email: string; subscriptionTier: string };
 }
 
 interface SyncPullResponse {
@@ -44,7 +44,7 @@ export function getAuthToken(): string | null {
 /**
  * Get stored user
  */
-export function getUser(): { id: string; email: string } | null {
+export function getUser(): { id: string; email: string; subscriptionTier: string } | null {
     const user = localStorage.getItem(USER_KEY);
     return user ? JSON.parse(user) : null;
 }
@@ -90,13 +90,10 @@ async function apiRequest<T>(
  * Register a new account
  */
 export async function register(email: string, password: string): Promise<AuthResponse> {
-    const response = await apiRequest<AuthResponse>('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-    });
-
     localStorage.setItem(TOKEN_KEY, response.token);
     localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+    localStorage.setItem(LAST_SYNC_KEY, '-1'); // Reset sync state to force full push
+    triggerSync();
 
     return response;
 }
@@ -112,6 +109,8 @@ export async function login(email: string, password: string): Promise<AuthRespon
 
     localStorage.setItem(TOKEN_KEY, response.token);
     localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+    localStorage.setItem(LAST_SYNC_KEY, '-1'); // Reset sync state to force full push
+    triggerSync();
 
     return response;
 }
@@ -242,6 +241,11 @@ export async function uploadFile(file: File): Promise<{
     contentType: string;
     size: number;
 }> {
+    const user = getUser();
+    if (user?.subscriptionTier === 'free') {
+        throw new Error('File uploads require a paid subscription. Please upgrade to sync files.');
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 

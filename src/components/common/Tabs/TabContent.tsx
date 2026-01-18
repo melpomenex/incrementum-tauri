@@ -2,6 +2,7 @@ import { Suspense, lazy, ComponentType, useEffect } from "react";
 import { Webview } from "@tauri-apps/api/webview";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { useTabsStore, type Tab } from "../../../stores";
+import { isTauri } from "../../../lib/tauri";
 
 interface TabContentProps {
   tabs: Tab[];
@@ -43,7 +44,7 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
 
   useEffect(() => {
     // When NOT on the web-browser tab, forcefully hide and close any webview
-    if (activeTab?.type !== "web-browser") {
+    if (activeTab?.type !== "web-browser" && isTauri()) {
       const hideWebview = async () => {
         try {
           const webviews = await Webview.getAll();
