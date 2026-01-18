@@ -82,6 +82,27 @@ export async function generateLearningItemsFromExtract(extractId: string): Promi
 }
 
 /**
+ * Delete a single learning item by ID
+ */
+export async function deleteLearningItem(itemId: string): Promise<void> {
+  return await invokeCommand<void>("delete_learning_item", { itemId });
+}
+
+/**
+ * Delete all learning items
+ */
+export async function deleteAllLearningItems(): Promise<void> {
+  return await invokeCommand<void>("delete_all_learning_items");
+}
+
+/**
+ * Delete all learning items for a specific document
+ */
+export async function deleteLearningItemsByDocument(documentId: string): Promise<void> {
+  return await invokeCommand<void>("delete_learning_items_by_document", { documentId });
+}
+
+/**
  * Get the item type display name
  */
 export function getItemTypeName(itemType: LearningItem["item_type"]): string {

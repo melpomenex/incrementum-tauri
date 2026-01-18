@@ -83,3 +83,29 @@ pub async fn get_learning_items_by_extract(
     let items = repo.get_learning_items_by_extract(&extract_id).await?;
     Ok(items)
 }
+
+#[tauri::command]
+pub async fn delete_learning_item(
+    item_id: String,
+    repo: State<'_, Repository>,
+) -> Result<()> {
+    repo.delete_learning_item(&item_id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_all_learning_items(
+    repo: State<'_, Repository>,
+) -> Result<()> {
+    repo.delete_all_learning_items().await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_learning_items_by_document(
+    document_id: String,
+    repo: State<'_, Repository>,
+) -> Result<()> {
+    repo.delete_learning_items_by_document(&document_id).await?;
+    Ok(())
+}

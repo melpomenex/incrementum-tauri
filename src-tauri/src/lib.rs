@@ -160,6 +160,9 @@ pub fn run() {
             commands::get_learning_items,
             commands::get_learning_item,
             commands::get_learning_items_by_extract,
+            commands::delete_learning_item,
+            commands::delete_all_learning_items,
+            commands::delete_learning_items_by_document,
             // Category commands
             commands::get_categories,
             commands::create_category,

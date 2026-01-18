@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Compass, Layers, Plus, RefreshCw, Tag, Zap } from "lucide-react";
+import { BarChart3, Compass, Layers, Plus, RefreshCw, Tag, Trash2, Zap } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useReviewStore } from "../../stores/reviewStore";
 import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { getDueItems, type LearningItem } from "../../api/review";
 import { filterByDeck, matchesDeckTags, normalizeTagList } from "../../utils/studyDecks";
 import type { StudyDeck } from "../../types/study-decks";
+import { deleteAllLearningItems } from "../../api/learning-items";
 
 interface ReviewHomeProps {
   onStartReview: () => Promise<void>;
@@ -122,6 +123,29 @@ export function ReviewHome({ onStartReview }: ReviewHomeProps) {
     updateDeck(deck.id, { tagFilters: nextTags });
   };
 
+  const handleResetAllCards = async () => {
+    if (scopedItems.length === 0) {
+      alert("There are no learning cards to delete.");
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to DELETE ALL ${scopedItems.length} learning cards? This will permanently remove all flashcards and learning items from your entire collection. This action CANNOT be undone!\n\nType "DELETE ALL" to confirm.`;
+    const userInput = prompt(confirmMessage);
+
+    if (userInput !== "DELETE ALL") {
+      return;
+    }
+
+    try {
+      await deleteAllLearningItems();
+      setDueItems([]);
+      alert("All learning cards have been successfully deleted. You can now start fresh!");
+      await loadStats();
+    } catch (err) {
+      alert(`Failed to delete all cards: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="flex flex-col gap-6">
@@ -148,6 +172,16 @@ export function ReviewHome({ onStartReview }: ReviewHomeProps) {
                 <RefreshCw className="h-4 w-4" />
                 Refresh
               </button>
+              {scopedItems.length > 0 && (
+                <button
+                  onClick={handleResetAllCards}
+                  className="inline-flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive hover:bg-destructive/20"
+                  title="Delete all learning cards and start over"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Reset All
+                </button>
+              )}
               <button
                 onClick={onStartReview}
                 disabled={isLoading}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Brain, Eye, EyeOff, Trash2, Edit, RefreshCw } from "lucide-react";
-import { getLearningItems, type LearningItem, getItemTypeName, getItemStateName } from "../../api/learning-items";
+import { getLearningItems, type LearningItem, getItemTypeName, getItemStateName, deleteLearningItem, deleteLearningItemsByDocument } from "../../api/learning-items";
 import { cn } from "../../utils";
 import { DynamicVirtualList } from "../common/VirtualList";
 
@@ -37,6 +37,34 @@ export function LearningCardsList({ documentId }: LearningCardsListProps) {
       ...prev,
       [cardId]: !prev[cardId],
     }));
+  };
+
+  const handleDeleteCard = async (cardId: string) => {
+    if (!confirm("Are you sure you want to delete this learning card? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      await deleteLearningItem(cardId);
+      setCards(prev => prev.filter(card => card.id !== cardId));
+    } catch (err) {
+      alert(`Failed to delete card: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  };
+
+  const handleDeleteAllCards = async () => {
+    if (cards.length === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ALL ${cards.length} learning cards for this document? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await deleteLearningItemsByDocument(documentId);
+      setCards([]);
+    } catch (err) {
+      alert(`Failed to delete all cards: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
   };
 
   const getCardTypeColor = (itemType: LearningItem["item_type"]) => {
@@ -98,6 +126,16 @@ export function LearningCardsList({ documentId }: LearningCardsListProps) {
           <button className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
             Study Now
           </button>
+          {cards.length > 0 && (
+            <button
+              onClick={handleDeleteAllCards}
+              className="px-3 py-1.5 text-sm bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity flex items-center gap-1.5"
+              title="Delete all learning cards for this document"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete All
+            </button>
+          )}
         </div>
       </div>
 
@@ -131,6 +169,7 @@ export function LearningCardsList({ documentId }: LearningCardsListProps) {
                   <Edit className="w-3.5 h-3.5 text-muted-foreground" />
                 </button>
                 <button
+                  onClick={() => handleDeleteCard(card.id)}
                   className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
                   title="Delete card"
                 >
