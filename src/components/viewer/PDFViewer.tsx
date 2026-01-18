@@ -32,11 +32,14 @@ export function PDFViewer({
   onPageChange,
   onLoad,
 }: PDFViewerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const textLayerRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const textLayerBuilderRef = useRef<TextLayerBuilder | null>(null);
+  const pageContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const textLayerRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const textLayerBuildersRef = useRef<(TextLayerBuilder | null)[]>([]);
+  const renderIdRef = useRef(0);
+  const scrollRafRef = useRef<number | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,8 +83,6 @@ export function PDFViewer({
           setOutline(outlineData);
         }
 
-        // Render the requested page
-        await renderPage(pdfDoc, pageNumber);
       } catch (err) {
         if (!mounted) return;
         setError(err instanceof Error ? err.message : "Failed to load PDF");
@@ -102,20 +103,24 @@ export function PDFViewer({
   useEffect(() => {
     let mounted = true;
 
-    const renderCurrentPage = async () => {
+    const renderPages = async () => {
       if (!pdf) return;
+      const renderId = ++renderIdRef.current;
 
-      if (mounted) {
-        await renderPage(pdf, pageNumber);
+      for (let i = 1; i <= pdf.numPages; i += 1) {
+        if (!mounted || renderId !== renderIdRef.current) {
+          return;
+        }
+        await renderPage(pdf, i);
       }
     };
 
-    renderCurrentPage();
+    renderPages();
 
     return () => {
       mounted = false;
     };
-  }, [pdf, pageNumber, scale, zoomMode]);
+  }, [pdf, scale, zoomMode]);
 
   // ResizeObserver to handle container resize (e.g., when assistant panel is resized)
   useEffect(() => {
@@ -131,7 +136,13 @@ export function PDFViewer({
       resizeTimeout = setTimeout(async () => {
         if (pdf && (zoomMode === "fit-width" || zoomMode === "fit-page")) {
           console.log("PDFViewer: Container resized, re-rendering page");
-          await renderPage(pdf, pageNumber);
+          const renderId = ++renderIdRef.current;
+          for (let i = 1; i <= pdf.numPages; i += 1) {
+            if (renderId !== renderIdRef.current) {
+              return;
+            }
+            await renderPage(pdf, i);
+          }
         }
       }, 100);
     });
@@ -148,11 +159,13 @@ export function PDFViewer({
 
   const renderPage = async (pdfDoc: pdfjsLib.PDFDocumentProxy, pageNum: number) => {
     const page = await pdfDoc.getPage(pageNum);
-    const canvas = canvasRef.current;
-    const textLayer = textLayerRef.current;
-    const container = containerRef.current;
+    const pageIndex = pageNum - 1;
+    const canvas = canvasRefs.current[pageIndex];
+    const textLayer = textLayerRefs.current[pageIndex];
+    const pageContainer = pageContainerRefs.current[pageIndex];
     const scrollContainer = scrollContainerRef.current;
-    if (!canvas || !container) return;
+
+    if (!canvas || !textLayer || !pageContainer) return;
 
     const context = canvas.getContext("2d");
     if (!context) return;
@@ -161,15 +174,19 @@ export function PDFViewer({
     let actualScale = scale;
     if (zoomMode === "fit-width") {
       const viewport = page.getViewport({ scale: 1 });
-      const containerWidth = (scrollContainer?.clientWidth ?? container.clientWidth) - 32; // padding
-      actualScale = containerWidth / viewport.width;
+      const containerWidth = (scrollContainer?.clientWidth ?? pageContainer.clientWidth) - 32; // padding
+      if (containerWidth > 0) {
+        actualScale = containerWidth / viewport.width;
+      }
     } else if (zoomMode === "fit-page") {
       const viewport = page.getViewport({ scale: 1 });
-      const containerWidth = (scrollContainer?.clientWidth ?? container.clientWidth) - 32;
-      const containerHeight = (scrollContainer?.clientHeight ?? container.clientHeight) - 32;
-      const scaleWidth = containerWidth / viewport.width;
-      const scaleHeight = containerHeight / viewport.height;
-      actualScale = Math.min(scaleWidth, scaleHeight);
+      const containerWidth = (scrollContainer?.clientWidth ?? pageContainer.clientWidth) - 32;
+      const containerHeight = (scrollContainer?.clientHeight ?? pageContainer.clientHeight) - 32;
+      if (containerWidth > 0 && containerHeight > 0) {
+        const scaleWidth = containerWidth / viewport.width;
+        const scaleHeight = containerHeight / viewport.height;
+        actualScale = Math.min(scaleWidth, scaleHeight);
+      }
     }
 
     const viewport = page.getViewport({ scale: actualScale });
@@ -179,12 +196,13 @@ export function PDFViewer({
     canvas.style.width = `${viewport.width}px`;
     canvas.style.height = `${viewport.height}px`;
 
+    pageContainer.style.width = `${viewport.width}px`;
+    pageContainer.style.height = `${viewport.height}px`;
+
     // Clear and setup text layer
-    if (textLayer) {
-      textLayer.innerHTML = "";
-      textLayer.style.width = `${viewport.width}px`;
-      textLayer.style.height = `${viewport.height}px`;
-    }
+    textLayer.innerHTML = "";
+    textLayer.style.width = `${viewport.width}px`;
+    textLayer.style.height = `${viewport.height}px`;
 
     // Render PDF page to canvas
     const renderContext = {
@@ -197,28 +215,43 @@ export function PDFViewer({
     context.setTransform(1, 0, 0, 1, 0, 0);
 
     // Render text layer for text selection (PDF.js implementation)
-    if (textLayer) {
-      try {
-        textLayerBuilderRef.current?.cancel();
-        textLayerBuilderRef.current = null;
-        textLayer.innerHTML = "";
-        textLayer.style.width = `${viewport.width}px`;
-        textLayer.style.height = `${viewport.height}px`;
+    try {
+      textLayerBuildersRef.current[pageIndex]?.cancel();
+      textLayerBuildersRef.current[pageIndex] = null;
+      textLayer.innerHTML = "";
+      textLayer.style.width = `${viewport.width}px`;
+      textLayer.style.height = `${viewport.height}px`;
 
-        const textLayerBuilder = new TextLayerBuilder({
-          pdfPage: page,
-          onAppend: (layer) => {
-            textLayer.appendChild(layer);
-          },
-        });
+      const textLayerBuilder = new TextLayerBuilder({
+        pdfPage: page,
+        onAppend: (layer) => {
+          textLayer.appendChild(layer);
+        },
+      });
 
-        textLayerBuilderRef.current = textLayerBuilder;
-        await textLayerBuilder.render({ viewport });
-      } catch (err) {
-        console.warn("Text layer rendering failed:", err);
-      }
+      textLayerBuildersRef.current[pageIndex] = textLayerBuilder;
+      await textLayerBuilder.render({ viewport });
+    } catch (err) {
+      console.warn("Text layer rendering failed:", err);
     }
   };
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const pageContainer = pageContainerRefs.current[pageNumber - 1];
+    if (!container || !pageContainer) return;
+
+    isProgrammaticScrollRef.current = true;
+    container.scrollTo({ top: Math.max(0, pageContainer.offsetTop - 16), behavior: "smooth" });
+
+    const timeout = setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 300);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [pageNumber, numPages]);
 
 
   const handlePrevPage = () => {
@@ -282,9 +315,8 @@ export function PDFViewer({
   const handleMouseDown = (e: React.MouseEvent) => {
     // Only enable drag when zoomed in and not clicking on links
     if (scale > 1 || zoomMode === "custom") {
-      if (textLayerRef.current && textLayerRef.current.contains(e.target as Node)) {
-        return;
-      }
+      const targetNode = e.target as Node;
+      if (textLayerRefs.current.some((layer) => layer?.contains(targetNode))) return;
       setIsDragging(true);
       setDragStart({ x: e.clientX - scrollPosition.x, y: e.clientY - scrollPosition.y });
     }
@@ -316,6 +348,29 @@ export function PDFViewer({
     if (container) {
       setScrollPosition({ x: -container.scrollLeft, y: -container.scrollTop });
     }
+
+    if (!container || scrollRafRef.current !== null) return;
+
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      if (isProgrammaticScrollRef.current) return;
+
+      const scrollTop = container.scrollTop;
+      let currentPage = 1;
+      for (let i = 0; i < pageContainerRefs.current.length; i += 1) {
+        const pageEl = pageContainerRefs.current[i];
+        if (!pageEl) continue;
+        if (pageEl.offsetTop - 24 <= scrollTop) {
+          currentPage = i + 1;
+        } else {
+          break;
+        }
+      }
+
+      if (currentPage !== pageNumber) {
+        onPageChange?.(currentPage);
+      }
+    });
   };
 
   return (
@@ -437,38 +492,47 @@ export function PDFViewer({
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
-            className="flex-1 overflow-auto flex items-center justify-center bg-muted/30 p-4"
+            className={cn(
+              "flex-1 overflow-auto bg-muted/30 p-4",
+              isDragging && "cursor-grabbing",
+              !isDragging && (scale > 1 || zoomMode === "custom") && "cursor-grab"
+            )}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
           >
-            <div
-              ref={containerRef}
-              className={cn(
-                "relative",
-                isDragging && "cursor-grabbing",
-                !isDragging && (scale > 1 || zoomMode === "custom") && "cursor-grab"
-              )}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseLeave}
-            >
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-muted-foreground">Loading PDF...</div>
-                </div>
-              ) : (
-                <div className="relative shadow-lg border border-border bg-white transition-transform duration-200">
-                  <canvas
-                    ref={canvasRef}
-                    className="block"
-                  />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-muted-foreground">Loading PDF...</div>
+              </div>
+            ) : (
+              <div className="mx-auto flex flex-col items-center gap-6">
+                {Array.from({ length: numPages }, (_, index) => (
                   <div
-                    ref={textLayerRef}
-                    className="absolute top-0 left-0 overflow-hidden"
-                    style={{ transformOrigin: "0 0" }}
-                  />
-                </div>
-              )}
-            </div>
+                    key={index}
+                    ref={(el) => {
+                      pageContainerRefs.current[index] = el;
+                    }}
+                    className="relative shadow-lg border border-border bg-white transition-transform duration-200"
+                  >
+                    <canvas
+                      ref={(el) => {
+                        canvasRefs.current[index] = el;
+                      }}
+                      className="block"
+                    />
+                    <div
+                      ref={(el) => {
+                        textLayerRefs.current[index] = el;
+                      }}
+                      className="absolute top-0 left-0 overflow-hidden"
+                      style={{ transformOrigin: "0 0" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Page Navigation Footer */}
