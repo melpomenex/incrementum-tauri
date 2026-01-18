@@ -149,6 +149,7 @@ export function PDFViewer({
     const canvas = canvasRef.current;
     const textLayer = textLayerRef.current;
     const container = containerRef.current;
+    const scrollContainer = scrollContainerRef.current;
     if (!canvas || !container) return;
 
     const context = canvas.getContext("2d");
@@ -158,20 +159,23 @@ export function PDFViewer({
     let actualScale = scale;
     if (zoomMode === "fit-width") {
       const viewport = page.getViewport({ scale: 1 });
-      const containerWidth = container.clientWidth - 32; // padding
+      const containerWidth = (scrollContainer?.clientWidth ?? container.clientWidth) - 32; // padding
       actualScale = containerWidth / viewport.width;
     } else if (zoomMode === "fit-page") {
       const viewport = page.getViewport({ scale: 1 });
-      const containerWidth = container.clientWidth - 32;
-      const containerHeight = container.clientHeight - 32;
+      const containerWidth = (scrollContainer?.clientWidth ?? container.clientWidth) - 32;
+      const containerHeight = (scrollContainer?.clientHeight ?? container.clientHeight) - 32;
       const scaleWidth = containerWidth / viewport.width;
       const scaleHeight = containerHeight / viewport.height;
       actualScale = Math.min(scaleWidth, scaleHeight);
     }
 
     const viewport = page.getViewport({ scale: actualScale });
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+    const outputScale = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
+    canvas.style.width = `${viewport.width}px`;
+    canvas.style.height = `${viewport.height}px`;
 
     // Clear and setup text layer
     if (textLayer) {
@@ -184,7 +188,7 @@ export function PDFViewer({
     const renderContext = {
       canvasContext: context,
       viewport: viewport,
-      canvas: canvas,
+      transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
     };
 
     await page.render(renderContext).promise;
@@ -325,6 +329,9 @@ export function PDFViewer({
   const handleMouseDown = (e: React.MouseEvent) => {
     // Only enable drag when zoomed in and not clicking on links
     if (scale > 1 || zoomMode === "custom") {
+      if (textLayerRef.current && textLayerRef.current.contains(e.target as Node)) {
+        return;
+      }
       setIsDragging(true);
       setDragStart({ x: e.clientX - scrollPosition.x, y: e.clientY - scrollPosition.y });
     }
@@ -503,7 +510,7 @@ export function PDFViewer({
                   />
                   <div
                     ref={textLayerRef}
-                    className="absolute top-0 left-0 overflow-hidden pointer-events-none"
+                    className="absolute top-0 left-0 overflow-hidden"
                     style={{ transformOrigin: "0 0" }}
                   />
                 </div>
