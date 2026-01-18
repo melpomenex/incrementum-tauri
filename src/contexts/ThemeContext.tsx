@@ -110,7 +110,7 @@ function loadLastThemeId(): ThemeId {
   } catch (error) {
     console.error('Failed to load last theme:', error);
   }
-  return 'modern-dark'; // Default theme
+  return 'milky-matcha'; // Default theme
 }
 
 /**
@@ -168,7 +168,7 @@ export function ThemeProvider({ children, defaultTheme }: ThemeProviderProps) {
 
     // Switch to default theme if current theme is removed
     if (currentThemeId === themeId) {
-      setCurrentThemeId('modern-dark');
+      setCurrentThemeId('milky-matcha');
     }
   };
 
