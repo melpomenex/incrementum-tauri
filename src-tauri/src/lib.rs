@@ -101,15 +101,16 @@ pub fn run() {
                 let repo = database::Repository::new(pool.clone());
 
                 app.manage(state);
-                app.manage(repo);
                 app.manage(AIState::default());
+
+                // Check and import demo content on first run (before repo is moved)
+                let _ = demo::check_and_import_demo_content(&repo).await;
+
+                app.manage(repo);
 
                 // Initialize browser sync server if auto-start is enabled
                 let repo_arc = std::sync::Arc::new(database::Repository::new(pool));
                 let _ = browser_sync_server::initialize_if_enabled(repo_arc, None).await;
-
-                // Check and import demo content on first run
-                let _ = demo::check_and_import_demo_content(&repo).await;
 
                 tracing_subscriber::fmt::init();
 

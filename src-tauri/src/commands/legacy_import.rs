@@ -501,6 +501,8 @@ fn parse_document_row(row: &sqlx::sqlite::SqliteRow) -> Result<Document> {
         content_hash: row.try_get::<Option<String>, _>("content_hash").unwrap_or(None),
         total_pages: row.try_get::<Option<i32>, _>("total_pages").unwrap_or(None),
         current_page: row.try_get::<Option<i32>, _>("current_page").unwrap_or(None),
+        current_scroll_percent: row.try_get("current_scroll_percent").ok(),
+        current_cfi: row.try_get("current_cfi").ok(),
         category: row.try_get::<Option<String>, _>("category").unwrap_or(None),
         tags,
         date_added: row.try_get("date_added")?,

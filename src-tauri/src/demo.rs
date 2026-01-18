@@ -10,7 +10,7 @@ use crate::database::Repository;
 /// Check if demo content should be imported
 pub async fn should_import_demo_content(repo: &Repository) -> Result<bool> {
     // Check if there are any existing learning items
-    let items = repo.get_learning_items(None, None, None, None).await?;
+    let items = repo.get_all_learning_items().await?;
 
     // Only import demo content if database is empty
     Ok(items.is_empty())

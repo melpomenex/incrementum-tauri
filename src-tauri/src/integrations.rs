@@ -298,6 +298,8 @@ pub async fn import_from_obsidian_internal(
         content_hash: None,
         total_pages: None,
         current_page: None,
+        current_scroll_percent: None,
+        current_cfi: None,
         category: None,
         tags: vec![],
         date_added: chrono::Utc::now(),
