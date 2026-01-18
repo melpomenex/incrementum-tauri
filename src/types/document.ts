@@ -8,6 +8,8 @@ export interface Document {
   contentHash?: string;
   totalPages?: number;
   currentPage?: number;
+  currentScrollPercent?: number;
+  currentCfi?: string;
   category?: string;
   tags: string[];
   dateAdded: string;

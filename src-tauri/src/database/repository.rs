@@ -70,11 +70,11 @@ impl Repository {
             r#"
             INSERT INTO documents (
                 id, title, file_path, file_type, content, content_hash,
-                total_pages, current_page, category, tags,
+                total_pages, current_page, current_scroll_percent, current_cfi, category, tags,
                 date_added, date_modified, date_last_reviewed,
                 extract_count, learning_item_count, priority_rating, priority_slider, priority_score,
                 is_archived, is_favorite, metadata
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
             "#,
         )
         .bind(&document.id)
@@ -85,6 +85,8 @@ impl Repository {
         .bind(&document.content_hash)
         .bind(document.total_pages)
         .bind(document.current_page)
+        .bind(document.current_scroll_percent)
+        .bind(&document.current_cfi)
         .bind(&document.category)
         .bind(&tags_json)
         .bind(document.date_added)
@@ -130,6 +132,8 @@ impl Repository {
                     content_hash: row.get("content_hash"),
                     total_pages: row.get("total_pages"),
                     current_page: row.get("current_page"),
+                    current_scroll_percent: row.try_get("current_scroll_percent").ok(),
+                    current_cfi: row.try_get("current_cfi").ok(),
                     category: row.get("category"),
                     tags,
                     date_added: row.get("date_added"),
@@ -183,6 +187,8 @@ impl Repository {
                     content_hash: row.get("content_hash"),
                     total_pages: row.get("total_pages"),
                     current_page: row.get("current_page"),
+                    current_scroll_percent: row.try_get("current_scroll_percent").ok(),
+                    current_cfi: row.try_get("current_cfi").ok(),
                     category: row.get("category"),
                     tags,
                     date_added: row.get("date_added"),
@@ -235,6 +241,8 @@ impl Repository {
                 content_hash: row.get("content_hash"),
                 total_pages: row.get("total_pages"),
                 current_page: row.get("current_page"),
+                current_scroll_percent: row.try_get("current_scroll_percent").ok(),
+                current_cfi: row.try_get("current_cfi").ok(),
                 category: row.get("category"),
                 tags,
                 date_added: row.get("date_added"),
@@ -367,18 +375,24 @@ impl Repository {
         &self,
         id: &str,
         current_page: Option<i32>,
+        current_scroll_percent: Option<f64>,
+        current_cfi: Option<String>,
     ) -> Result<Document> {
         let now = Utc::now();
 
         sqlx::query(
             r#"
             UPDATE documents SET
-                current_page = ?1,
-                date_modified = ?2
-            WHERE id = ?3
+                current_page = COALESCE(?1, current_page),
+                current_scroll_percent = COALESCE(?2, current_scroll_percent),
+                current_cfi = COALESCE(?3, current_cfi),
+                date_modified = ?4
+            WHERE id = ?5
             "#,
         )
         .bind(current_page)
+        .bind(current_scroll_percent)
+        .bind(current_cfi)
         .bind(now)
         .bind(id)
         .execute(&self.pool)

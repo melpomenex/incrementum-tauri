@@ -6,6 +6,7 @@ import { DocumentViewer as BaseDocumentViewer } from "./DocumentViewer";
 import { AssistantPanel, type AssistantContext, type AssistantPosition } from "../assistant/AssistantPanel";
 import { useDocumentStore, useSettingsStore } from "../../stores";
 import * as documentsApi from "../../api/documents";
+import { trimToTokenWindow } from "../../utils/tokenizer";
 
 const ASSISTANT_POSITION_KEY = "assistant-panel-position";
 
@@ -19,7 +20,9 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
   const [scrollState, setScrollState] = useState<{ pageNumber?: number; scrollPercent?: number }>({});
   const currentDocument = useDocumentStore((state) => state.currentDocument);
   const contextWindowTokens = useSettingsStore((state) => state.settings.ai.maxTokens);
+  const aiModel = useSettingsStore((state) => state.settings.ai.model);
   const [documentContent, setDocumentContent] = useState<string | undefined>(undefined);
+  const [assistantContent, setAssistantContent] = useState<string | undefined>(undefined);
   const [assistantPosition, setAssistantPosition] = useState<AssistantPosition>(() => {
     const saved = localStorage.getItem(ASSISTANT_POSITION_KEY);
     return saved === "left" ? "left" : "right";
@@ -49,33 +52,46 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
     };
   }, [documentId]);
 
-  const assistantContext = useMemo<AssistantContext>(() => {
+  useEffect(() => {
+    let isActive = true;
     const baseContent = currentDocument?.content ?? documentContent;
     const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
-    const maxChars = maxTokens * 4;
 
-    let trimmedContent = baseContent;
-    if (baseContent && baseContent.length > maxChars) {
-      if (selection && baseContent.includes(selection)) {
-        const selectionIndex = baseContent.indexOf(selection);
-        const windowBefore = Math.floor((maxChars - selection.length) / 2);
-        const start = Math.max(0, selectionIndex - windowBefore);
-        const end = Math.min(baseContent.length, start + maxChars);
-        trimmedContent = baseContent.slice(start, end);
-      } else {
-        trimmedContent = baseContent.slice(0, maxChars);
-      }
+    if (!baseContent) {
+      setAssistantContent(undefined);
+      return () => {
+        isActive = false;
+      };
     }
 
+    trimToTokenWindow(baseContent, maxTokens, aiModel, selection)
+      .then((trimmed) => {
+        if (isActive) {
+          setAssistantContent(trimmed);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setAssistantContent(baseContent.slice(0, maxTokens * 4));
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentDocument?.content, documentContent, selection, contextWindowTokens, aiModel]);
+
+  const assistantContext = useMemo<AssistantContext>(() => {
+    const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
     return {
       type: "document",
       documentId,
       selection: selection || undefined,
-      content: trimmedContent,
+      content: assistantContent,
       contextWindowTokens: maxTokens,
       position: scrollState,
     };
-  }, [currentDocument?.content, documentContent, documentId, selection, contextWindowTokens, scrollState]);
+  }, [assistantContent, documentId, selection, contextWindowTokens, scrollState]);
 
   const handlePositionChange = (newPosition: AssistantPosition) => {
     setAssistantPosition(newPosition);

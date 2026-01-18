@@ -178,12 +178,19 @@ export async function getDocumentHttp(id: string): Promise<any | null> {
 /**
  * Update document progress via HTTP API
  */
-export async function updateDocumentProgressHttp(id: string, currentPage: number): Promise<any> {
+export async function updateDocumentProgressHttp(
+  id: string,
+  currentPage?: number | null,
+  currentScrollPercent?: number | null,
+  currentCfi?: string | null
+): Promise<any> {
   const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}/progress`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      current_page: currentPage
+      current_page: currentPage ?? null,
+      current_scroll_percent: currentScrollPercent ?? null,
+      current_cfi: currentCfi ?? null,
     }),
   });
 
@@ -207,9 +214,19 @@ export async function getDocumentAuto(id: string): Promise<any | null> {
 /**
  * Unified updateDocumentProgress function that works in both Tauri and web mode
  */
-export async function updateDocumentProgressAuto(id: string, currentPage: number): Promise<any> {
+export async function updateDocumentProgressAuto(
+  id: string,
+  currentPage?: number | null,
+  currentScrollPercent?: number | null,
+  currentCfi?: string | null
+): Promise<any> {
   if (isWebMode()) {
-    return await updateDocumentProgressHttp(id, currentPage);
+    return await updateDocumentProgressHttp(id, currentPage, currentScrollPercent, currentCfi);
   }
-  return await invokeCommand<Document>("update_document_progress", { id, currentPage });
+  return await invokeCommand<Document>("update_document_progress", {
+    id,
+    current_page: currentPage ?? null,
+    current_scroll_percent: currentScrollPercent ?? null,
+    current_cfi: currentCfi ?? null,
+  });
 }

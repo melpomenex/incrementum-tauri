@@ -52,6 +52,7 @@
     "sql.js": "^1.13.0",
     "tailwind-merge": "^3.4.0",
     "three": "^0.182.0",
+    "@dqbd/tiktoken": "^1.0.18",
     "typings": "^2.1.1",
     "uuid": "^10.0.0",
     "zustand": "^5.0.9"

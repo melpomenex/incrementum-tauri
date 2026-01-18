@@ -167,6 +167,8 @@ export interface Document {
     content_hash?: string;
     total_pages?: number;
     current_page: number;
+    current_scroll_percent?: number;
+    current_cfi?: string;
     category?: string;
     tags: string[];
     date_added: string;
@@ -201,6 +203,8 @@ export async function createDocument(doc: Partial<Document>): Promise<Document> 
         content_hash: doc.content_hash,
         total_pages: doc.total_pages,
         current_page: doc.current_page || 1,
+        current_scroll_percent: doc.current_scroll_percent,
+        current_cfi: doc.current_cfi,
         category: doc.category,
         tags: doc.tags || [],
         date_added: doc.date_added || now,

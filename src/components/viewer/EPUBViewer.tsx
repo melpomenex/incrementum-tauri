@@ -4,6 +4,7 @@ import { cn } from "../../utils";
 import { useThemeStore } from "../common/ThemeSystem";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { getDeviceInfo } from "../../lib/pwa";
+import { getDocumentAuto, updateDocumentProgressAuto } from "../../api/documents";
 
 interface EPUBViewerProps {
   fileData: Uint8Array;
@@ -70,20 +71,19 @@ export function EPUBViewer({
       // Save to localStorage as fallback and for quick access
       localStorage.setItem(`epub-position-${documentId}`, cfi);
 
-      // Also save to database through the document store/update API
-      // We'll update the document's currentPage or a custom field
-      console.log("EPUBViewer: Saving reading position:", cfi);
+      await updateDocumentProgressAuto(documentId, null, null, cfi);
     } catch (error) {
       console.error("EPUBViewer: Failed to save position:", error);
     }
   }, [documentId]);
 
   // Load reading position from database
-  const loadReadingPosition = useCallback((): string | null => {
+  const loadReadingPosition = useCallback(async (): Promise<string | null> => {
     if (!documentId) return null;
 
     try {
-      const saved = localStorage.getItem(`epub-position-${documentId}`);
+      const doc = await getDocumentAuto(documentId);
+      const saved = doc?.current_cfi || doc?.currentCfi || localStorage.getItem(`epub-position-${documentId}`);
       if (saved) {
         console.log("EPUBViewer: Found saved position:", saved);
         return saved;
@@ -437,7 +437,7 @@ export function EPUBViewer({
 
           // Display the book at saved position or start
           console.log("EPUBViewer: Displaying book...");
-          const savedPosition = loadReadingPosition();
+          const savedPosition = await loadReadingPosition();
 
           if (savedPosition) {
             await rendition.display(savedPosition);

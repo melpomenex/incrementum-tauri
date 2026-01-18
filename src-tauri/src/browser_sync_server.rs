@@ -247,6 +247,8 @@ pub struct OpmlExportResponse {
 #[derive(Debug, Deserialize)]
 pub struct UpdateProgressRequest {
     pub current_page: Option<i32>,
+    pub current_scroll_percent: Option<f64>,
+    pub current_cfi: Option<String>,
 }
 
 /// Document response
@@ -257,6 +259,8 @@ pub struct DocumentResponse {
     pub file_path: String,
     pub file_type: String,
     pub current_page: Option<i32>,
+    pub current_scroll_percent: Option<f64>,
+    pub current_cfi: Option<String>,
     pub total_pages: Option<i32>,
     pub content: Option<String>,
     pub category: Option<String>,
@@ -1357,6 +1361,8 @@ async fn handle_get_document(
                 file_path: doc.file_path,
                 file_type: format!("{:?}", doc.file_type),
                 current_page: doc.current_page,
+                current_scroll_percent: doc.current_scroll_percent,
+                current_cfi: doc.current_cfi,
                 total_pages: doc.total_pages,
                 content: doc.content,
                 category: doc.category,
@@ -1382,7 +1388,11 @@ async fn handle_update_progress(
 ) -> Response {
     use crate::database::Repository;
 
-    match state.repo.update_document_progress(&id, payload.current_page).await {
+    match state
+        .repo
+        .update_document_progress(&id, payload.current_page, payload.current_scroll_percent, payload.current_cfi)
+        .await
+    {
         Ok(updated_doc) => {
             let response = DocumentResponse {
                 id: updated_doc.id,
@@ -1390,6 +1400,8 @@ async fn handle_update_progress(
                 file_path: updated_doc.file_path,
                 file_type: format!("{:?}", updated_doc.file_type),
                 current_page: updated_doc.current_page,
+                current_scroll_percent: updated_doc.current_scroll_percent,
+                current_cfi: updated_doc.current_cfi,
                 total_pages: updated_doc.total_pages,
                 content: updated_doc.content,
                 category: updated_doc.category,

@@ -261,10 +261,12 @@ pub async fn update_document_priority(
 pub async fn update_document_progress(
     id: String,
     current_page: Option<i32>,
+    current_scroll_percent: Option<f64>,
+    current_cfi: Option<String>,
     repo: State<'_, Repository>,
 ) -> Result<Document> {
     let updated = repo
-        .update_document_progress(&id, current_page)
+        .update_document_progress(&id, current_page, current_scroll_percent, current_cfi)
         .await?;
     Ok(updated)
 }

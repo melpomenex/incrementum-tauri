@@ -15,6 +15,7 @@ import { HoverRatingControls } from "../review/HoverRatingControls";
 import { useQueueNavigation } from "../../hooks/useQueueNavigation";
 import { cn } from "../../utils";
 import * as documentsApi from "../../api/documents";
+import { updateDocumentProgressAuto } from "../../api/documents";
 import { rateDocument } from "../../api/algorithm";
 import type { ReviewRating } from "../../api/review";
 import { autoExtractWithCache, isAutoExtractEnabled } from "../../utils/documentAutoExtract";
@@ -132,9 +133,13 @@ export function DocumentViewer({
           updatedAt: Date.now(),
         };
         localStorage.setItem(scrollStorageKey, JSON.stringify(payload));
-      }, 250);
+        if (currentDocument?.id) {
+          updateDocumentProgressAuto(currentDocument.id, state.pageNumber, state.scrollPercent, null)
+            .catch((error) => console.warn("Failed to save document progress:", error));
+        }
+      }, 500);
     },
-    [onScrollPositionChange, scrollStorageKey]
+    [onScrollPositionChange, scrollStorageKey, currentDocument?.id]
   );
 
   // Timer for tracking reading time
@@ -300,13 +305,23 @@ export function DocumentViewer({
     if (skipStoredScrollRef.current) return;
 
     const stored = localStorage.getItem(scrollStorageKey);
-    if (!stored) return;
+    if (!stored && typeof currentDocument?.currentScrollPercent !== "number") {
+      return;
+    }
 
     let parsed: { scrollPercent?: number; pageNumber?: number } | null = null;
-    try {
-      parsed = JSON.parse(stored);
-    } catch {
-      parsed = null;
+    if (stored) {
+      try {
+        parsed = JSON.parse(stored);
+      } catch {
+        parsed = null;
+      }
+    }
+    if (!parsed && typeof currentDocument?.currentScrollPercent === "number") {
+      parsed = {
+        scrollPercent: currentDocument.currentScrollPercent,
+        pageNumber: currentDocument.currentPage ?? undefined,
+      };
     }
     if (!parsed) return;
 
@@ -332,7 +347,7 @@ export function DocumentViewer({
     };
 
     tryRestore();
-  }, [isLoading, scrollStorageKey, viewMode]);
+  }, [isLoading, scrollStorageKey, viewMode, currentDocument?.currentScrollPercent, currentDocument?.currentPage]);
 
   useEffect(() => {
     loadQueue();
