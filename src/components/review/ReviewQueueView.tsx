@@ -66,6 +66,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     clearBulkResult,
     queueFilterMode,
     setQueueFilterMode,
+    loadDueDocumentsOnly,
+    loadDueQueueItems,
   } = useQueueStore();
   const [queueMode, setQueueMode] = useState<QueueMode>("reading");
   const [preset, setPreset] = useState<PriorityPreset>("maximize-retention");
