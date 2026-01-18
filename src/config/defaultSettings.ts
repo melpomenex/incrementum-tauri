@@ -224,6 +224,7 @@ tags: [incrementum]
     autoRefresh: true,
     refreshInterval: 5,
     mode: 'normal',
+    useFsrsScheduling: true, // Enable FSRS-based queue scheduling by default
   },
 
   keybindings: {

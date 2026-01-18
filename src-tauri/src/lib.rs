@@ -164,6 +164,7 @@ pub fn run() {
             commands::get_queue_items,
             commands::get_queued_items,
             commands::get_due_queue_items,
+            commands::get_due_documents_only,
             commands::get_queue_stats,
             commands::postpone_item,
             commands::bulk_suspend_items,
@@ -271,6 +272,10 @@ pub fn run() {
             commands::send_cards_due_notification,
             commands::send_review_completed_notification,
             commands::send_document_imported_notification,
+            // Anna's Archive commands
+            commands::search_books,
+            commands::download_book,
+            commands::get_available_mirrors,
             commands::schedule_study_reminders,
             commands::get_notification_settings,
             commands::update_notification_settings,

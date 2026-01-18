@@ -281,6 +281,7 @@ pub fn parse_structured_response(json_str: &str) -> Result<Vec<GeneratedItem>, S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::MessageRole;
 
     #[test]
     fn test_prompt_builder_basic() {

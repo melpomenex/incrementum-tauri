@@ -486,6 +486,25 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_rss_prefs_feed_id ON rss_user_preferences(feed_id);
         "#,
     ),
+
+    // Migration 014: Add FSRS queue performance indexes
+    Migration::new(
+        "014_add_fsrs_queue_index",
+        r#"
+        -- Add next_reading_date column to documents table if it doesn't exist
+        -- This column is used for FSRS-based queue scheduling
+        ALTER TABLE documents ADD COLUMN next_reading_date TEXT;
+
+        -- Create index on documents.next_reading_date for efficient queue queries
+        -- This improves performance for FSRS-based queue scheduling where we filter
+        -- documents by next_reading_date <= now (due documents)
+        CREATE INDEX IF NOT EXISTS idx_documents_next_reading_date ON documents(next_reading_date);
+
+        -- Create composite index for common queue queries
+        -- This optimizes queries that filter by is_archived and sort by next_reading_date
+        CREATE INDEX IF NOT EXISTS idx_documents_archived_next_reading ON documents(is_archived, next_reading_date);
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

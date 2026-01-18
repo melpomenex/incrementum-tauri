@@ -232,6 +232,7 @@ export interface SmartQueueSettings {
   autoRefresh: boolean;
   refreshInterval: number;
   mode: 'normal' | 'filtered' | 'intelligent';
+  useFsrsScheduling: boolean; // Use FSRS-based scheduling for documents in the queue
 }
 
 // Keybindings Settings

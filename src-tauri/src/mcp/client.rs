@@ -409,8 +409,8 @@ mod tests {
         assert_eq!(config.name, "Test Server");
     }
 
-    #[test]
-    fn test_manager_creation() {
+    #[tokio::test]
+    async fn test_manager_creation() {
         let manager = MCPClientManager::new();
         assert!(manager.list_servers().await.is_empty());
     }

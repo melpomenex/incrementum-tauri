@@ -15,7 +15,7 @@ export type PriorityVector = {
   overduePenalty: number;
 };
 
-export type QueueStatus = "new" | "learning" | "review" | "drifted";
+export type QueueStatus = "new" | "learning" | "review" | "drifted" | "due" | "due-overdue" | "scheduled";
 
 export type SessionBlock = {
   id: string;
@@ -124,10 +124,97 @@ export function getPriorityScore(item: QueueItem, preset: PriorityPreset): numbe
 
 export function getQueueStatus(item: QueueItem): QueueStatus {
   const due = item.dueDate ? new Date(item.dueDate).getTime() : null;
-  if (due && due < Date.now()) return "drifted";
+  const now = Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
   if (item.itemType === "learning-item") return "review";
   if (item.itemType === "extract") return "learning";
+
+  // FSRS-based document status
+  if (item.itemType === "document") {
+    if (!due) {
+      // New document - never been scheduled/read
+      return "new";
+    }
+    if (due < now - oneDayMs) {
+      // Overdue by more than a day
+      return "drifted";
+    }
+    if (due <= now) {
+      // Due today or within the last day
+      return "due";
+    }
+    // Scheduled for future
+    return "scheduled";
+  }
+
   return "new";
+}
+
+// Get detailed FSRS scheduling info for display
+export function getFsrsSchedulingInfo(item: QueueItem): {
+  status: string;
+  statusLabel: string;
+  isDue: boolean;
+  isOverdue: boolean;
+  daysUntilDue: number | null;
+  nextReviewDate: Date | null;
+} {
+  const due = item.dueDate ? new Date(item.dueDate) : null;
+  const now = new Date();
+  const isDue = due ? due <= now : false;
+  const isOverdue = due ? due < now : false;
+  const daysUntilDue = due ? Math.ceil((due.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) : null;
+
+  let status = "unknown";
+  let statusLabel = "Unknown";
+
+  if (item.itemType === "learning-item") {
+    status = "review";
+    statusLabel = "Review";
+  } else if (item.itemType === "extract") {
+    status = "learning";
+    statusLabel = "Learning";
+  } else if (item.itemType === "document") {
+    if (!due) {
+      status = "new";
+      statusLabel = "New";
+    } else if (isOverdue) {
+      const daysOverdue = Math.floor((now.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
+      if (daysOverdue >= 7) {
+        status = "drifted";
+        statusLabel = `Overdue (${daysOverdue}d)`;
+      } else {
+        status = "due-overdue";
+        statusLabel = "Overdue";
+      }
+    } else if (isDue) {
+      status = "due";
+      statusLabel = "Due Today";
+    } else {
+      status = "scheduled";
+      if (daysUntilDue !== null) {
+        if (daysUntilDue <= 1) {
+          statusLabel = "Tomorrow";
+        } else if (daysUntilDue <= 7) {
+          statusLabel = `In ${daysUntilDue}d`;
+        } else {
+          statusLabel = `${daysUntilDue}d`;
+        }
+      } else {
+        statusLabel = "Scheduled";
+      }
+    }
+  }
+
+  return {
+    status,
+    statusLabel,
+    isDue,
+    isOverdue,
+    daysUntilDue,
+    nextReviewDate: due,
+  };
 }
 
 export function isScheduledItem(item: QueueItem): boolean {
@@ -247,12 +334,20 @@ export function getStatusLabel(status: QueueStatus): string {
   switch (status) {
     case "drifted":
       return "Drifted";
+    case "due-overdue":
+      return "Overdue";
+    case "due":
+      return "Due Today";
+    case "scheduled":
+      return "Scheduled";
     case "review":
       return "Review";
     case "learning":
       return "Learning";
-    default:
+    case "new":
       return "New";
+    default:
+      return "Unknown";
   }
 }
 

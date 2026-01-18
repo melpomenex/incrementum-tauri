@@ -19,7 +19,7 @@ pub mod incremental_scheduler;
 // Re-exports
 pub use optimizer::calculate_review_statistics;
 pub use queue_selector::QueueSelector;
-pub use document_scheduler::DocumentScheduler;
+pub use document_scheduler::{DocumentScheduler, DocumentSchedulerParams};
 pub use incremental_scheduler::{IncrementalScheduler, IncrementalSchedulerParams};
 
 #[cfg(test)]
@@ -196,6 +196,90 @@ pub fn calculate_document_priority_score(
     };
 
     ((slider + rating_normalized) / 2.0).max(0.0).min(100.0)
+}
+
+/// Calculate FSRS-based priority for documents in the queue.
+///
+/// This uses FSRS `next_reading_date` as the primary factor, with stability
+/// and difficulty as secondary sorting factors. The user's priority_rating
+/// acts as a multiplier on the FSRS-calculated priority.
+///
+/// # Arguments
+/// * `next_reading_date` - FSRS-calculated next review date (None for new documents)
+/// * `stability` - FSRS stability value (None for new documents)
+/// * `difficulty` - FSRS difficulty value (None for new documents)
+/// * `priority_rating` - User-set priority (1-10) acting as multiplier
+///
+/// # Returns
+/// A priority score (0-10) where higher values indicate higher urgency
+pub fn calculate_fsrs_document_priority(
+    next_reading_date: Option<chrono::DateTime<Utc>>,
+    stability: Option<f64>,
+    difficulty: Option<f64>,
+    priority_rating: i32,
+) -> f64 {
+    let now = Utc::now();
+
+    // Calculate user priority multiplier (0.5x to 2.0x based on rating 1-10)
+    // Rating 5 = 1.0x (no effect), Rating 1 = 0.5x, Rating 10 = 2.0x
+    let priority_multiplier = if priority_rating > 0 {
+        let rating = priority_rating.clamp(1, 10) as f64;
+        0.5 + (rating - 1.0) / 9.0 * 1.5  // Maps 1->0.5, 5->1.0, 10->2.0
+    } else {
+        1.0
+    };
+
+    // Base priority from FSRS scheduling
+    let base_priority = match next_reading_date {
+        Some(next_date) => {
+            let is_due = next_date <= now;
+            let days_until_due = (next_date - now).num_days();
+
+            if is_due {
+                // Overdue documents get highest priority
+                // Decay priority based on days overdue (more overdue = slightly lower)
+                let days_overdue = -days_until_due;
+                (10.0 - (days_overdue as f64 * 0.1)).max(5.0)
+            } else {
+                // Future-dated documents get lower priority
+                // Priority decays the further in the future
+                if days_until_due <= 1 {
+                    8.0
+                } else if days_until_due <= 3 {
+                    6.0
+                } else if days_until_due <= 7 {
+                    4.0
+                } else if days_until_due <= 30 {
+                    2.0
+                } else {
+                    0.5  // Very far future, lowest priority
+                }
+            }
+        }
+        None => {
+            // New documents (never read) get high priority for first reading
+            // They're ordered by user-set priority_rating
+            9.0
+        }
+    };
+
+    // Apply user priority multiplier
+    let adjusted_priority = base_priority * priority_multiplier;
+
+    // Apply FSRS metrics as micro-adjustments (secondary sorting factors)
+    let fsrs_adjustment = match (stability, difficulty) {
+        (Some(stab), Some(diff)) => {
+            // Lower stability = higher priority (needs more review)
+            // Higher difficulty = slightly higher priority (harder items need attention)
+            let stability_bonus = if stab < 5.0 { 0.5 } else if stab < 10.0 { 0.2 } else { 0.0 };
+            let difficulty_bonus = if diff > 7.0 { 0.3 } else if diff > 5.0 { 0.1 } else { 0.0 };
+            stability_bonus + difficulty_bonus
+        }
+        _ => 0.0
+    };
+
+    // Final priority with adjustments, clamped to 0-10 range
+    (adjusted_priority + fsrs_adjustment).max(0.0).min(10.0)
 }
 
 #[derive(Clone, serde::Serialize)]

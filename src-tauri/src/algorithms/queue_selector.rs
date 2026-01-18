@@ -112,22 +112,51 @@ impl QueueSelector {
         dist.sample(&mut rng)
     }
 
-    /// Sort queue items by priority (descending) and due date (ascending)
+    /// Sort queue items using FSRS-based priority
+    ///
+    /// Sorting order (FSRS-first):
+    /// 1. Due items (next_reading_date <= now) appear before future-dated items
+    /// 2. Items are sorted by FSRS-calculated priority (descending)
+    /// 3. Within same priority, items are sorted by due date (ascending)
+    /// 4. New items (no due_date) are ordered by user-set priority_rating
     pub fn sort_queue_items(&self, items: &mut [QueueItem]) {
+        let now = chrono::Utc::now();
+
         items.sort_by(|a, b| {
-            // First sort by priority (higher first)
+            // Determine if each item is due, new, or future-dated
+            let a_is_due = a.due_date.as_ref()
+                .and_then(|d| chrono::DateTime::parse_from_rfc3339(d).ok())
+                .map(|d| d.with_timezone(&chrono::Utc) <= now)
+                .unwrap_or(false); // No due_date = new item
+            let a_is_new = a.due_date.is_none();
+            let b_is_due = b.due_date.as_ref()
+                .and_then(|d| chrono::DateTime::parse_from_rfc3339(d).ok())
+                .map(|d| d.with_timezone(&chrono::Utc) <= now)
+                .unwrap_or(false);
+            let b_is_new = b.due_date.is_none();
+
+            // Primary sort: Due items first, then new items, then future-dated items
+            match (a_is_due, a_is_new, b_is_due, b_is_new) {
+                (true, _, false, false) => return std::cmp::Ordering::Less,  // a is due, b is future
+                (false, false, true, _) => return std::cmp::Ordering::Greater, // a is future, b is due
+                (false, true, false, false) => return std::cmp::Ordering::Less,  // a is new, b is future
+                (false, false, false, true) => return std::cmp::Ordering::Greater, // a is future, b is new
+                _ => {} // Both are due, both are new, or both are future - continue to secondary sort
+            }
+
+            // Secondary sort: by FSRS-calculated priority (higher first)
             match b.priority.partial_cmp(&a.priority) {
                 Some(std::cmp::Ordering::Equal) => {}
                 Some(ord) => return ord,
                 None => {}
             }
 
-            // Then sort by due date (earlier first)
+            // Tertiary sort: by due date (earlier first) for items with due dates
             match (&a.due_date, &b.due_date) {
                 (Some(a_date), Some(b_date)) => {
                     a_date.partial_cmp(b_date).unwrap_or(std::cmp::Ordering::Equal)
                 }
-                (Some(_), None) => std::cmp::Ordering::Less,
+                (Some(_), None) => std::cmp::Ordering::Less,  // Has due date comes before new items
                 (None, Some(_)) => std::cmp::Ordering::Greater,
                 (None, None) => std::cmp::Ordering::Equal,
             }
@@ -261,5 +290,112 @@ mod tests {
         assert_eq!(due_items.len(), 2);
         assert!(due_items.iter().any(|i| i.id == "1"));
         assert!(due_items.iter().any(|i| i.id == "2"));
+    }
+
+    // FSRS-based queue ordering tests
+
+    #[test]
+    fn test_fsrs_queue_sorting_due_items_first() {
+        let selector = QueueSelector::new(0.0);
+        let mut items = vec![
+            // New item (no due date) - should come after due items
+            create_test_item("new", 9.0, -1),
+            // Future-dated item - should come last
+            create_test_item("future", 5.0, 10),
+            // Due items - should come first
+            create_test_item("due1", 8.0, 0),
+            create_test_item("due2", 7.0, -2), // Overdue
+        ];
+
+        selector.sort_queue_items(&mut items);
+
+        // Order should be: due items first (by priority), then new, then future
+        assert_eq!(items[0].id, "due1");  // Due, priority 8
+        assert_eq!(items[1].id, "due2");  // Due, priority 7
+        assert_eq!(items[2].id, "new");   // New (no due date)
+        assert_eq!(items[3].id, "future"); // Future-dated
+    }
+
+    #[test]
+    fn test_fsrs_queue_sorting_new_vs_future() {
+        let selector = QueueSelector::new(0.0);
+        let mut items = vec![
+            create_test_item("future1", 9.0, 30),  // Far future
+            create_test_item("new1", 5.0, -1),     // New item
+            create_test_item("future2", 8.0, 5),   // Near future
+            create_test_item("new2", 7.0, -1),     // New item
+        ];
+
+        selector.sort_queue_items(&mut items);
+
+        // New items should come before future-dated items
+        assert!(items.iter().position(|i| i.id == "new1").unwrap() <
+                items.iter().position(|i| i.id == "future1").unwrap());
+        assert!(items.iter().position(|i| i.id == "new2").unwrap() <
+                items.iter().position(|i| i.id == "future2").unwrap());
+    }
+
+    #[test]
+    fn test_fsrs_queue_sorting_due_date_secondary() {
+        let selector = QueueSelector::new(0.0);
+        let now = Utc::now();
+
+        let mut items = vec![
+            QueueItem {
+                id: "due_today".to_string(),
+                document_id: "doc1".to_string(),
+                document_title: "Due Today".to_string(),
+                extract_id: None,
+                learning_item_id: None,
+                item_type: "document".to_string(),
+                priority_rating: None,
+                priority_slider: None,
+                priority: 9.0,
+                due_date: Some(now.to_rfc3339()),
+                estimated_time: 5,
+                tags: vec![],
+                category: None,
+                progress: 0,
+            },
+            QueueItem {
+                id: "due_tomorrow".to_string(),
+                document_id: "doc2".to_string(),
+                document_title: "Due Tomorrow".to_string(),
+                extract_id: None,
+                learning_item_id: None,
+                item_type: "document".to_string(),
+                priority_rating: None,
+                priority_slider: None,
+                priority: 9.0, // Same priority
+                due_date: Some((now + chrono::Duration::days(1)).to_rfc3339()),
+                estimated_time: 5,
+                tags: vec![],
+                category: None,
+                progress: 0,
+            },
+        ];
+
+        selector.sort_queue_items(&mut items);
+
+        // Due today should come before due tomorrow (same priority)
+        assert_eq!(items[0].id, "due_today");
+        assert_eq!(items[1].id, "due_tomorrow");
+    }
+
+    #[test]
+    fn test_fsrs_queue_new_items_ordered_by_priority() {
+        let selector = QueueSelector::new(0.0);
+        let mut items = vec![
+            create_test_item("new_low", 5.0, -1),
+            create_test_item("new_high", 9.0, -1),
+            create_test_item("new_med", 7.0, -1),
+        ];
+
+        selector.sort_queue_items(&mut items);
+
+        // New items should be ordered by priority (descending)
+        assert_eq!(items[0].id, "new_high"); // Priority 9
+        assert_eq!(items[1].id, "new_med");  // Priority 7
+        assert_eq!(items[2].id, "new_low");  // Priority 5
     }
 }

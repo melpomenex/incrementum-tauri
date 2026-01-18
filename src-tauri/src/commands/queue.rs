@@ -2,7 +2,7 @@
 
 use tauri::State;
 use crate::database::Repository;
-use crate::algorithms::{calculate_document_priority_score, QueueSelector};
+use crate::algorithms::{calculate_fsrs_document_priority, QueueSelector};
 use crate::error::Result;
 use crate::models::QueueItem;
 use chrono::Utc;
@@ -183,37 +183,15 @@ pub async fn get_queue(
             _ => 0,
         };
 
-        // Calculate priority for documents
-        let priority_score = calculate_document_priority_score(
-            if document.priority_rating > 0 {
-                Some(document.priority_rating)
-            } else {
-                None
-            },
-            document.priority_slider,
+        // Calculate FSRS-based priority for documents
+        // This uses next_reading_date as the primary factor, with stability and
+        // difficulty as secondary factors. The user's priority_rating acts as a multiplier.
+        let priority = calculate_fsrs_document_priority(
+            document.next_reading_date,
+            document.stability,
+            document.difficulty,
+            document.priority_rating,
         );
-
-        // For documents with next_reading_date, adjust priority based on due date
-        let priority = if let Some(next_reading_date) = document.next_reading_date {
-            let is_due = next_reading_date <= now;
-            let days_until_due = (next_reading_date - now).num_days();
-
-            if is_due {
-                // Documents that are due for reading get higher priority
-                priority_score.max(8.0)
-            } else if days_until_due <= 1 {
-                priority_score.max(7.0)
-            } else if days_until_due <= 3 {
-                priority_score.max(6.0)
-            } else if days_until_due <= 7 {
-                priority_score.max(5.0)
-            } else {
-                priority_score
-            }
-        } else {
-            // Documents without scheduled dates get base priority
-            priority_score
-        };
 
         queue_items.push(QueueItem {
             id: document.id.clone(),
@@ -289,4 +267,73 @@ pub async fn get_due_queue_items(
 
     selector.sort_queue_items(&mut due_items);
     Ok(due_items)
+}
+
+/// Get only due documents (excluding learning items and extracts)
+///
+/// This provides a "Due Today" view focused specifically on documents that
+/// are scheduled for reading via FSRS (next_reading_date <= now) or have
+/// never been read (next_reading_date is NULL).
+#[tauri::command]
+pub async fn get_due_documents_only(
+    repo: State<'_, Repository>,
+) -> Result<Vec<QueueItem>> {
+    let mut due_documents = Vec::new();
+    let now = Utc::now();
+
+    // Get all documents
+    let documents = repo.list_documents().await?;
+
+    for document in documents {
+        // Skip archived documents
+        if document.is_archived {
+            continue;
+        }
+
+        // Include documents that are due (next_reading_date <= now)
+        // OR documents that have never been read (next_reading_date is NULL)
+        let is_due = document.next_reading_date.map_or(true, |next_date| next_date <= now);
+
+        if !is_due {
+            continue; // Skip future-dated documents
+        }
+
+        let progress = match (document.current_page, document.total_pages) {
+            (Some(current), Some(total)) if total > 0 => {
+                ((current as f64 / total as f64) * 100.0).round() as i32
+            }
+            _ => 0,
+        };
+
+        // Calculate FSRS-based priority
+        let priority = calculate_fsrs_document_priority(
+            document.next_reading_date,
+            document.stability,
+            document.difficulty,
+            document.priority_rating,
+        );
+
+        due_documents.push(QueueItem {
+            id: document.id.clone(),
+            document_id: document.id.clone(),
+            document_title: document.title.clone(),
+            extract_id: None,
+            learning_item_id: None,
+            item_type: "document".to_string(),
+            priority_rating: Some(document.priority_rating),
+            priority_slider: Some(document.priority_slider),
+            priority,
+            due_date: document.next_reading_date.map(|d| d.to_rfc3339()),
+            estimated_time: 5,
+            tags: document.tags.clone(),
+            category: document.category.clone(),
+            progress,
+        });
+    }
+
+    // Sort using FSRS-based priority
+    let selector = QueueSelector::new(0.0); // No randomness for due documents
+    selector.sort_queue_items(&mut due_documents);
+
+    Ok(due_documents)
 }

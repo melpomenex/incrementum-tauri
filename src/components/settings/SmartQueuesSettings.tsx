@@ -3,13 +3,14 @@
  * Configure intelligent queue management and auto-refresh behavior
  */
 
-import { RefreshCw, Filter, Brain } from "lucide-react";
+import { RefreshCw, Filter, Brain, Calendar } from "lucide-react";
 
 interface SmartQueuesSettingsProps {
   settings: {
     autoRefresh: boolean;
     refreshInterval: number;
     mode: 'normal' | 'filtered' | 'intelligent';
+    useFsrsScheduling: boolean;
   };
   onUpdateSettings: (updates: Partial<SmartQueuesSettingsProps["settings"]>) => void;
 }
@@ -51,6 +52,33 @@ export function SmartQueuesSettings({
       </div>
 
       <div className="space-y-6">
+        {/* FSRS Scheduling Toggle */}
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-start gap-3">
+              <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div>
+                <div className="text-sm font-medium text-foreground">FSRS-Based Queue Scheduling</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Use FSRS (Free Spaced Repetition Scheduler) algorithm to optimize document review timing based on memory retention
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => onUpdateSettings({ useFsrsScheduling: !settings.useFsrsScheduling })}
+              className={`relative w-12 h-6 rounded-full transition-colors ${
+                settings.useFsrsScheduling ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                  settings.useFsrsScheduling ? "left-7" : "left-1"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         {/* Auto-Refresh Toggle */}
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center justify-between">
@@ -157,6 +185,27 @@ export function SmartQueuesSettings({
             ))}
           </div>
         </div>
+
+        {/* FSRS Info */}
+        {settings.useFsrsScheduling && (
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-3">
+            <p className="text-sm font-medium text-primary">FSRS-Based Scheduling Enabled</p>
+            <ul className="text-sm text-primary space-y-2">
+              <li>
+                Documents are scheduled based on <strong>next_reading_date</strong> calculated by FSRS for optimal memory retention
+              </li>
+              <li>
+                New documents (never read) appear first, ordered by user-set priority
+              </li>
+              <li>
+                Due documents (next_reading_date ≤ now) appear before future-dated documents
+              </li>
+              <li>
+                Your priority_rating acts as a multiplier (0.5x to 2.0x) on FSRS-calculated priority
+              </li>
+            </ul>
+          </div>
+        )}
 
         {/* Mode Descriptions */}
         <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-3">

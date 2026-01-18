@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
+import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
 import type { Document } from "../../types/document";
 import {
   DocumentSortDirection,
@@ -80,6 +81,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
 
   const [isDragging, setIsDragging] = useState(false);
   const [showYouTubeImport, setShowYouTubeImport] = useState(false);
+  const [showAnnaArchiveSearch, setShowAnnaArchiveSearch] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
@@ -382,6 +384,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                 Import YouTube
               </button>
             )}
+            <button
+              onClick={() => setShowAnnaArchiveSearch(true)}
+              className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 text-sm"
+              title="Search and download books from Anna's Archive"
+            >
+              <BookOpen className="w-4 h-4" />
+              Anna's Archive
+            </button>
             <button
               onClick={handleImport}
               disabled={isImporting}
@@ -861,6 +871,21 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showAnnaArchiveSearch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-4xl max-h-[90vh] overflow-auto">
+            <AnnaArchiveSearch
+              onImportComplete={(path) => {
+                // After download, trigger document import from the downloaded path
+                loadDocuments();
+                setShowAnnaArchiveSearch(false);
+              }}
+              onClose={() => setShowAnnaArchiveSearch(false)}
+            />
           </div>
         </div>
       )}

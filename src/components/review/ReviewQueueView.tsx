@@ -13,7 +13,7 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
-import { useQueueStore } from "../../stores/queueStore";
+import { useQueueStore, type QueueFilterMode } from "../../stores/queueStore";
 import type { QueueItem } from "../../types/queue";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../common/ItemDetailsPopover";
 import {
@@ -21,6 +21,7 @@ import {
   buildSessionBlocks,
   formatMinutesRange,
   getFsrsMetrics,
+  getFsrsSchedulingInfo,
   getPriorityScore,
   getPriorityVector,
   getQueueStatus,
@@ -63,6 +64,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     bulkOperationLoading,
     bulkOperationResult,
     clearBulkResult,
+    queueFilterMode,
+    setQueueFilterMode,
   } = useQueueStore();
   const [queueMode, setQueueMode] = useState<QueueMode>("reading");
   const [preset, setPreset] = useState<PriorityPreset>("maximize-retention");
@@ -81,9 +84,22 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   }, [queueMode, onOpenScrollMode]);
 
   useEffect(() => {
-    loadQueue();
+    // Load queue based on current filter mode
+    switch (queueFilterMode) {
+      case "due-today":
+        loadDueDocumentsOnly();
+        break;
+      case "due-all":
+        loadDueQueueItems();
+        break;
+      case "all-items":
+      case "new-only":
+      default:
+        loadQueue();
+        break;
+    }
     loadStats();
-  }, [loadQueue, loadStats]);
+  }, [queueFilterMode, loadQueue, loadDueDocumentsOnly, loadDueQueueItems, loadStats]);
 
   const visibleItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -309,6 +325,50 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
             />
             <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           </div>
+          {queueMode === "reading" && (
+            <div className="flex items-center gap-1 bg-muted/60 rounded-md p-1">
+              <button
+                onClick={() => setQueueFilterMode("due-today")}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
+                  queueFilterMode === "due-today" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Documents scheduled for today (FSRS)"
+              >
+                <Clock className="w-3 h-3" />
+                Due Today
+              </button>
+              <button
+                onClick={() => setQueueFilterMode("all-items")}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
+                  queueFilterMode === "all-items" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="All documents in your library"
+              >
+                <LayoutList className="w-3 h-3" />
+                All Items
+              </button>
+              <button
+                onClick={() => setQueueFilterMode("new-only")}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
+                  queueFilterMode === "new-only" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Documents that have never been read"
+              >
+                <Sparkles className="w-3 h-3" />
+                New Only
+              </button>
+              <button
+                onClick={() => setQueueFilterMode("due-all")}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
+                  queueFilterMode === "due-all" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="All due items (documents, extracts, flashcards)"
+              >
+                <Target className="w-3 h-3" />
+                Due All
+              </button>
+            </div>
+          )}
           <select
             value={preset}
             onChange={(event) => setPreset(event.target.value as PriorityPreset)}
@@ -467,6 +527,18 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                             />
                           )}
                           <StatusPill status={status} />
+                          {item.itemType === "document" && (() => {
+                            const fsrsInfo = getFsrsSchedulingInfo(item);
+                            return (
+                              <span
+                                className="px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-300"
+                                title={`Next review: ${fsrsInfo.nextReviewDate ? fsrsInfo.nextReviewDate.toLocaleDateString() : 'Not scheduled'}`}
+                              >
+                                <Clock className="w-3 h-3 inline mr-1" />
+                                {fsrsInfo.statusLabel}
+                              </span>
+                            );
+                          })()}
                           <div className="min-w-0">
                             <div className="text-sm font-semibold text-foreground line-clamp-1">
                               {item.documentTitle}
@@ -674,6 +746,12 @@ function StatusPill({ status }: { status: ReturnType<typeof getQueueStatus> }) {
   const styles =
     status === "drifted"
       ? "bg-slate-500/15 text-slate-200 dark:text-slate-300"
+      : status === "due-overdue"
+      ? "bg-red-500/15 text-red-600 dark:text-red-300"
+      : status === "due"
+      ? "bg-orange-500/15 text-orange-600 dark:text-orange-300"
+      : status === "scheduled"
+      ? "bg-blue-500/15 text-blue-600 dark:text-blue-300"
       : status === "review"
       ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
       : status === "learning"

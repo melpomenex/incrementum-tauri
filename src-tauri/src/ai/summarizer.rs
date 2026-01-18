@@ -280,6 +280,7 @@ mod tests {
     use super::*;
     use crate::ai::providers::{ChatCompletionResponse, LLMProvider, LLMProviderType};
 
+    #[derive(Debug)]
     struct MockProvider {
         response: String,
     }

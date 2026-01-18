@@ -78,6 +78,39 @@ export async function getQueue(): Promise<QueueItem[]> {
 }
 
 /**
+ * Get only due documents (FSRS-scheduled documents with next_reading_date <= now)
+ * This provides a "Due Today" view focused specifically on documents
+ */
+export async function getDueDocumentsOnly(): Promise<QueueItem[]> {
+  const items = await invokeCommand<RustQueueItem[]>("get_due_documents_only");
+  return items.map(convertQueueItem);
+}
+
+/**
+ * Get due queue items only (includes documents, extracts, and learning items)
+ */
+export async function getDueQueueItems(randomness?: number): Promise<QueueItem[]> {
+  const items = await invokeCommand<RustQueueItem[]>("get_due_queue_items", { randomness });
+  return items.map(convertQueueItem);
+}
+
+/**
+ * Get next item from the queue
+ */
+export async function getNextQueueItem(randomness?: number): Promise<QueueItem | null> {
+  const item = await invokeCommand<RustQueueItem | null>("get_next_queue_item", { randomness });
+  return item ? convertQueueItem(item) : null;
+}
+
+/**
+ * Get multiple items from the queue
+ */
+export async function getQueueItems(count?: number, randomness?: number): Promise<QueueItem[]> {
+  const items = await invokeCommand<RustQueueItem[]>("get_queue_items", { count, randomness });
+  return items.map(convertQueueItem);
+}
+
+/**
  * Get queue statistics
  */
 export async function getQueueStats(): Promise<QueueStats> {

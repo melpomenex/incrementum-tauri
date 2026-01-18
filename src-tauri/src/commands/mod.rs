@@ -3,6 +3,7 @@
 pub mod analytics;
 pub mod algorithm;
 pub mod ai;
+pub mod anna_archive;
 pub mod document;
 pub mod extract;
 pub mod extract_bulk;
@@ -28,6 +29,7 @@ pub use crate::error::Result;
 pub use analytics::*;
 pub use algorithm::*;
 pub use ai::*;
+pub use anna_archive::*;
 pub use document::*;
 pub use extract::*;
 pub use extract_bulk::*;

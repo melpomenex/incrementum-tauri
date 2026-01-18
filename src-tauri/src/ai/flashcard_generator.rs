@@ -197,9 +197,10 @@ impl BatchFlashcardGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::providers::{Message, MessageRole};
+    use crate::ai::providers::{ChatCompletionRequest, ChatCompletionResponse, LLMProvider, Message, MessageRole};
 
     // Mock provider for testing
+    #[derive(Debug)]
     struct MockProvider {
         response: String,
     }
@@ -213,8 +214,8 @@ mod tests {
         async fn chat_completion(
             &self,
             _request: &ChatCompletionRequest,
-        ) -> Result<crate::ai::ChatCompletionResponse, String> {
-            Ok(crate::ai::ChatCompletionResponse {
+        ) -> Result<ChatCompletionResponse, String> {
+            Ok(ChatCompletionResponse {
                 content: self.response.clone(),
                 input_tokens: 100,
                 output_tokens: 200,

@@ -1,6 +1,20 @@
 import { create } from "zustand";
-import { getQueue, getQueueStats, postponeItem, bulkSuspendItems, bulkUnsuspendItems, bulkDeleteItems, type BulkOperationResult, type QueueStats } from "../api/queue";
+import {
+  getQueue,
+  getDueDocumentsOnly,
+  getDueQueueItems,
+  getQueueStats,
+  postponeItem,
+  bulkSuspendItems,
+  bulkUnsuspendItems,
+  bulkDeleteItems,
+  type BulkOperationResult,
+  type QueueStats
+} from "../api/queue";
 import type { QueueItem, SortOptions, SearchFilters } from "../types";
+
+// Queue filter modes for FSRS-based scheduling
+export type QueueFilterMode = "due-today" | "all-items" | "new-only" | "due-all";
 
 interface QueueState {
   // Data
@@ -15,11 +29,15 @@ interface QueueState {
   searchQuery: string;
   filters: SearchFilters;
   sortOptions: SortOptions;
+  queueFilterMode: QueueFilterMode; // FSRS queue filter mode
   bulkOperationLoading: boolean;
   bulkOperationResult: BulkOperationResult | null;
 
   // Actions
   loadQueue: () => Promise<void>;
+  loadDueDocumentsOnly: () => Promise<void>;
+  loadDueQueueItems: () => Promise<void>;
+  setQueueFilterMode: (mode: QueueFilterMode) => void;
   loadStats: () => Promise<void>;
   setItems: (items: QueueItem[]) => void;
   setSelected: (id: string, selected: boolean) => void;
@@ -54,6 +72,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     field: "priority",
     direction: "desc",
   },
+  queueFilterMode: "due-today", // Default to due-today for FSRS-based scheduling
   bulkOperationLoading: false,
   bulkOperationResult: null,
 
@@ -81,6 +100,61 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       set({ stats });
     } catch (error) {
       console.error("Failed to load queue stats:", error);
+    }
+  },
+
+  // Load only due documents (FSRS-scheduled with next_reading_date <= now or never read)
+  loadDueDocumentsOnly: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const items = await getDueDocumentsOnly();
+      set({
+        items,
+        filteredItems: items,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Failed to load due documents",
+        isLoading: false,
+      });
+    }
+  },
+
+  // Load due queue items (includes documents, extracts, and learning items)
+  loadDueQueueItems: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const items = await getDueQueueItems();
+      set({
+        items,
+        filteredItems: items,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Failed to load due items",
+        isLoading: false,
+      });
+    }
+  },
+
+  // Set the queue filter mode and reload accordingly
+  setQueueFilterMode: async (mode: QueueFilterMode) => {
+    set({ queueFilterMode: mode });
+    // Reload queue based on the new filter mode
+    switch (mode) {
+      case "due-today":
+        await get().loadDueDocumentsOnly();
+        break;
+      case "due-all":
+        await get().loadDueQueueItems();
+        break;
+      case "all-items":
+      case "new-only":
+      default:
+        await get().loadQueue();
+        break;
     }
   },
 
