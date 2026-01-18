@@ -5,6 +5,8 @@ import { useDocumentStore } from "./stores/documentStore";
 import { useQueueStore } from "./stores/queueStore";
 import { useReviewStore } from "./stores/reviewStore";
 import { invokeCommand } from "./lib/tauri";
+import * as syncClient from "./lib/sync-client";
+import { LoginModal } from "./components/auth/LoginModal";
 
 // Page components
 import { DocumentsPage } from "./pages/DocumentsPage";
@@ -26,9 +28,38 @@ function App() {
   const { documents, loadDocuments } = useDocumentStore();
   const { queue: reviewQueue } = useReviewStore();
 
+  const [isAuthenticated, setIsAuthenticated] = useState(syncClient.isAuthenticated());
+  const [user, setUser] = useState(syncClient.getUser());
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  const handleLogin = async (email: string, password: string) => {
+    await syncClient.login(email, password);
+    setIsAuthenticated(true);
+    setUser(syncClient.getUser());
+  };
+
+  const handleRegister = async (email: string, password: string) => {
+    await syncClient.register(email, password);
+    setIsAuthenticated(true);
+    setUser(syncClient.getUser());
+  };
+
+  const handleLogout = () => {
+    syncClient.logout();
+    setIsAuthenticated(false);
+    setUser(null);
+  };
+
+  const handleAuthenticated = () => {
+    setIsAuthenticated(true);
+    setUser(syncClient.getUser());
+  };
+
   useEffect(() => {
     loadAll();
     loadDocuments();
+    setIsAuthenticated(syncClient.isAuthenticated());
+    setUser(syncClient.getUser());
   }, [loadAll, loadDocuments]);
 
   const renderPage = () => {
@@ -56,9 +87,23 @@ function App() {
   }
 
   return (
-    <NewMainLayout activeItem={currentPage} onPageChange={setCurrentPage}>
-      {renderPage()}
-    </NewMainLayout>
+    <>
+      <NewMainLayout
+        activeItem={currentPage}
+        onPageChange={setCurrentPage}
+        isAuthenticated={isAuthenticated}
+        user={user}
+        onLoginClick={() => setShowLoginModal(true)}
+        onLogout={handleLogout}
+      >
+        {renderPage()}
+      </NewMainLayout>
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onAuthenticated={handleAuthenticated}
+      />
+    </>
   );
 }
 

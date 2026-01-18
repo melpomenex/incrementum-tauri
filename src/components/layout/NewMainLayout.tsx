@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useAnalyticsStore } from "../../stores/analyticsStore";
+import { SyncStatusIndicator } from "../sync/SyncStatusIndicator";
 import {
   Home,
   BookOpen,
@@ -33,10 +34,18 @@ export function NewMainLayout({
   children,
   activeItem,
   onPageChange,
+  isAuthenticated,
+  user,
+  onLoginClick,
+  onLogout,
 }: {
   children: React.ReactNode;
   activeItem: string;
   onPageChange: (page: string) => void;
+  isAuthenticated?: boolean;
+  user?: { id: string; email: string } | null;
+  onLoginClick?: () => void;
+  onLogout?: () => void;
 }) {
   const { settings } = useSettingsStore();
   const { dashboardStats, loadAll } = useAnalyticsStore();
@@ -63,7 +72,12 @@ export function NewMainLayout({
   return (
     <div className="flex flex-col h-screen w-full bg-cream">
       {/* Top Header Bar */}
-      <TopHeaderBar />
+      <TopHeaderBar
+        isAuthenticated={isAuthenticated}
+        user={user}
+        onLoginClick={onLoginClick}
+        onLogout={onLogout}
+      />
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden">
@@ -83,7 +97,17 @@ export function NewMainLayout({
   );
 }
 
-function TopHeaderBar() {
+function TopHeaderBar({
+  isAuthenticated,
+  user,
+  onLoginClick,
+  onLogout,
+}: {
+  isAuthenticated?: boolean;
+  user?: { id: string; email: string } | null;
+  onLoginClick?: () => void;
+  onLogout?: () => void;
+}) {
   return (
     <header className="h-10 bg-card border-b border-border flex items-center justify-between px-3 flex-shrink-0">
       {/* Left side - navigation icons */}
@@ -105,6 +129,7 @@ function TopHeaderBar() {
 
       {/* Right side - actions */}
       <div className="flex items-center gap-2">
+        <SyncStatusIndicator />
         <button className="p-1 hover:bg-muted rounded transition-colors" title="Search">
           <Search className="w-4 h-4 text-foreground-secondary" />
         </button>
@@ -112,9 +137,37 @@ function TopHeaderBar() {
           <Bell className="w-4 h-4 text-foreground-secondary" />
         </button>
         <div className="h-4 w-px bg-border mx-1" />
-        <button className="p-1 hover:bg-muted rounded transition-colors" title="User profile">
-          <User className="w-4 h-4 text-foreground-secondary" />
-        </button>
+        {isAuthenticated && user ? (
+          <div className="relative group">
+            <button className="p-1 hover:bg-muted rounded transition-colors" title="User profile">
+              <div className="w-5 h-5 rounded-full bg-primary-300 flex items-center justify-center text-white text-xs font-medium">
+                {user.email[0].toUpperCase()}
+              </div>
+            </button>
+            <div className="absolute right-0 top-full mt-1 w-48 py-1 rounded-lg bg-card border border-border shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+              <div className="px-3 py-2 text-sm text-foreground-secondary border-b border-border truncate">
+                {user.email}
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-muted"
+                >
+                  Sign out
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          onLoginClick && (
+            <button
+              onClick={onLoginClick}
+              className="px-3 py-1 text-sm bg-primary-300 text-white rounded hover:opacity-90 transition-opacity"
+            >
+              Sign in
+            </button>
+          )
+        )}
       </div>
     </header>
   );
