@@ -457,7 +457,7 @@ I also have context of what you're currently viewing, so feel free to ask questi
         provider: p.provider,
         name: p.name,
         enabled: p.enabled,
-        hasApiKey: !!p.apiKey && p.apiKey.trim().length > 0,
+        hasApiKey: p.apiKey ? p.apiKey.trim().length > 0 : false,
       })));
 
       // Check if the selected provider exists but is disabled

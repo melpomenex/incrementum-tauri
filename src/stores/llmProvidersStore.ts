@@ -62,7 +62,7 @@ export const useLLMProvidersStore = create<LLMProvidersState>()(
           id: p.id,
           provider: p.provider,
           name: p.name,
-          hasApiKey: !!p.apiKey && p.apiKey.trim().length > 0,
+          hasApiKey: p.apiKey ? p.apiKey.trim().length > 0 : false,
           enabled: p.enabled,
         })));
         return enabled;
@@ -85,7 +85,7 @@ export const useLLMProvidersStore = create<LLMProvidersState>()(
           const before = state.providers.length;
           // Remove providers with empty API keys (except ollama which doesn't require one)
           state.providers = state.providers.filter((p) =>
-            p.provider === 'ollama' || (p.apiKey && p.apiKey.trim().length > 0)
+            p.provider === 'ollama' || (p.apiKey ? p.apiKey.trim().length > 0 : false)
           );
           const after = state.providers.length;
           if (before !== after) {

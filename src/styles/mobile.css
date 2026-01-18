@@ -251,6 +251,13 @@
   padding: 8px 0;
   z-index: 1000;
   user-select: none;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.mobile-bottom-nav.hidden {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .mobile-nav-item {
@@ -1096,4 +1103,3 @@
     display: none;
   }
 }
-

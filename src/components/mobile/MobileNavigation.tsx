@@ -8,7 +8,7 @@
  * - Responsive icon sizing
  */
 
-import { NavLink, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import {
   Home,
   FileText,
@@ -16,14 +16,30 @@ import {
   Rss,
   Settings,
   BarChart3,
+  X,
 } from "lucide-react";
+import { useTabsStore } from "../../stores";
+import type { TabType } from "../../stores/tabsStore";
+import {
+  DashboardTab,
+  QueueTab,
+  ReviewTab,
+  DocumentsTab,
+  AnalyticsTab,
+  SettingsTab,
+  RssTab,
+} from "../tabs/TabRegistry";
 
 interface NavItem {
   id: string;
   label: string;
   icon: React.ElementType;
-  path: string;
-  badge?: number;
+  tabType: TabType;
+  tabTitle: string;
+  tabIcon: string;
+  tabContent: React.ComponentType;
+  closable: boolean;
+  badge?: "review" | "rss";
 }
 
 const navItems: NavItem[] = [
@@ -31,61 +47,125 @@ const navItems: NavItem[] = [
     id: "dashboard",
     label: "Home",
     icon: Home,
-    path: "/#/",
+    tabType: "dashboard",
+    tabTitle: "Dashboard",
+    tabIcon: "📊",
+    tabContent: DashboardTab,
+    closable: false,
   },
   {
     id: "documents",
     label: "Documents",
     icon: FileText,
-    path: "/#/documents",
+    tabType: "documents",
+    tabTitle: "Documents",
+    tabIcon: "📂",
+    tabContent: DocumentsTab,
+    closable: true,
   },
   {
     id: "review",
     label: "Review",
     icon: Brain,
-    path: "/#/review",
+    tabType: "review",
+    tabTitle: "Review",
+    tabIcon: "🧠",
+    tabContent: ReviewTab,
+    closable: true,
+    badge: "review",
   },
   {
     id: "rss",
     label: "RSS",
     icon: Rss,
-    path: "/#/rss",
+    tabType: "rss",
+    tabTitle: "RSS",
+    tabIcon: "📰",
+    tabContent: RssTab,
+    closable: true,
+    badge: "rss",
   },
   {
     id: "analytics",
     label: "Stats",
     icon: BarChart3,
-    path: "/#/analytics",
+    tabType: "analytics",
+    tabTitle: "Statistics",
+    tabIcon: "📈",
+    tabContent: AnalyticsTab,
+    closable: true,
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings,
+    tabType: "settings",
+    tabTitle: "Settings",
+    tabIcon: "⚙️",
+    tabContent: SettingsTab,
+    closable: true,
+  },
+  {
+    id: "queue",
+    label: "Queue",
+    icon: FileText,
+    tabType: "queue",
+    tabTitle: "Queue",
+    tabIcon: "📚",
+    tabContent: QueueTab,
+    closable: true,
   },
 ];
 
 interface MobileNavigationProps {
   dueCount?: number;
   unreadCount?: number;
+  hidden?: boolean;
 }
 
-export function MobileNavigation({ dueCount = 0, unreadCount = 0 }: MobileNavigationProps) {
-  const location = useLocation();
+export function MobileNavigation({
+  dueCount = 0,
+  unreadCount = 0,
+  hidden = false,
+}: MobileNavigationProps) {
+  const { tabs, activeTabId, addTab, setActiveTab } = useTabsStore();
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) ?? null,
+    [tabs, activeTabId]
+  );
 
-  // Check if current path matches (handles hash routing)
-  const isActive = (path: string) => {
-    // Remove trailing slash and compare
-    const currentPath = location.pathname + location.hash;
-    return currentPath === path || currentPath.replace(/\/$/, '') === path;
+  const openTab = (item: NavItem) => {
+    const existing = tabs.find((tab) => tab.type === item.tabType);
+    if (existing) {
+      setActiveTab(existing.id);
+      return;
+    }
+
+    addTab({
+      title: item.tabTitle,
+      icon: item.tabIcon,
+      type: item.tabType,
+      content: item.tabContent,
+      closable: item.closable,
+    });
   };
 
   return (
-    <nav className="mobile-bottom-nav">
+    <nav className={`mobile-bottom-nav ${hidden ? "hidden" : ""}`} aria-hidden={hidden}>
       {navItems.map((item) => {
-        const active = isActive(item.path);
-        const badge = item.id === "review" ? dueCount :
-                     item.id === "rss" ? unreadCount :
-                     item.badge;
+        const active = activeTab?.type === item.tabType;
+        const badge =
+          item.badge === "review"
+            ? dueCount
+            : item.badge === "rss"
+            ? unreadCount
+            : 0;
 
         return (
-          <NavLink
+          <button
             key={item.id}
-            to={item.path}
+            type="button"
+            onClick={() => openTab(item)}
             className={`mobile-nav-item ${active ? 'active' : ''}`}
             aria-label={item.label}
             aria-current={active ? "page" : undefined}
@@ -99,7 +179,7 @@ export function MobileNavigation({ dueCount = 0, unreadCount = 0 }: MobileNaviga
               )}
             </div>
             <span className="mobile-nav-label">{item.label}</span>
-          </NavLink>
+          </button>
         );
       })}
     </nav>
@@ -236,7 +316,7 @@ export function MobileSettingsPanel({
 /**
  * PWA Status indicator
  */
-function PWastatusIndicator() {
+export function PWastatusIndicator() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isPWA, setIsPWA] = useState(false);
 

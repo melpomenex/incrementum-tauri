@@ -29,6 +29,8 @@ const STATIC_ASSETS = [
 // API endpoints that should be cached
 const CACHEABLE_API_PATTERNS = [
   '/api/documents',
+  '/api/queue',
+  '/api/review',
   '/api/rss',
   '/api/analytics',
 ];

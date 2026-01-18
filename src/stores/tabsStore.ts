@@ -13,6 +13,7 @@ export type TabType =
   | "settings"
   | "knowledge-sphere"
   | "knowledge-network"
+  | "rss"
   | "web-browser";
 
 export interface Tab {

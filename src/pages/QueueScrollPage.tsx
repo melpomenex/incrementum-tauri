@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2 } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
 import { useDocumentStore } from "../stores/documentStore";
@@ -19,6 +20,7 @@ import { getUnreadItems, type FeedItem as RSSFeedItem, type Feed as RSSFeed, mar
 import { cn } from "../utils";
 import type { QueueItem } from "../types";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../components/common/ItemDetailsPopover";
+import { AssistantPanel, type AssistantContext, type AssistantPosition } from "../components/assistant/AssistantPanel";
 
 /**
  * Unified scroll item type for documents, RSS articles, and flashcards
@@ -61,6 +63,12 @@ export function QueueScrollPage() {
   const [dueFlashcards, setDueFlashcards] = useState<LearningItem[]>([]);
   const [dueExtracts, setDueExtracts] = useState<Extract[]>([]);
   const [isRating, setIsRating] = useState(false);
+  const [, setAssistantInputActive] = useState(false);
+  const [assistantPosition, setAssistantPosition] = useState<AssistantPosition>(() => {
+    const saved = localStorage.getItem("assistant-panel-position");
+    return saved === "left" ? "left" : "right";
+  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Popup state
   const [activeExtractForCloze, setActiveExtractForCloze] = useState<{ id: string, text: string, range: [number, number] } | null>(null);
@@ -286,6 +294,50 @@ export function QueueScrollPage() {
     return null;
   }, [currentItem, documents]);
 
+  const assistantContext = useMemo<AssistantContext | undefined>(() => {
+    const assistantItem = renderedItem ?? currentItem;
+    if (!assistantItem) return undefined;
+
+    if (assistantItem.type === "document" && assistantItem.documentId) {
+      const doc = documents.find(d => d.id === assistantItem.documentId);
+      const title = doc?.title || assistantItem.documentTitle;
+      const content = [title ? `Title: ${title}` : null, doc?.content]
+        .filter(Boolean)
+        .join("\n\n");
+      return {
+        type: "document",
+        documentId: assistantItem.documentId,
+        content: content || undefined,
+      };
+    }
+
+    if (assistantItem.type === "extract" && assistantItem.extract) {
+      const extractContent = [assistantItem.extract.content, assistantItem.extract.notes]
+        .filter(Boolean)
+        .join("\n\n");
+      const title = assistantItem.documentTitle ? `Title: ${assistantItem.documentTitle}` : null;
+      const content = [title, extractContent].filter(Boolean).join("\n\n");
+      return {
+        type: "document",
+        documentId: `extract:${assistantItem.extract.id}`,
+        content: content || undefined,
+      };
+    }
+
+    if (assistantItem.type === "rss") {
+      const title = assistantItem.rssItem?.title ? `Title: ${assistantItem.rssItem?.title}` : null;
+      const rssContent = assistantItem.rssItem?.content || assistantItem.rssItem?.description;
+      const content = [title, rssContent].filter(Boolean).join("\n\n");
+      return {
+        type: "web",
+        url: assistantItem.rssItem?.link || `rss:${assistantItem.rssItem?.id}`,
+        content: content || undefined,
+      };
+    }
+
+    return undefined;
+  }, [currentItem, renderedItem, documents]);
+
   // Debug logging
   useEffect(() => {
     if (currentItem) {
@@ -347,6 +399,27 @@ export function QueueScrollPage() {
     }
   }, [currentIndex, isTransitioning, isRating]);
 
+  const advanceAfterRemoval = useCallback((removedItemId: string) => {
+    setScrollItems((prev) => {
+      const updated = prev.filter((item) => item.id !== removedItemId);
+      if (updated.length === 0) {
+        setCurrentIndex(0);
+        setRenderedIndex(0);
+        return updated;
+      }
+
+      const nextIndex = Math.min(currentIndex, updated.length - 1);
+      setIsTransitioning(true);
+      setCurrentIndex(nextIndex);
+      startTimeRef.current = Date.now();
+      setTimeout(() => {
+        setRenderedIndex(nextIndex);
+        setIsTransitioning(false);
+      }, 300);
+      return updated;
+    });
+  }, [currentIndex]);
+
   // Mouse wheel scroll detection - only navigate when document can't scroll further
   // For EPUB documents, disable auto-advance to allow user to read through the entire book
   useEffect(() => {
@@ -378,6 +451,9 @@ export function QueueScrollPage() {
 
       // Find the scrollable content element
       const target = e.target as HTMLElement;
+      if (target.closest(".assistant-panel")) {
+        return;
+      }
       const scrollableElement = target.closest('[class*="overflow"]') as HTMLElement || target.closest('.prose') as HTMLElement || document.documentElement;
 
       if (scrollableElement) {
@@ -414,6 +490,21 @@ export function QueueScrollPage() {
     }
   }, [goToNext, goToPrevious, currentItem, documents]);
 
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      if (isFullscreen) {
+        await appWindow.setFullscreen(false);
+        setIsFullscreen(false);
+      } else {
+        await appWindow.setFullscreen(true);
+        setIsFullscreen(true);
+      }
+    } catch (error) {
+      console.error("Failed to toggle fullscreen:", error);
+    }
+  }, [isFullscreen]);
+
   // Keyboard navigation - use modifier keys to avoid conflict with document scrolling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -432,7 +523,16 @@ export function QueueScrollPage() {
       } else if (altKey && (e.key === "ArrowUp" || e.key === "PageUp")) {
         e.preventDefault();
         goToPrevious();
+      } else if (e.key === "F11") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        toggleFullscreen();
       } else if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        if (isFullscreen) {
+          toggleFullscreen();
+          return;
+        }
         // Exit scroll mode
         window.history.back();
       } else if (e.key === "h" || e.key === "?") {
@@ -441,9 +541,9 @@ export function QueueScrollPage() {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToNext, goToPrevious]);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [goToNext, goToPrevious, isFullscreen, toggleFullscreen]);
 
   // Auto-hide controls on mouse idle
   useEffect(() => {
@@ -475,6 +575,8 @@ export function QueueScrollPage() {
       if (currentItem.type === "document") {
         console.log(`Rating document ${currentItem.documentId} as ${rating} (time: ${timeTaken}s)`);
         await rateDocument(currentItem.documentId!, rating, timeTaken);
+        advanceAfterRemoval(ratedItemId);
+        void loadQueue();
       } else if (currentItem.type === "flashcard" && currentItem.learningItem) {
         // Rate flashcard using FSRS
         console.log(`Rating flashcard ${currentItem.learningItem.id} as ${rating} (time: ${timeTaken}s)`);
@@ -511,13 +613,15 @@ export function QueueScrollPage() {
       }
 
       // Auto-advance to next item after rating
-      // Note: After removing the current item, the next item shifts to currentIndex
-      // So we don't need to adjust currentIndex - goToNext will move to the next one
-      setTimeout(() => {
-        goToNext();
-        // Small delay to allow transition to complete before allowing new ratings
-        setTimeout(() => setIsRating(false), 200);
-      }, 300);
+      if (currentItem.type !== "document") {
+        setTimeout(() => {
+          goToNext();
+          // Small delay to allow transition to complete before allowing new ratings
+          setTimeout(() => setIsRating(false), 200);
+        }, 300);
+      } else {
+        setTimeout(() => setIsRating(false), 300);
+      }
     } catch (error) {
       console.error("Failed to handle rating:", error);
       setIsRating(false);
@@ -557,100 +661,126 @@ export function QueueScrollPage() {
       className="h-screen w-screen overflow-hidden bg-background relative"
     >
       {/* Content Viewer - Document, Flashcard, or RSS Article */}
-      <div
-        className={cn(
-          "h-full w-full transition-opacity duration-300",
-          isTransitioning ? "opacity-0" : "opacity-100"
+      <div className="flex h-full w-full">
+        {renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "left" && (
+          <AssistantPanel
+            context={assistantContext}
+            className="assistant-panel flex-shrink-0"
+            onInputHoverChange={setAssistantInputActive}
+            position={assistantPosition}
+            onPositionChange={(newPosition) => {
+              setAssistantPosition(newPosition);
+              localStorage.setItem("assistant-panel-position", newPosition);
+            }}
+          />
         )}
-      >
-        {renderedItem?.type === "document" ? (() => {
-          // Safety check: skip YouTube videos in scroll mode (they can crash)
-          const doc = documents.find(d => d.id === renderedItem.documentId);
-          if (doc?.fileType === "youtube" || doc?.filePath?.includes("youtube.com") || doc?.filePath?.includes("youtu.be")) {
-            return (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
-                  <div className="text-4xl mb-4">📺</div>
-                  <p>YouTube videos are not supported in scroll mode</p>
-                  <p className="text-sm mt-2">Please view this video from the Documents page</p>
+        <div
+          className={cn(
+            "h-full flex-1 min-w-0 transition-opacity duration-300",
+            isTransitioning ? "opacity-0" : "opacity-100"
+          )}
+        >
+          {renderedItem?.type === "document" ? (() => {
+            // Safety check: skip YouTube videos in scroll mode (they can crash)
+            const doc = documents.find(d => d.id === renderedItem.documentId);
+            if (doc?.fileType === "youtube" || doc?.filePath?.includes("youtube.com") || doc?.filePath?.includes("youtu.be")) {
+              return (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center text-muted-foreground">
+                    <div className="text-4xl mb-4">📺</div>
+                    <p>YouTube videos are not supported in scroll mode</p>
+                    <p className="text-sm mt-2">Please view this video from the Documents page</p>
+                  </div>
                 </div>
-              </div>
-            );
-          }
-          if (renderedItem.isImportedWebArticle && doc) {
+              );
+            }
+            if (renderedItem.isImportedWebArticle && doc) {
+              return (
+                <ScrollModeArticleEditor
+                  key={renderedItem.documentId}
+                  document={doc}
+                />
+              );
+            }
             return (
-              <ScrollModeArticleEditor
+              <DocumentViewer
                 key={renderedItem.documentId}
-                document={doc}
+                documentId={renderedItem.documentId!}
+                disableHoverRating={true}
               />
             );
-          }
-          return (
-            <DocumentViewer
-              key={renderedItem.documentId}
-              documentId={renderedItem.documentId!}
-              disableHoverRating={true}
+          })() : renderedItem?.type === "flashcard" && renderedItem.learningItem ? (
+            <FlashcardScrollItem
+              key={renderedItem.learningItem.id}
+              learningItem={renderedItem.learningItem}
+              onRate={handleRating}
             />
-          );
-        })() : renderedItem?.type === "flashcard" && renderedItem.learningItem ? (
-          <FlashcardScrollItem
-            key={renderedItem.learningItem.id}
-            learningItem={renderedItem.learningItem}
-            onRate={handleRating}
-          />
-        ) : renderedItem?.type === "rss" ? (
-          <div className="h-full w-full overflow-y-auto">
-            <div className="max-w-3xl mx-auto px-8 py-12">
-              {/* RSS Article Header */}
-              <div className="mb-6">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                  <span className="px-2 py-1 bg-orange-500/10 text-orange-500 rounded-md text-xs font-medium">
-                    RSS
-                  </span>
-                  <span>{renderedItem.rssFeed?.title}</span>
+          ) : renderedItem?.type === "rss" ? (
+            <div className="h-full w-full overflow-y-auto">
+              <div className="max-w-3xl mx-auto px-8 py-12">
+                {/* RSS Article Header */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                    <span className="px-2 py-1 bg-orange-500/10 text-orange-500 rounded-md text-xs font-medium">
+                      RSS
+                    </span>
+                    <span>{renderedItem.rssFeed?.title}</span>
+                  </div>
+                  <h1 className="text-3xl font-bold text-foreground mb-3">
+                    {renderedItem.rssItem?.title}
+                  </h1>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    {renderedItem.rssItem?.pubDate && (
+                      <span>{new Date(renderedItem.rssItem.pubDate).toLocaleDateString()}</span>
+                    )}
+                    {renderedItem.rssItem?.author && <span>• {renderedItem.rssItem.author}</span>}
+                    <a
+                      href={renderedItem.rssItem?.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 hover:text-foreground transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Open original
+                    </a>
+                  </div>
                 </div>
-                <h1 className="text-3xl font-bold text-foreground mb-3">
-                  {renderedItem.rssItem?.title}
-                </h1>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  {renderedItem.rssItem?.pubDate && (
-                    <span>{new Date(renderedItem.rssItem.pubDate).toLocaleDateString()}</span>
-                  )}
-                  {renderedItem.rssItem?.author && <span>• {renderedItem.rssItem.author}</span>}
-                  <a
-                    href={renderedItem.rssItem?.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Open original
-                  </a>
-                </div>
-              </div>
 
-              {/* RSS Article Content */}
-              <div
-                className="prose prose-lg max-w-none text-foreground"
-                dangerouslySetInnerHTML={{ __html: renderedItem.rssItem?.content || renderedItem.rssItem?.description || "" }}
-              />
+                {/* RSS Article Content */}
+                <div
+                  className="prose prose-lg max-w-none text-foreground"
+                  dangerouslySetInnerHTML={{ __html: renderedItem.rssItem?.content || renderedItem.rssItem?.description || "" }}
+                />
+              </div>
             </div>
-          </div>
-        ) : renderedItem?.type === "extract" && renderedItem.extract ? (
-          <ExtractScrollItem
-            key={renderedItem.extract.id}
-            extract={renderedItem.extract}
-            documentTitle={renderedItem.documentTitle}
-            onRate={handleRating}
-            onCreateCloze={(text, range) => setActiveExtractForCloze({ id: renderedItem.extract!.id, text, range })}
-            onCreateQA={() => setActiveExtractForQA(renderedItem.extract!.id)}
-            onUpdate={(updates) => handleExtractUpdate(renderedItem.extract!.id, updates)}
+          ) : renderedItem?.type === "extract" && renderedItem.extract ? (
+            <ExtractScrollItem
+              key={renderedItem.extract.id}
+              extract={renderedItem.extract}
+              documentTitle={renderedItem.documentTitle}
+              onRate={handleRating}
+              onCreateCloze={(text, range) => setActiveExtractForCloze({ id: renderedItem.extract!.id, text, range })}
+              onCreateQA={() => setActiveExtractForQA(renderedItem.extract!.id)}
+              onUpdate={(updates) => handleExtractUpdate(renderedItem.extract!.id, updates)}
+            />
+          ) : (
+            // Fallback for no item
+            <div className="h-full flex items-center justify-center">
+              <div className="text-muted-foreground">Loading...</div>
+            </div>
+          )}
+        </div>
+        {renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "right" && (
+          <AssistantPanel
+            context={assistantContext}
+            className="assistant-panel flex-shrink-0"
+            onInputHoverChange={setAssistantInputActive}
+            position={assistantPosition}
+            onPositionChange={(newPosition) => {
+              setAssistantPosition(newPosition);
+              localStorage.setItem("assistant-panel-position", newPosition);
+            }}
           />
-        ) : (
-          // Fallback for no item
-          <div className="h-full flex items-center justify-center">
-            <div className="text-muted-foreground">Loading...</div>
-          </div>
         )}
       </div>
 
