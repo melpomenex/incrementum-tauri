@@ -485,6 +485,20 @@ const commandHandlers: Record<string, CommandHandler> = {
 
         throw new Error(`Failed to fetch feed after trying all methods. Last error: ${lastError?.message || 'Unknown error'}`);
     },
+
+    // Anna's Archive search - not available in browser mode due to CORS
+    search_books: async () => {
+        console.warn('[Browser] Anna\'s Archive search is not available in browser mode due to CORS restrictions.');
+        return [];
+    },
+
+    download_book: async () => {
+        throw new Error('Book download is not available in browser mode');
+    },
+
+    get_available_mirrors: async () => {
+        return [];
+    },
 };
 
 /**

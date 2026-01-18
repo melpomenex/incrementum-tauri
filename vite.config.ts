@@ -9,7 +9,13 @@ const host = rawHost === "localhost" ? "127.0.0.1" : rawHost;
 // https://vite.dev/config/
 export default defineConfig(async ({ mode }) => {
   const isProd = mode === "production";
-  const isPWA = mode === "pwa" || (!rawHost && isProd);
+  const isTauriBuild = Boolean(
+    process.env.TAURI_DEV_HOST ||
+      process.env.TAURI_PLATFORM ||
+      process.env.TAURI_ARCH ||
+      process.env.TAURI_FAMILY
+  );
+  const isPWA = mode === "pwa" || (!isTauriBuild && isProd);
 
   const plugins = [react(), tailwindcss()];
 
@@ -34,13 +40,13 @@ export default defineConfig(async ({ mode }) => {
       port: 15173,
       strictPort: true,
       host: host || "127.0.0.1",
-      hmr: host
-        ? {
-          protocol: "ws",
-          host,
-          port: 15174,
-        }
-        : undefined,
+      // Force HMR to a fixed port to avoid handshake issues in the Tauri webview.
+      hmr: {
+        protocol: "ws",
+        host: host || "127.0.0.1",
+        port: 15174,
+        clientPort: 15174,
+      },
       watch: {
         // 3. tell Vite to ignore watching `src-tauri`
         ignored: ["**/src-tauri/**", "**/server/**"],
