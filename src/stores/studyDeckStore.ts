@@ -68,9 +68,10 @@ export const useStudyDeckStore = create<StudyDeckState>()(
 
         const tagCandidates = new Set<string>();
         documents.forEach((doc) => {
-          if (!doc.tags || doc.tags.length === 0) return;
-          if (!doc.tags.some((tag) => tag.toLowerCase() === "anki-import")) return;
-          getDeckTagCandidates(doc.tags).forEach((tag) => tagCandidates.add(tag));
+          const tags = Array.isArray(doc.tags) ? doc.tags : [];
+          if (tags.length === 0) return;
+          if (!tags.some((tag) => tag.toLowerCase() === "anki-import")) return;
+          getDeckTagCandidates(tags).forEach((tag) => tagCandidates.add(tag));
         });
 
         if (tagCandidates.size === 0) return;
