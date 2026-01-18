@@ -65,10 +65,8 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     importFromFiles,
     updateDocument,
   } = useDocumentStore();
-  const { decks, activeDeckId } = useStudyDeckStore((state) => ({
-    decks: state.decks,
-    activeDeckId: state.activeDeckId,
-  }));
+  const decks = useStudyDeckStore((state) => state.decks);
+  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
 
   const [mode, setMode] = useState<DocumentViewMode>(() => {
     if (typeof window === "undefined") return "grid";

@@ -7,7 +7,7 @@ import { VimiumNavigationProvider, useVimiumEnabled, type VimiumCommand } from "
 import { Toolbar } from "../Toolbar";
 import { Tabs } from "../common/Tabs";
 import { DashboardTab, QueueTab, DocumentsTab, ReviewTab, AnalyticsTab, SettingsTab, WebBrowserTab } from "../tabs/TabRegistry";
-import { CommandCenter } from "../search/CommandCenter";
+// import { CommandCenter } from "../search/CommandCenter";
 import { captureAndSaveScreenshot } from "../../utils/screenshotCaptureFlow";
 import { MobileLayoutWrapper } from "../mobile/MobileLayoutWrapper";
 
@@ -272,7 +272,7 @@ export function MainLayout() {
           </div>
 
           {/* Global Command Center */}
-          <CommandCenter />
+          {/* <CommandCenter /> */}
         </div>
       </VimiumNavigationProvider>
     </MobileLayoutWrapper>

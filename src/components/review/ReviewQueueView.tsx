@@ -71,10 +71,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     loadDueDocumentsOnly,
     loadDueQueueItems,
   } = useQueueStore();
-  const { decks, activeDeckId } = useStudyDeckStore((state) => ({
-    decks: state.decks,
-    activeDeckId: state.activeDeckId,
-  }));
+  const decks = useStudyDeckStore((state) => state.decks);
+  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
   const [queueMode, setQueueMode] = useState<QueueMode>("reading");
   const [preset, setPreset] = useState<PriorityPreset>("maximize-retention");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());

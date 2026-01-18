@@ -35,10 +35,8 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
     nextCard,
     goToIndex,
   } = useReviewStore();
-  const { decks, activeDeckId } = useStudyDeckStore((state) => ({
-    decks: state.decks,
-    activeDeckId: state.activeDeckId,
-  }));
+  const decks = useStudyDeckStore((state) => state.decks);
+  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
   const activeDeck = decks.find((deck) => deck.id === activeDeckId) ?? null;
 
   const [isQueueListOpen, setIsQueueListOpen] = useState(false);

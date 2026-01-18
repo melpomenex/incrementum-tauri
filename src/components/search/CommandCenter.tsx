@@ -1,4 +1,5 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { shallow } from "zustand/shallow";
 import { GlobalSearch, SearchResult, SearchQuery, SearchResultType } from "./GlobalSearch";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useTabsStore } from "../../stores/tabsStore";
@@ -25,13 +26,16 @@ import {
 } from "lucide-react";
 
 export function CommandCenter() {
-  const { documents } = useDocumentStore();
-  const { addTab } = useTabsStore();
-  const { decks, activeDeckId } = useStudyDeckStore((state) => ({
-    decks: state.decks,
-    activeDeckId: state.activeDeckId,
-  }));
-  const activeDeck = decks.find((deck) => deck.id === activeDeckId) ?? null;
+  const documents = useDocumentStore((state) => state.documents, shallow);
+  const addTab = useTabsStore((state) => state.addTab);
+  const decks = useStudyDeckStore((state) => state.decks, shallow);
+  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
+
+  const activeDeckTags = useMemo(() => {
+    const deck = decks.find((item) => item.id === activeDeckId);
+    return deck?.tagFilters ?? [];
+  }, [decks, activeDeckId]);
+  const hasActiveDeck = Boolean(activeDeckId);
 
   const handleSearch = useCallback(async (query: SearchQuery): Promise<SearchResult[]> => {
     const term = query.query.toLowerCase();
@@ -156,8 +160,10 @@ export function CommandCenter() {
     // 2. Search Documents
     // If types filter is set and doesn't include Document, skip
     if (!query.types || query.types.includes(SearchResultType.Document)) {
-      const scopedDocs = activeDeck
-        ? documents.filter((doc) => matchesDeckTags(doc.tags ?? [], activeDeck))
+      const scopedDocs = hasActiveDeck
+        ? documents.filter((doc) =>
+            matchesDeckTags(doc.tags ?? [], { id: "", name: "", tagFilters: activeDeckTags })
+          )
         : documents;
       const matchedDocs = scopedDocs.filter(doc => 
         doc.title.toLowerCase().includes(term)
@@ -180,7 +186,7 @@ export function CommandCenter() {
 
     // Sort by score
     return results.sort((a, b) => b.score - a.score);
-  }, [documents, addTab, activeDeck]);
+  }, [documents, addTab, activeDeckTags, hasActiveDeck]);
 
   const handleResultClick = useCallback((result: SearchResult) => {
     if (result.type === SearchResultType.Command) {

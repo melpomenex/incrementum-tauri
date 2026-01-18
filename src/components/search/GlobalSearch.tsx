@@ -136,7 +136,7 @@ export function GlobalSearch({
         tags: filters.tags.length > 0 ? filters.tags : undefined,
       };
       debouncedSearch(searchQuery);
-    } else {
+    } else if (results.length > 0) {
       setResults([]);
     }
   }, [query, filters, debouncedSearch]);

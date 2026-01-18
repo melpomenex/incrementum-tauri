@@ -79,19 +79,25 @@ export const useLLMProvidersStore = create<LLMProvidersState>()(
       partialize: (state) => ({
         providers: state.providers,
       }),
-      // Clean up providers with empty API keys on hydration
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          const before = state.providers.length;
-          // Remove providers with empty API keys (except ollama which doesn't require one)
-          state.providers = state.providers.filter((p) =>
-            p.provider === 'ollama' || (p.apiKey ? p.apiKey.trim().length > 0 : false)
-          );
-          const after = state.providers.length;
-          if (before !== after) {
-            console.log(`Cleaned up ${before - after} provider(s) with empty API keys`);
-          }
+      // Clean up providers with empty API keys on hydration using merge
+      // This prevents infinite loops caused by mutating state in onRehydrateStorage
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<LLMProvidersState> | undefined;
+        if (!persisted || !persisted.providers) {
+          return currentState;
         }
+        // Remove providers with empty API keys (except ollama which doesn't require one)
+        const cleanedProviders = persisted.providers.filter((p) =>
+          p.provider === 'ollama' || (p.apiKey ? p.apiKey.trim().length > 0 : false)
+        );
+        const removed = persisted.providers.length - cleanedProviders.length;
+        if (removed > 0) {
+          console.log(`Cleaned up ${removed} provider(s) with empty API keys`);
+        }
+        return {
+          ...currentState,
+          providers: cleanedProviders,
+        };
       },
     }
   )

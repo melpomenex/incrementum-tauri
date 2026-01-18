@@ -34,6 +34,7 @@ export interface TabsState {
 
   // Actions
   addTab: (tab: Omit<Tab, "id">) => string;
+  addTabInBackground: (tab: Omit<Tab, "id">) => string;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   updateTab: (tabId: string, updates: Partial<Tab>) => void;
