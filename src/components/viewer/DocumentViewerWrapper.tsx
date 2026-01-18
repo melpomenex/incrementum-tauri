@@ -7,6 +7,7 @@ import { AssistantPanel, type AssistantContext, type AssistantPosition } from ".
 import { useDocumentStore, useSettingsStore } from "../../stores";
 import * as documentsApi from "../../api/documents";
 import { trimToTokenWindow } from "../../utils/tokenizer";
+import { getDeviceInfo } from "../../lib/pwa";
 
 const ASSISTANT_POSITION_KEY = "assistant-panel-position";
 
@@ -27,6 +28,8 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
     const saved = localStorage.getItem(ASSISTANT_POSITION_KEY);
     return saved === "left" ? "left" : "right";
   });
+  const deviceInfo = getDeviceInfo();
+  const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
 
   useEffect(() => {
     let isActive = true;
@@ -121,7 +124,9 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
 
   return (
     <div className="flex h-full">
-      {assistantPosition === "left" ? (
+      {isMobile ? (
+        documentViewer
+      ) : assistantPosition === "left" ? (
         <>
           {assistantPanel}
           {documentViewer}

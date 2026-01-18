@@ -128,12 +128,15 @@ export function EPUBViewer({
         margin: 0 !important;
         padding: ${contentPadding} !important;
         width: 100% !important;
-        height: 100% !important;
+        height: auto !important;
+        min-height: 100% !important;
         line-height: ${lineHeightRef.current} !important;
         color: ${textColor} !important;
         background: ${bgColor} !important;
         max-width: ${contentMaxWidth} !important;
-        overflow: hidden !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
       }
       body {
         font-size: ${fontSizeRef.current}px !important;

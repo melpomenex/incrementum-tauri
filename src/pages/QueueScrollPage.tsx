@@ -21,6 +21,7 @@ import { cn } from "../utils";
 import type { QueueItem } from "../types";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../components/common/ItemDetailsPopover";
 import { AssistantPanel, type AssistantContext, type AssistantPosition } from "../components/assistant/AssistantPanel";
+import { getDeviceInfo } from "../lib/pwa";
 
 /**
  * Unified scroll item type for documents, RSS articles, and flashcards
@@ -69,6 +70,8 @@ export function QueueScrollPage() {
     return saved === "left" ? "left" : "right";
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const deviceInfo = getDeviceInfo();
+  const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
 
   // Popup state
   const [activeExtractForCloze, setActiveExtractForCloze] = useState<{ id: string, text: string, range: [number, number] } | null>(null);
@@ -662,7 +665,7 @@ export function QueueScrollPage() {
     >
       {/* Content Viewer - Document, Flashcard, or RSS Article */}
       <div className="flex h-full w-full">
-        {renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "left" && (
+        {!isMobile && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "left" && (
           <AssistantPanel
             context={assistantContext}
             className="assistant-panel flex-shrink-0"
@@ -770,7 +773,7 @@ export function QueueScrollPage() {
             </div>
           )}
         </div>
-        {renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "right" && (
+        {!isMobile && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "right" && (
           <AssistantPanel
             context={assistantContext}
             className="assistant-panel flex-shrink-0"
