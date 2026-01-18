@@ -606,7 +606,13 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                 {sortedDocuments.map((doc) => (
                   <div
                     key={doc.id}
-                    onClick={(event) => handleSelectRow(doc, event.metaKey || event.ctrlKey)}
+                    onClick={(event) => {
+                      if (isMobile) {
+                        onOpenDocument?.(doc);
+                        return;
+                      }
+                      handleSelectRow(doc, event.metaKey || event.ctrlKey);
+                    }}
                     className={`border rounded-lg p-3 cursor-pointer transition-colors ${
                       selectedIds.has(doc.id) ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted/40"
                     }`}
@@ -641,6 +647,19 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                           )}
                           <TagsInline tags={doc.tags} />
                         </div>
+                        {isMobile && (
+                          <div className="mt-3">
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onOpenDocument?.(doc);
+                              }}
+                              className="px-3 py-2 bg-primary text-primary-foreground rounded text-xs mobile-density-tap"
+                            >
+                              Open / Read
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -669,7 +688,13 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                         {docs.map((doc) => (
                           <div
                             key={doc.id}
-                            onClick={(event) => handleSelectRow(doc, event.metaKey || event.ctrlKey)}
+                            onClick={(event) => {
+                              if (isMobile) {
+                                onOpenDocument?.(doc);
+                                return;
+                              }
+                              handleSelectRow(doc, event.metaKey || event.ctrlKey);
+                            }}
                             className={`p-4 rounded-lg border transition-shadow cursor-pointer ${
                               selectedIds.has(doc.id)
                                 ? "border-primary bg-primary/5"
@@ -699,6 +724,19 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                             <div className="mt-3">
                               <TagsInline tags={doc.tags} />
                             </div>
+                            {isMobile && (
+                              <div className="mt-3">
+                                <button
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onOpenDocument?.(doc);
+                                  }}
+                                  className="px-3 py-2 bg-primary text-primary-foreground rounded text-xs mobile-density-tap"
+                                >
+                                  Open / Read
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
