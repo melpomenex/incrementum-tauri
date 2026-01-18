@@ -139,7 +139,7 @@
   border-radius: 8px;
   cursor: pointer;
   display: flex;
-  align-items:;
+  align-items: center;
   justify-content: center;
   transition: background-color 0.2s;
 }
@@ -492,7 +492,7 @@
 
 .button-setting-desc {
   display: block;
-  font  size: 12px;
+  font-size: 12px;
   color: #a1a1aa;
   margin-top: 2px;
 }
@@ -884,16 +884,18 @@
    Utility Classes for Mobile
    ========================================================================== */
 
+/* Hide on mobile, show on desktop */
 .hide-on-mobile {
-  display: none;
+  display: block;
 }
 
 @media (max-width: 768px) {
   .hide-on-mobile {
-    display: block;
+    display: none !important;
   }
 }
 
+/* Show on mobile, hide on desktop */
 .show-on-mobile {
   display: none;
 }

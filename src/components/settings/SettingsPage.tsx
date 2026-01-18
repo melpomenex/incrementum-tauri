@@ -99,8 +99,8 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-full bg-background">
-      {/* Sidebar */}
-      <div className="w-64 border-r border-border bg-muted/30 text-foreground">
+      {/* Sidebar - Hidden on mobile */}
+      <div className="hidden md:block w-64 border-r border-border bg-muted/30 text-foreground flex-shrink-0">
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2">
             <SettingsIcon className="w-5 h-5" />
@@ -108,14 +108,14 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <nav className="p-2 space-y-1">
+        <nav className="p-2 space-y-1 overflow-y-auto">
           {SETTINGS_TABS.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors min-h-[40px] ${
                   activeTab === tab.id
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted text-foreground"
@@ -132,8 +132,23 @@ export function SettingsPage() {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-border gap-3 md:gap-0">
+          {/* Mobile settings selector */}
+          <div className="md:hidden">
+            <select
+              value={activeTab}
+              onChange={(e) => handleTabChange(e.target.value as SettingsTab)}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm min-h-[44px]"
+            >
+              {SETTINGS_TABS.map((tab) => (
+                <option key={tab.id} value={tab.id}>
+                  {tab.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Desktop header */}
+          <div className="hidden md:block">
             <h2 className="text-xl font-semibold text-foreground">
               {SETTINGS_TABS.find((t) => t.id === activeTab)?.label}
             </h2>
@@ -144,10 +159,10 @@ export function SettingsPage() {
 
           {hasChanges && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Unsaved changes</span>
+              <span className="hidden md:inline text-sm text-muted-foreground">Unsaved changes</span>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                className="px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors min-h-[44px] text-sm"
               >
                 Save
               </button>

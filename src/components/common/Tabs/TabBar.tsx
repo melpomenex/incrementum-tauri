@@ -96,11 +96,11 @@ export function TabBar({
 
   return (
     <>
-      <div className="hidden md:flex items-center bg-card border-b border-border">
+      <div className="flex items-center bg-card border-b border-border">
         {/* Left scroll button */}
         <button
           onClick={scrollLeft}
-          className="p-2 hover:bg-muted transition-colors border-r border-border"
+          className="p-1 md:p-2 hover:bg-muted transition-colors border-r border-border min-w-[36px] md:min-w-[44px] min-h-[36px] md:min-h-[44px] flex items-center justify-center"
           aria-label="Scroll tabs left"
         >
           ◀
@@ -135,10 +135,10 @@ export function TabBar({
                   }
                 }}
                 className={`
-                  relative flex items-center gap-2 px-3 md:px-4 py-2 cursor-pointer
+                  relative flex items-center gap-1 md:gap-2 px-2 md:px-3 lg:px-4 py-1.5 md:py-2 cursor-pointer
                   border-r border-border border-t-2
                   transition-colors select-none min-w-fit
-                  min-h-[44px]
+                  min-h-[36px] md:min-h-[44px]
                   ${isDragging ? "opacity-50" : ""}
                   ${
                     isActive
@@ -150,10 +150,10 @@ export function TabBar({
                 style={{ cursor: tab.closable ? "grab" : "default" }}
               >
                 {/* Tab icon */}
-                <span className="text-sm">{tab.icon}</span>
+                <span className="text-xs md:text-sm">{tab.icon}</span>
 
                 {/* Tab title */}
-                <span className="text-sm font-medium whitespace-nowrap">
+                <span className="text-xs md:text-sm font-medium whitespace-nowrap">
                   {tab.title}
                 </span>
 
@@ -165,10 +165,10 @@ export function TabBar({
                       onTabClose(tab.id);
                     }}
                     className="
-                      ml-1 w-5 h-5 flex items-center justify-center
+                      ml-0.5 md:ml-1 w-6 h-6 md:w-5 md:h-5 flex items-center justify-center
                       rounded-sm hover:bg-destructive hover:text-destructive-foreground
-                      opacity-0 group-hover:opacity-100
-                      transition-opacity
+                      opacity-100 md:opacity-0 md:group-hover:opacity-100
+                      transition-opacity text-xs md:text-sm
                     "
                     aria-label={`Close ${tab.title}`}
                   >
@@ -183,7 +183,7 @@ export function TabBar({
         {/* Right scroll button */}
         <button
           onClick={scrollRight}
-          className="p-2 hover:bg-muted transition-colors border-l border-border"
+          className="p-1 md:p-2 hover:bg-muted transition-colors border-l border-border min-w-[36px] md:min-w-[44px] min-h-[36px] md:min-h-[44px] flex items-center justify-center"
           aria-label="Scroll tabs right"
         >
           ▶

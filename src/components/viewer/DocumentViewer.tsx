@@ -639,16 +639,16 @@ export function DocumentViewer({
         <div className="flex items-center gap-2">
           <button
             onClick={handleBack}
-            className="p-2 rounded-md hover:bg-muted transition-colors"
+            className="p-2 rounded-md hover:bg-muted transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
             title="Back to Documents"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <div className="h-6 w-px bg-border" />
-          <h2 className="font-semibold text-foreground line-clamp-1 max-w-md">
+          <div className="hidden sm:block h-6 w-px bg-border" />
+          <h2 className="font-semibold text-foreground line-clamp-1 max-w-[120px] sm:max-w-[200px] md:max-w-md text-sm md:text-base">
             {currentDocument.title}
           </h2>
-          <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+          <span className="hidden sm:inline text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
             {docType.toUpperCase()}
           </span>
         </div>
@@ -670,7 +670,7 @@ export function DocumentViewer({
                     setSearchQuery("");
                   }
                 }}
-                className="px-3 py-1.5 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary w-64"
+                className="flex-1 md:flex-none px-3 py-1.5 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary md:w-64 min-h-[36px]"
                 autoFocus
               />
               <button
@@ -678,7 +678,7 @@ export function DocumentViewer({
                   setShowSearch(false);
                   setSearchQuery("");
                 }}
-                className="p-1 hover:bg-background rounded-md transition-colors"
+                className="p-2 hover:bg-background rounded-md transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
               >
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
@@ -956,14 +956,15 @@ export function DocumentViewer({
 
       {/* Floating Action Button for Extract Creation */}
       {selectedText && viewMode === "document" && (
-        <div className="fixed bottom-6 right-6 z-10">
+        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-10">
           <button
             onClick={openExtractDialog}
-            className="flex items-center gap-2 px-4 py-3 bg-primary text-primary-foreground rounded-lg shadow-lg hover:opacity-90 transition-opacity"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 bg-primary text-primary-foreground rounded-lg shadow-lg hover:opacity-90 transition-opacity min-h-[44px] text-sm md:text-base"
             title="Create extract from selection"
           >
             <Lightbulb className="w-5 h-5" />
-            <span className="font-medium">Create Extract</span>
+            <span className="font-medium hidden sm:inline">Create Extract</span>
+            <span className="font-medium sm:hidden">Extract</span>
           </button>
         </div>
       )}

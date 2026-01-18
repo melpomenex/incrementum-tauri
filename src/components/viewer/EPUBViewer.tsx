@@ -912,20 +912,20 @@ export function EPUBViewer({
 
           {/* Mobile TOC drawer */}
           {showTocDrawer && (
-            <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm">
-              <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border border-border bg-card max-h-[75%] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm" onClick={() => setShowTocDrawer(false)}>
+              <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border border-border bg-card max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
                   <div className="text-sm font-semibold text-foreground">Table of Contents</div>
                   <button
                     type="button"
                     data-chrome-control="true"
                     onClick={() => setShowTocDrawer(false)}
-                    className="text-xs text-muted-foreground"
+                    className="text-sm text-muted-foreground px-3 py-2 min-h-[44px]"
                   >
                     Close
                   </button>
                 </div>
-                <div className="overflow-y-auto">
+                <div className="overflow-y-auto flex-1">
                   {toc.map((chapter, index) => (
                     <button
                       key={index}
@@ -934,7 +934,7 @@ export function EPUBViewer({
                         handleTocClick(chapter.href);
                         setShowTocDrawer(false);
                       }}
-                      className="block w-full text-left px-4 py-3 text-sm text-foreground border-b border-border/40"
+                      className="block w-full text-left px-4 py-3 text-sm text-foreground border-b border-border/40 hover:bg-muted transition-colors min-h-[48px]"
                     >
                       {chapter.label}
                     </button>
@@ -946,36 +946,36 @@ export function EPUBViewer({
 
           {/* Mobile settings sheet */}
           {showSettingsSheet && (
-            <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm">
-              <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border border-border bg-card p-4 space-y-4">
+            <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm" onClick={() => setShowSettingsSheet(false)}>
+              <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border border-border bg-card p-4 space-y-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold text-foreground">Reading Settings</div>
                   <button
                     type="button"
                     data-chrome-control="true"
                     onClick={() => setShowSettingsSheet(false)}
-                    className="text-xs text-muted-foreground"
+                    className="text-sm text-muted-foreground px-3 py-2 min-h-[44px]"
                   >
                     Close
                   </button>
                 </div>
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground">Font Size</div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center gap-4">
                     <button
                       type="button"
                       data-chrome-control="true"
                       onClick={decreaseFontSize}
-                      className="px-3 py-1.5 text-xs rounded-full border border-border bg-card text-foreground"
+                      className="px-4 py-3 text-sm rounded-full border border-border bg-card text-foreground min-w-[60px] min-h-[44px] hover:bg-muted transition-colors"
                     >
                       A-
                     </button>
-                    <div className="text-sm text-foreground">{epubSettings.fontSize}px</div>
+                    <div className="text-base font-medium text-foreground min-w-[60px] text-center">{epubSettings.fontSize}px</div>
                     <button
                       type="button"
                       data-chrome-control="true"
                       onClick={increaseFontSize}
-                      className="px-3 py-1.5 text-xs rounded-full border border-border bg-card text-foreground"
+                      className="px-4 py-3 text-sm rounded-full border border-border bg-card text-foreground min-w-[60px] min-h-[44px] hover:bg-muted transition-colors"
                     >
                       A+
                     </button>
@@ -983,21 +983,21 @@ export function EPUBViewer({
                 </div>
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground">Line Height</div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center gap-4">
                     <button
                       type="button"
                       data-chrome-control="true"
                       onClick={() => updateLineHeight(epubSettings.lineHeight - 0.1)}
-                      className="px-3 py-1.5 text-xs rounded-full border border-border bg-card text-foreground"
+                      className="px-4 py-3 text-sm rounded-full border border-border bg-card text-foreground min-w-[60px] min-h-[44px] hover:bg-muted transition-colors"
                     >
-                      - 
+                      -
                     </button>
-                    <div className="text-sm text-foreground">{epubSettings.lineHeight.toFixed(2)}</div>
+                    <div className="text-base font-medium text-foreground min-w-[60px] text-center">{epubSettings.lineHeight.toFixed(2)}</div>
                     <button
                       type="button"
                       data-chrome-control="true"
                       onClick={() => updateLineHeight(epubSettings.lineHeight + 0.1)}
-                      className="px-3 py-1.5 text-xs rounded-full border border-border bg-card text-foreground"
+                      className="px-4 py-3 text-sm rounded-full border border-border bg-card text-foreground min-w-[60px] min-h-[44px] hover:bg-muted transition-colors"
                     >
                       +
                     </button>

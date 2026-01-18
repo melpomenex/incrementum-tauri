@@ -399,19 +399,26 @@ export function PDFViewer({
         </div>
       )}
 
-      <div className="flex flex-1">
-        {/* Table of Contents Sidebar */}
+      <div className="flex flex-1 relative">
+        {/* Table of Contents Sidebar - Overlay on mobile, inline on desktop */}
         {showTOC && (
-          <div className="w-64 border-r border-border bg-card overflow-y-auto flex-shrink-0">
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Table of Contents</h3>
-              <button
-                onClick={() => setShowTOC(false)}
-                className="p-1 hover:bg-muted rounded transition-colors"
-              >
-                ✕
-              </button>
-            </div>
+          <>
+            {/* Mobile overlay backdrop */}
+            <div
+              className="md:hidden fixed inset-0 bg-black/50 z-40"
+              onClick={() => setShowTOC(false)}
+            />
+            {/* TOC Panel */}
+            <div className="fixed md:relative inset-y-0 left-0 md:left-auto w-[280px] md:w-64 border-r border-border bg-card overflow-y-auto flex-shrink-0 z-50">
+              <div className="p-3 md:p-4 border-b border-border flex items-center justify-between">
+                <h3 className="font-semibold text-foreground text-sm md:text-base">Table of Contents</h3>
+                <button
+                  onClick={() => setShowTOC(false)}
+                  className="p-2 hover:bg-muted rounded transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
             <nav className="p-2">
               {outline.length > 0 ? (
                 renderOutline(outline)
@@ -422,55 +429,56 @@ export function PDFViewer({
               )}
             </nav>
           </div>
+          </>
         )}
 
         {/* Main Viewer Area */}
         <div className="flex-1 flex flex-col">
           {/* Viewer Toolbar */}
-          <div className="flex items-center justify-between p-2 border-b border-border bg-card">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between p-1 md:p-2 border-b border-border bg-card gap-2 overflow-x-auto">
+            <div className="flex items-center gap-0.5 md:gap-1">
               <button
                 onClick={() => setShowTOC(!showTOC)}
                 className={cn(
-                  "p-2 rounded-md transition-colors",
+                  "p-2 rounded-md transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center",
                   showTOC ? "bg-muted text-foreground" : "hover:bg-muted text-muted-foreground"
                 )}
                 title="Toggle Table of Contents"
               >
-                <List className="w-4 h-4" />
+                <List className="w-4 h-4 md:w-4 md:h-4" />
               </button>
 
-              <div className="h-6 w-px bg-border mx-2" />
+              <div className="hidden md:block h-6 w-px bg-border mx-2" />
 
               <button
                 onClick={handlePrevPage}
                 disabled={pageNumber <= 1}
-                className="p-2 rounded-md hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-md hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] flex items-center justify-center"
                 title="Previous Page (←)"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <span className="text-sm text-muted-foreground min-w-[100px] text-center">
-                Page {pageNumber} of {numPages}
+              <span className="text-xs md:text-sm text-muted-foreground min-w-[70px] md:min-w-[100px] text-center whitespace-nowrap">
+                {pageNumber}/{numPages}
               </span>
 
               <button
                 onClick={handleNextPage}
                 disabled={pageNumber >= numPages}
-                className="p-2 rounded-md hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-md hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] flex items-center justify-center"
                 title="Next Page (→)"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex items-center gap-1">
-              {/* Zoom Mode Buttons */}
+            <div className="flex items-center gap-0.5 md:gap-1">
+              {/* Zoom Mode Buttons - Hide some on mobile */}
               <button
                 onClick={() => handleZoomModeChange("fit-page")}
                 className={cn(
-                  "p-2 rounded-md transition-colors",
+                  "hidden md:flex p-2 rounded-md transition-colors min-w-[36px] min-h-[36px] items-center justify-center",
                   zoomMode === "fit-page" ? "bg-muted text-foreground" : "hover:bg-muted text-muted-foreground"
                 )}
                 title="Fit to Page"
@@ -481,7 +489,7 @@ export function PDFViewer({
               <button
                 onClick={() => handleZoomModeChange("fit-width")}
                 className={cn(
-                  "p-2 rounded-md transition-colors",
+                  "p-2 rounded-md transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center",
                   zoomMode === "fit-width" ? "bg-muted text-foreground" : "hover:bg-muted text-muted-foreground"
                 )}
                 title="Fit to Width"

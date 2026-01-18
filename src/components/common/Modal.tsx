@@ -219,23 +219,23 @@ export function Modal() {
       {/* Modal */}
       <div
         ref={modalRef}
-        className={`relative ${sizeClasses[modal.size]} w-full mx-4 bg-card rounded-lg shadow-2xl border border-border`}
+        className={`relative ${sizeClasses[modal.size]} w-full mx-4 md:mx-auto bg-card rounded-lg shadow-2xl border border-border max-h-[90vh] md:max-h-[80vh] flex flex-col`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
         {/* Header */}
-        <div className="flex items-start gap-3 p-6">
+        <div className="flex items-start gap-2 md:gap-3 p-4 md:p-6 flex-shrink-0">
           {typeIcons[modal.type]}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h2
               id="modal-title"
-              className="text-lg font-semibold text-foreground"
+              className="text-base md:text-lg font-semibold text-foreground"
             >
               {modal.title}
             </h2>
             {modal.message && (
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="mt-1 md:mt-2 text-xs md:text-sm text-muted-foreground">
                 {modal.message}
               </p>
             )}
@@ -243,7 +243,7 @@ export function Modal() {
           {modal.closable && (
             <button
               onClick={handleClose}
-              className="p-1 hover:bg-muted rounded transition-colors"
+              className="p-2 hover:bg-muted rounded transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center flex-shrink-0"
               aria-label="Close"
             >
               <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -255,24 +255,24 @@ export function Modal() {
 
         {/* Custom Content */}
         {modal.content && (
-          <div className="px-6 pb-6">
+          <div className="px-4 md:px-6 pb-4 md:pb-6 overflow-y-auto flex-1 min-h-0">
             {modal.content}
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 bg-muted/30 border-t border-border rounded-b-lg">
+        <div className="flex items-center justify-end gap-2 px-4 md:px-6 py-3 md:py-4 bg-muted/30 border-t border-border rounded-b-lg flex-shrink-0">
           {isConfirm && (
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-sm font-medium text-foreground bg-background border border-border rounded-md hover:bg-muted transition-colors"
+              className="px-4 py-2.5 text-sm font-medium text-foreground bg-background border border-border rounded-md hover:bg-muted transition-colors min-h-[44px]"
             >
               {modal.cancelText}
             </button>
           )}
           <button
             onClick={handleConfirm}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            className={`px-4 py-2.5 text-sm font-medium rounded-md transition-colors min-h-[44px] ${
               modal.variant === "danger"
                 ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 : modal.variant === "warning"
