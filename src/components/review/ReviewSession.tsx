@@ -185,19 +185,19 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
   const maxMinutes = Math.max(1, Math.round((estimatedSecondsRemaining / 60) * 1.15));
 
   return (
-    <div className="h-full flex flex-col p-6">
+    <div className="h-full flex flex-col p-4 md:p-6 pb-20 md:pb-6">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="mb-4 md:mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 w-full md:w-auto">
           <button
             onClick={onExit}
-            className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground min-h-[44px] md:min-h-0"
           >
-            <ArrowLeft className="h-3 w-3" />
+            <ArrowLeft className="h-4 w-4 md:h-3 md:w-3" />
           </button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Review</h1>
-            <p className="text-muted-foreground">
+          <div className="flex-1">
+            <h1 className="text-xl md:text-3xl font-bold text-foreground">Review</h1>
+            <p className="text-xs md:text-sm text-muted-foreground hidden md:block">
               Focused session with clear time and retention feedback
             </p>
             {activeDeck && (

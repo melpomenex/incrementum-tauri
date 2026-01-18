@@ -50,8 +50,8 @@ export function RatingButtons({
   ];
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="grid grid-cols-4 gap-3">
+    <div className="w-full max-w-2xl mx-auto px-2 md:px-0">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
         {ratings.map((rating) => {
           const Icon = rating.icon;
           const interval = previewIntervals
@@ -75,14 +75,16 @@ export function RatingButtons({
               disabled={disabled}
               className={`
                 ${rating.color}
-                text-white rounded-lg p-4 transition-all
+                text-white rounded-lg p-3 md:p-4 transition-all
                 hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
-                flex flex-col items-center gap-2
+                flex flex-col items-center gap-1 md:gap-2
+                min-h-[80px] md:min-h-[100px]
+                touch-manipulation
               `}
               title={rating.description}
             >
-              <Icon className="w-6 h-6" />
-              <span className="font-semibold">{rating.label}</span>
+              <Icon className="w-5 h-5 md:w-6 md:h-6" />
+              <span className="font-semibold text-sm md:text-base">{rating.label}</span>
               {interval && (
                 <span className="text-xs opacity-90">{interval}</span>
               )}
@@ -91,8 +93,8 @@ export function RatingButtons({
         })}
       </div>
 
-      {/* Keyboard shortcuts hint */}
-      <div className="mt-4 text-center text-sm text-muted-foreground">
+      {/* Keyboard shortcuts hint - hide on mobile */}
+      <div className="mt-4 text-center text-sm text-muted-foreground hidden md:block">
         Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">1</kbd>
         <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs ml-1">2</kbd>
         <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs ml-1">3</kbd>

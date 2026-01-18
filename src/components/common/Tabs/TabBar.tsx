@@ -96,7 +96,7 @@ export function TabBar({
 
   return (
     <>
-      <div className="flex items-center bg-card border-b border-border">
+      <div className="hidden md:flex items-center bg-card border-b border-border">
         {/* Left scroll button */}
         <button
           onClick={scrollLeft}
@@ -135,9 +135,10 @@ export function TabBar({
                   }
                 }}
                 className={`
-                  relative flex items-center gap-2 px-4 py-2 cursor-pointer
+                  relative flex items-center gap-2 px-3 md:px-4 py-2 cursor-pointer
                   border-r border-border border-t-2
                   transition-colors select-none min-w-fit
+                  min-h-[44px]
                   ${isDragging ? "opacity-50" : ""}
                   ${
                     isActive

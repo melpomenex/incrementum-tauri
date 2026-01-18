@@ -10,15 +10,15 @@ export function DashboardTab() {
   const { addTab } = useTabsStore();
 
   return (
-    <div className="h-full overflow-auto p-8">
-      <h1 className="text-3xl font-bold text-foreground mb-4">
+    <div className="h-full overflow-auto p-4 md:p-6 lg:p-8 pb-20 md:pb-8">
+      <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3 md:mb-4">
         Welcome to Incrementum
       </h1>
-      <p className="text-muted-foreground mb-6">
+      <p className="text-sm md:text-base text-muted-foreground mb-4 md:mb-6">
         Your incremental reading and spaced repetition companion.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <button
           onClick={() =>
             addTab({
@@ -29,11 +29,11 @@ export function DashboardTab() {
               closable: true,
             })
           }
-          className="p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left"
+          className="p-4 md:p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left min-h-[120px] md:min-h-[140px] active:scale-[0.98] transition-transform"
         >
-          <div className="text-3xl mb-2">📚</div>
-          <h3 className="font-semibold text-foreground mb-1">Queue</h3>
-          <p className="text-sm text-muted-foreground">
+          <div className="text-2xl md:text-3xl mb-2">📚</div>
+          <h3 className="font-semibold text-base md:text-lg text-foreground mb-1">Queue</h3>
+          <p className="text-xs md:text-sm text-muted-foreground">
             Review your reading queue
           </p>
         </button>
@@ -48,11 +48,11 @@ export function DashboardTab() {
               closable: true,
             })
           }
-          className="p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left"
+          className="p-4 md:p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left min-h-[120px] md:min-h-[140px] active:scale-[0.98] transition-transform"
         >
-          <div className="text-3xl mb-2">🎴</div>
-          <h3 className="font-semibold text-foreground mb-1">Review</h3>
-          <p className="text-sm text-muted-foreground">
+          <div className="text-2xl md:text-3xl mb-2">🎴</div>
+          <h3 className="font-semibold text-base md:text-lg text-foreground mb-1">Review</h3>
+          <p className="text-xs md:text-sm text-muted-foreground">
             Practice with flashcards
           </p>
         </button>
@@ -67,11 +67,11 @@ export function DashboardTab() {
               closable: true,
             })
           }
-          className="p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left"
+          className="p-4 md:p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left min-h-[120px] md:min-h-[140px] active:scale-[0.98] transition-transform"
         >
-          <div className="text-3xl mb-2">📄</div>
-          <h3 className="font-semibold text-foreground mb-1">Documents</h3>
-          <p className="text-sm text-muted-foreground">
+          <div className="text-2xl md:text-3xl mb-2">📄</div>
+          <h3 className="font-semibold text-base md:text-lg text-foreground mb-1">Documents</h3>
+          <p className="text-xs md:text-sm text-muted-foreground">
             Browse your documents
           </p>
         </button>
@@ -86,30 +86,30 @@ export function DashboardTab() {
               closable: true,
             })
           }
-          className="p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left"
+          className="p-4 md:p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left min-h-[120px] md:min-h-[140px] active:scale-[0.98] transition-transform"
         >
-          <div className="text-3xl mb-2">📊</div>
-          <h3 className="font-semibold text-foreground mb-1">Analytics</h3>
-          <p className="text-sm text-muted-foreground">
+          <div className="text-2xl md:text-3xl mb-2">📊</div>
+          <h3 className="font-semibold text-base md:text-lg text-foreground mb-1">Analytics</h3>
+          <p className="text-xs md:text-sm text-muted-foreground">
             Track your progress
           </p>
         </button>
       </div>
 
-      <div className="mt-8 p-6 bg-muted/50 border border-border rounded-lg">
-        <h2 className="text-xl font-semibold text-foreground mb-2">Quick Stats</h2>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <div className="text-2xl font-bold text-foreground">0</div>
-            <div className="text-sm text-muted-foreground">Documents</div>
+      <div className="mt-6 md:mt-8 p-4 md:p-6 bg-muted/50 border border-border rounded-lg">
+        <h2 className="text-lg md:text-xl font-semibold text-foreground mb-3 md:mb-4">Quick Stats</h2>
+        <div className="grid grid-cols-3 gap-3 md:gap-4">
+          <div className="text-center md:text-left">
+            <div className="text-xl md:text-2xl font-bold text-foreground">0</div>
+            <div className="text-xs md:text-sm text-muted-foreground">Documents</div>
           </div>
-          <div>
-            <div className="text-2xl font-bold text-foreground">0</div>
-            <div className="text-sm text-muted-foreground">Due Today</div>
+          <div className="text-center md:text-left">
+            <div className="text-xl md:text-2xl font-bold text-foreground">0</div>
+            <div className="text-xs md:text-sm text-muted-foreground">Due Today</div>
           </div>
-          <div>
-            <div className="text-2xl font-bold text-foreground">0</div>
-            <div className="text-sm text-muted-foreground">Cards Learned</div>
+          <div className="text-center md:text-left">
+            <div className="text-xl md:text-2xl font-bold text-foreground">0</div>
+            <div className="text-xs md:text-sm text-muted-foreground">Cards Learned</div>
           </div>
         </div>
       </div>

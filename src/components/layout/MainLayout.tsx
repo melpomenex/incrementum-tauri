@@ -261,13 +261,14 @@ export function MainLayout() {
         actions={vimiumActions}
       >
         <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-          {/* Toolbar - Fixed at top */}
-          <div className="flex-shrink-0">
+          {/* Toolbar - Fixed at top - Hidden on mobile */}
+          <div className="flex-shrink-0 hidden md:block">
             <Toolbar />
           </div>
 
           {/* Tabbed Interface - Below toolbar - must grow to fill remaining height */}
-          <div className="flex-1 min-h-0" data-vimium-scroll>
+          {/* Add bottom padding on mobile for navigation bar */}
+          <div className="flex-1 min-h-0 pb-0 md:pb-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} data-vimium-scroll>
             <Tabs />
           </div>
 

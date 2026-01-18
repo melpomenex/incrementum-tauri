@@ -262,9 +262,11 @@
   display: flex;
   justify-content: space-around;
   padding: 8px 0;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
   z-index: 1000;
   user-select: none;
   transition: transform 0.2s ease, opacity 0.2s ease;
+  min-height: 64px;
 }
 
 .mobile-bottom-nav.hidden {
@@ -284,8 +286,10 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 8px 0;
+  padding: 8px 4px;
   transition: color 0.2s;
+  min-height: 48px;
+  max-width: 80px;
 }
 
 .mobile-nav-item:hover {
@@ -694,11 +698,51 @@
     padding-right: 0 !important;
   }
 
+  /* Add bottom padding to prevent content from being hidden by mobile nav */
+  .mobile-main-content {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
   /* Hide desktop-specific elements */
   .sidebar,
   .desktop-header,
   .toolbar {
     display: none !important;
+  }
+
+  /* Ensure touch-friendly button sizes */
+  button:not(.mobile-nav-item):not(.mobile-header-btn):not(.mobile-nav-btn) {
+    min-height: 44px;
+  }
+
+  /* Improve tap target spacing */
+  .mobile-density-tap {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    padding: 8px !important;
+  }
+
+  /* Add touch-action for better mobile performance */
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* Prevent text selection on interactive elements */
+  button,
+  .mobile-nav-item,
+  .mobile-header-btn {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  /* Improve scrolling on mobile */
+  .overflow-auto,
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .mobile-reading-surface {

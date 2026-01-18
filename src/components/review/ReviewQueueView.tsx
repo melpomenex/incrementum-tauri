@@ -263,14 +263,14 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   };
 
   return (
-    <div className="h-full flex flex-col bg-cream">
-      <div className="border-b border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">
+    <div className="h-full flex flex-col bg-cream pb-20 md:pb-0">
+      <div className="border-b border-border bg-card p-3 md:p-4">
+        <div className="flex flex-col md:flex-row md:flex-wrap items-start md:items-center justify-between gap-3">
+          <div className="w-full md:w-auto">
+            <h1 className="text-xl md:text-2xl font-semibold text-foreground">
               {queueMode === "reading" ? "Reading Queue" : "Review Queue"}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground hidden md:block">
               {queueMode === "reading"
                 ? "Imported books, articles, and RSS feeds scheduled for incremental reading"
                 : "Flashcards and learning items scheduled for review"}
@@ -281,19 +281,20 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <button
               onClick={handleStartOptimalSession}
-              className="px-4 py-2 bg-primary text-white rounded-md hover:opacity-90 flex items-center gap-2"
+              className="flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2 bg-primary text-white rounded-md hover:opacity-90 flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
               style={{ color: 'var(--color-primary-foreground, white)' }}
             >
               <Play className="w-4 h-4" />
-              Start Optimal Session
+              <span className="hidden sm:inline">Start Optimal Session</span>
+              <span className="sm:hidden">Start</span>
             </button>
             {queueMode === "reading" && onOpenScrollMode && (
               <button
                 onClick={onOpenScrollMode}
-                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:opacity-90 flex items-center gap-2"
+                className="flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:opacity-90 flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
                 title="TikTok-style vertical scrolling through documents"
               >
                 <Smartphone className="w-4 h-4" />

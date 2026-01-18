@@ -53,7 +53,7 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
     }
 
     return (
-      <div className="text-lg leading-relaxed text-foreground">
+      <div className="text-base md:text-lg leading-relaxed text-foreground">
         <span dangerouslySetInnerHTML={{ __html: card.question }} />
       </div>
     );
@@ -63,11 +63,11 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
     if (!showAnswer || !card.answer) return null;
 
     return (
-      <div className="mt-6 pt-6 border-t border-border">
-        <div className="text-sm uppercase tracking-wide text-foreground/80 mb-2 font-medium">
+      <div className="mt-4 md:mt-6 pt-4 md:pt-6 border-t border-border">
+        <div className="text-xs md:text-sm uppercase tracking-wide text-foreground/80 mb-2 font-medium">
           Answer
         </div>
-        <div className="text-base leading-relaxed text-foreground">
+        <div className="text-sm md:text-base leading-relaxed text-foreground">
           <span dangerouslySetInnerHTML={{ __html: card.answer }} />
         </div>
       </div>
@@ -75,11 +75,11 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-2xl mx-auto px-2 md:px-0">
       {/* Card Type Badge */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-2xl">{getItemIcon(card.item_type)}</span>
-        <span className="text-sm uppercase tracking-wide text-foreground/80 font-medium">
+      <div className="flex items-center gap-2 mb-3 md:mb-4">
+        <span className="text-xl md:text-2xl">{getItemIcon(card.item_type)}</span>
+        <span className="text-xs md:text-sm uppercase tracking-wide text-foreground/80 font-medium">
           {card.item_type}
         </span>
         {card.tags.length > 0 && (
