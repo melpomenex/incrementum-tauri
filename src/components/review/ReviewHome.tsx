@@ -48,7 +48,7 @@ export function ReviewHome({ onStartReview }: ReviewHomeProps) {
   const deckSectionRef = useRef<HTMLDivElement | null>(null);
 
   const activeDeck = useMemo(
-    () => decks.find((deck) => deck.id === activeDeckId) ?? null,
+    () => (decks || []).find((deck) => deck.id === activeDeckId) ?? null,
     [decks, activeDeckId]
   );
 
@@ -97,7 +97,7 @@ export function ReviewHome({ onStartReview }: ReviewHomeProps) {
   const estimatedSeconds = scopedItems.length * 30;
 
   const deckStats = useMemo(() => {
-    return decks.map((deck) => ({
+    return (decks || []).map((deck) => ({
       deck,
       count: dueItems.filter((item) => matchesDeckTags(item.tags ?? [], deck)).length,
     }));
@@ -168,7 +168,7 @@ export function ReviewHome({ onStartReview }: ReviewHomeProps) {
             >
               All Decks
             </button>
-            {decks.map((deck) => (
+            {decks?.map((deck) => (
               <button
                 key={deck.id}
                 onClick={() => setActiveDeckId(deck.id)}
@@ -252,12 +252,12 @@ export function ReviewHome({ onStartReview }: ReviewHomeProps) {
             </div>
 
             <div className="mt-4 grid gap-3">
-              {decks.length === 0 && (
+              {!decks || decks.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   No decks yet. Import an Anki `.apkg` file or create a deck below.
                 </div>
               )}
-              {deckStats.map(({ deck, count }) => (
+              {deckStats?.map(({ deck, count }) => (
                 <button
                   key={deck.id}
                   onClick={() => setActiveDeckId(deck.id)}
@@ -295,10 +295,10 @@ export function ReviewHome({ onStartReview }: ReviewHomeProps) {
             </div>
 
             <div className="mt-4 space-y-4">
-              {decks.length === 0 && (
+              {!decks || decks.length === 0 && (
                 <p className="text-sm text-muted-foreground">Create a deck to start tagging.</p>
               )}
-              {decks.map((deck) => (
+              {decks?.map((deck) => (
                 <div key={deck.id} className="rounded-lg border border-border bg-background p-3">
                   <div className="flex items-center justify-between">
                     <input

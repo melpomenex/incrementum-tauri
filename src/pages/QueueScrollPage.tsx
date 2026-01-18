@@ -717,19 +717,19 @@ export function QueueScrollPage() {
             />
           ) : renderedItem?.type === "rss" ? (
             <div className="h-full w-full overflow-y-auto">
-              <div className="max-w-3xl mx-auto px-8 py-12">
+              <div className="max-w-3xl mx-auto px-8 py-12 mobile-reading-surface">
                 {/* RSS Article Header */}
                 <div className="mb-6">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3 mobile-reading-meta">
                     <span className="px-2 py-1 bg-orange-500/10 text-orange-500 rounded-md text-xs font-medium">
                       RSS
                     </span>
                     <span>{renderedItem.rssFeed?.title}</span>
                   </div>
-                  <h1 className="text-3xl font-bold text-foreground mb-3">
+                  <h1 className="text-3xl font-bold text-foreground mb-3 mobile-reading-title">
                     {renderedItem.rssItem?.title}
                   </h1>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground mobile-reading-meta">
                     {renderedItem.rssItem?.pubDate && (
                       <span>{new Date(renderedItem.rssItem.pubDate).toLocaleDateString()}</span>
                     )}
@@ -738,7 +738,7 @@ export function QueueScrollPage() {
                       href={renderedItem.rssItem?.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 hover:text-foreground transition-colors"
+                      className="flex items-center gap-1 hover:text-foreground transition-colors mobile-density-tap"
                     >
                       <ExternalLink className="w-3 h-3" />
                       Open original
@@ -748,7 +748,7 @@ export function QueueScrollPage() {
 
                 {/* RSS Article Content */}
                 <div
-                  className="prose prose-lg max-w-none text-foreground"
+                  className="prose prose-lg max-w-none text-foreground mobile-reading-prose"
                   dangerouslySetInnerHTML={{ __html: renderedItem.rssItem?.content || renderedItem.rssItem?.description || "" }}
                 />
               </div>

@@ -398,7 +398,7 @@ export function RSSReader() {
         {/* Items list */}
         <div className="flex-1 overflow-y-auto border-r border-border">
           {selectedFeed && viewMode === "all" && (
-            <div className="p-4 border-b border-border bg-muted/30">
+            <div className="p-4 border-b border-border bg-muted/30 mobile-density-section">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-foreground">{selectedFeed.title}</h3>
@@ -407,21 +407,21 @@ export function RSSReader() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleRefreshFeed(selectedFeed)}
-                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg mobile-density-tap"
                     title="Refresh feed"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleMarkAllRead(selectedFeed.id)}
-                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg mobile-density-tap"
                     title="Mark all as read"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleRemoveFeed(selectedFeed.id)}
-                    className="p-2 text-destructive hover:bg-destructive/20 rounded-lg"
+                    className="p-2 text-destructive hover:bg-destructive/20 rounded-lg mobile-density-tap"
                     title="Unsubscribe"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -432,7 +432,7 @@ export function RSSReader() {
           )}
 
           {items.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
+            <div className="p-8 text-center text-muted-foreground mobile-density-section">
               {viewMode === "unread" ? "No unread items" : "No articles"}
             </div>
           ) : (
@@ -441,7 +441,7 @@ export function RSSReader() {
                 <article
                   key={`${feed.id}-${item.id}`}
                   onClick={() => handleItemClick(feed, item)}
-                  className={`p-4 hover:bg-muted/30 cursor-pointer transition-colors ${
+                  className={`p-4 hover:bg-muted/30 cursor-pointer transition-colors mobile-density-list-item ${
                     !item.read ? "bg-primary/5" : ""
                   }`}
                 >
@@ -483,7 +483,7 @@ export function RSSReader() {
                           e.stopPropagation();
                           handleToggleFavorite(feed, item);
                         }}
-                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors mobile-density-tap"
                         title={item.favorite ? "Remove favorite" : "Add to favorites"}
                       >
                         {item.favorite ? (
@@ -497,7 +497,7 @@ export function RSSReader() {
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors mobile-density-tap"
                         title="Open original"
                       >
                         <ExternalLink className="w-4 h-4" />
@@ -513,14 +513,14 @@ export function RSSReader() {
         {/* Article preview */}
         {selectedItem && (
           <div className="h-1/2 border-t border-border bg-card overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-xl font-bold text-foreground mb-2">{selectedItem.title}</h2>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4">
+            <div className="p-6 mobile-reading-surface">
+              <h2 className="text-xl font-bold text-foreground mb-2 mobile-reading-title">{selectedItem.title}</h2>
+              <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4 mobile-reading-meta">
                 <span>{formatFeedDate(selectedItem.pubDate)}</span>
                 {selectedItem.author && <span>by {selectedItem.author}</span>}
               </div>
               <div
-                className="prose prose-sm max-w-none text-foreground"
+                className="prose prose-sm max-w-none text-foreground mobile-reading-prose"
                 dangerouslySetInnerHTML={{ __html: selectedItem.content }}
               />
             </div>

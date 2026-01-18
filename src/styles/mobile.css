@@ -12,6 +12,19 @@
   --mobile-breakpoint: 768px;
   --tablet-breakpoint: 1024px;
   --desktop-breakpoint: 1280px;
+  --mobile-density-space-1: 6px;
+  --mobile-density-space-2: 10px;
+  --mobile-density-space-3: 14px;
+  --mobile-density-space-4: 18px;
+  --mobile-reading-font-family: "Iowan Old Style", "Charter", "Source Serif 4", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --mobile-reading-font-size: 16px;
+  --mobile-reading-line-height: 1.55;
+  --mobile-reading-title-size: 1.55rem;
+  --mobile-reading-title-line-height: 1.2;
+  --mobile-reading-max-width: 44rem;
+  --mobile-reading-padding-x: 16px;
+  --mobile-reading-padding-y: 20px;
+  --mobile-reading-meta-size: 0.85rem;
 }
 
 /* ==========================================================================
@@ -686,6 +699,64 @@
   .desktop-header,
   .toolbar {
     display: none !important;
+  }
+
+  .mobile-reading-surface {
+    padding: var(--mobile-reading-padding-y) var(--mobile-reading-padding-x) !important;
+    max-width: var(--mobile-reading-max-width);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .mobile-reading-prose {
+    font-family: var(--mobile-reading-font-family);
+    font-size: var(--mobile-reading-font-size);
+    line-height: var(--mobile-reading-line-height);
+    letter-spacing: -0.01em;
+    text-rendering: optimizeLegibility;
+    font-kerning: normal;
+  }
+
+  .mobile-reading-prose p {
+    margin: 0.85em 0;
+  }
+
+  .mobile-reading-prose h1,
+  .mobile-reading-prose h2,
+  .mobile-reading-prose h3,
+  .mobile-reading-prose h4 {
+    letter-spacing: -0.015em;
+  }
+
+  .mobile-reading-title {
+    font-size: var(--mobile-reading-title-size) !important;
+    line-height: var(--mobile-reading-title-line-height) !important;
+    margin-bottom: var(--mobile-density-space-3) !important;
+  }
+
+  .mobile-reading-meta {
+    font-size: var(--mobile-reading-meta-size);
+    gap: var(--mobile-density-space-2);
+    flex-wrap: wrap;
+  }
+
+  .mobile-density-list-item {
+    padding: var(--mobile-density-space-3) !important;
+  }
+
+  .mobile-density-section {
+    padding: var(--mobile-density-space-3) !important;
+  }
+
+  .mobile-density-tap {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .mobile-reading-surface .markdown-viewer {
+    padding: 0 !important;
+    background: transparent !important;
+    min-height: auto !important;
   }
 }
 

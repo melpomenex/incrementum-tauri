@@ -48,7 +48,7 @@ export function EPUBViewer({
   const lineHeightRef = useRef(epubSettings.lineHeight);
 
   const fontFamilyMap: Record<string, string> = {
-    serif: "Georgia, 'Times New Roman', serif",
+    serif: "\"Iowan Old Style\", \"Charter\", \"Source Serif 4\", \"Palatino Linotype\", Palatino, Georgia, \"Times New Roman\", serif",
     "sans-serif": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
     monospace: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
   };
@@ -108,7 +108,7 @@ export function EPUBViewer({
     const textColor = themeRef.current.colors.foreground;
     const bgColor = themeRef.current.colors.background;
     const fontFamily = fontFamilyMap[fontFamilyRef.current] || fontFamilyMap.serif;
-    const contentPadding = isMobile ? "1.5rem 1.25rem 5rem" : "2rem 3rem";
+    const contentPadding = isMobile ? "1.25rem 1rem 4.5rem" : "2rem 3rem";
     const contentMaxWidth = isMobile ? "40rem" : "100%";
     const contentMargin = isMobile ? "0 auto" : "0";
 

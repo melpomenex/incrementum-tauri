@@ -913,14 +913,14 @@ export function DocumentViewer({
             />
           </div>
         ) : docType === "markdown" ? (
-          <div className="p-8 bg-background min-h-full">
+          <div className="p-8 bg-background min-h-full mobile-reading-surface">
             <MarkdownViewer document={currentDocument} content={currentDocument.content} />
           </div>
         ) : docType === "html" ? (
-          <div className="p-8 bg-background min-h-[500px]">
-            <h1 className="text-2xl font-bold mb-4">{currentDocument.title}</h1>
+          <div className="p-8 bg-background min-h-[500px] mobile-reading-surface">
+            <h1 className="text-2xl font-bold mb-4 mobile-reading-title">{currentDocument.title}</h1>
             <div
-              className="prose prose-sm max-w-none dark:prose-invert"
+              className="prose prose-sm max-w-none dark:prose-invert mobile-reading-prose"
               dangerouslySetInnerHTML={{ __html: currentDocument.content || "" }}
             />
           </div>
