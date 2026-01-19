@@ -83,6 +83,7 @@ export function DocumentViewer({
   const [zoomMode, setZoomMode] = useState<"custom" | "fit-width" | "fit-page">("fit-width");
   const [fileData, setFileData] = useState<Uint8Array | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pagesRendered, setPagesRendered] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode ?? "document");
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -313,6 +314,7 @@ export function DocumentViewer({
   useEffect(() => {
     restoreScrollDoneRef.current = false;
     restoreScrollAttemptsRef.current = 0;
+    setPagesRendered(false);
     if (restoreScrollTimeoutRef.current !== null) {
       clearTimeout(restoreScrollTimeoutRef.current);
       restoreScrollTimeoutRef.current = null;
@@ -322,6 +324,7 @@ export function DocumentViewer({
   useEffect(() => {
     if (viewMode !== "document") return;
     if (isLoading) return;
+    if (!pagesRendered) return;
     if (!scrollStorageKey) return;
     if (restoreScrollDoneRef.current) return;
     if (skipStoredScrollRef.current) return;
@@ -378,7 +381,7 @@ export function DocumentViewer({
     };
 
     tryRestore();
-  }, [isLoading, scrollStorageKey, viewMode, currentDocument?.currentScrollPercent, currentDocument?.currentPage]);
+  }, [isLoading, pagesRendered, scrollStorageKey, viewMode, currentDocument?.currentScrollPercent, currentDocument?.currentPage]);
 
   useEffect(() => {
     loadQueue();
@@ -943,6 +946,7 @@ export function DocumentViewer({
               zoomMode={zoomMode}
               onPageChange={handlePageChange}
               onLoad={handleDocumentLoad}
+              onPagesRendered={() => setPagesRendered(true)}
               onScrollPositionChange={handleScrollPositionChange}
               contextPageWindow={contextPageWindow}
               onTextWindowChange={handlePdfContextTextChange}

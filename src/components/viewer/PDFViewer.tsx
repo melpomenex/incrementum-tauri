@@ -19,6 +19,7 @@ interface PDFViewerProps {
   zoomMode?: ZoomMode;
   onPageChange?: (pageNumber: number) => void;
   onLoad?: (numPages: number, outline: any[]) => void;
+  onPagesRendered?: () => void;
   onScrollPositionChange?: (state: {
     pageNumber: number;
     scrollTop: number;
@@ -40,6 +41,7 @@ export function PDFViewer({
   zoomMode: externalZoomMode,
   onPageChange,
   onLoad,
+  onPagesRendered,
   onScrollPositionChange,
   contextPageWindow = 2,
   onTextWindowChange,
@@ -128,6 +130,11 @@ export function PDFViewer({
         }
         await renderPage(pdf, i);
       }
+
+      // Call onPagesRendered after all pages are rendered
+      if (mounted && renderId === renderIdRef.current) {
+        onPagesRendered?.();
+      }
     };
 
     renderPages();
@@ -135,7 +142,7 @@ export function PDFViewer({
     return () => {
       mounted = false;
     };
-  }, [pdf, scale, zoomMode]);
+  }, [pdf, scale, zoomMode, onPagesRendered]);
 
   useEffect(() => {
     if (!pdf || !onTextWindowChange) return;
