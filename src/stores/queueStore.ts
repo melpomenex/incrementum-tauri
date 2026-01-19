@@ -12,6 +12,7 @@ import {
   type QueueStats
 } from "../api/queue";
 import type { QueueItem, SortOptions, SearchFilters } from "../types";
+import { useCollectionStore } from "./collectionStore";
 
 // Queue filter modes for FSRS-based scheduling
 export type QueueFilterMode = "due-today" | "all-items" | "new-only" | "due-all";
@@ -83,9 +84,9 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       const items = await getQueue();
       set({
         items,
-        filteredItems: items,
         isLoading: false,
       });
+      get().applyFilters();
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Failed to load queue",
@@ -110,9 +111,9 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       const items = await getDueDocumentsOnly();
       set({
         items,
-        filteredItems: items,
         isLoading: false,
       });
+      get().applyFilters();
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Failed to load due documents",
@@ -128,9 +129,9 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       const items = await getDueQueueItems();
       set({
         items,
-        filteredItems: items,
         isLoading: false,
       });
+      get().applyFilters();
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Failed to load due items",
@@ -206,6 +207,15 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   applyFilters: () => {
     const { items, searchQuery, filters, sortOptions } = get();
     let filtered = [...items];
+    const { activeCollectionId, documentAssignments } = useCollectionStore.getState();
+
+    if (activeCollectionId) {
+      filtered = filtered.filter((item) => {
+        if (!item.documentId) return true;
+        const assigned = documentAssignments[item.documentId];
+        return assigned ? assigned === activeCollectionId : true;
+      });
+    }
 
     // Apply search query
     if (searchQuery) {
@@ -344,3 +354,11 @@ export const useQueueStore = create<QueueState>((set, get) => ({
 
   clearBulkResult: () => set({ bulkOperationResult: null }),
 }));
+
+useCollectionStore.subscribe(
+  (state) => state.activeCollectionId,
+  () => {
+    const { applyFilters } = useQueueStore.getState();
+    applyFilters();
+  }
+);

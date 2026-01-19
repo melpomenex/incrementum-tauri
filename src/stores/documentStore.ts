@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { Document, Extract } from "../types";
 import * as documentsApi from "../api/documents";
 import { isTauri } from "../lib/tauri";
+import { useCollectionStore } from "./collectionStore";
 
 interface DocumentState {
   // Data
@@ -70,6 +71,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const docs = await documentsApi.getDocuments();
+      useCollectionStore.getState().ensureDocumentsAssigned(docs);
       set({ documents: docs, isLoading: false });
     } catch (error) {
       set({
@@ -89,9 +91,13 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }),
 
   addDocument: (document) =>
-    set((state) => ({
-      documents: [...state.documents, document],
-    })),
+    set((state) => {
+      const { activeCollectionId, assignDocument } = useCollectionStore.getState();
+      if (activeCollectionId) {
+        assignDocument(document.id, activeCollectionId);
+      }
+      return { documents: [...state.documents, document] };
+    }),
 
   updateDocument: (id, updates) =>
     set((state) => ({
@@ -116,6 +122,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     set({ isImporting: true, error: null });
     try {
       const doc = await documentsApi.importDocument(filePath);
+      const { activeCollectionId, assignDocument } = useCollectionStore.getState();
+      if (activeCollectionId) {
+        assignDocument(doc.id, activeCollectionId);
+      }
       set((state) => ({
         documents: [...state.documents, doc],
         isImporting: false,
@@ -146,6 +156,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         try {
           const doc = await documentsApi.importDocument(filePath);
           imported.push(doc);
+          const { activeCollectionId, assignDocument } = useCollectionStore.getState();
+          if (activeCollectionId) {
+            assignDocument(doc.id, activeCollectionId);
+          }
         } catch (error) {
           console.error(`Failed to import ${fileName}:`, error);
           // Continue with other files

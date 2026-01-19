@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { X, Tag as TagIcon, FolderOpen, Lightbulb, Bold, Italic, Code, List, Layers, Eye } from "lucide-react";
 import { createExtract, CreateExtractInput, Extract } from "../../api/extracts";
 import { generateLearningItemsFromExtract } from "../../api/learning-items";
+import { ClozeCreatorPopup } from "./ClozeCreatorPopup";
+import { QACreatorPopup } from "./QACreatorPopup";
 
 interface CreateExtractDialogProps {
   documentId: string;
@@ -62,6 +64,8 @@ export function CreateExtractDialog({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [creationMode, setCreationMode] = useState<"edit" | "cloze" | "qa">("edit");
+  const [savedExtractId, setSavedExtractId] = useState<string | null>(null);
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -74,6 +78,8 @@ export function CreateExtractDialog({
       setProgressiveLevel(0);
       setShowPreview(false);
       setError(null);
+      setCreationMode("edit");
+      setSavedExtractId(null);
     }
   }, [isOpen, selectedText]);
 
@@ -131,7 +137,7 @@ export function CreateExtractDialog({
     }
   };
 
-  const handleCreate = async (generateCards = false) => {
+  const handleCreate = async (action: "extract" | "generate" | "cloze" | "qa") => {
     if (!content.trim()) {
       setError("Content is required");
       return;
@@ -154,12 +160,17 @@ export function CreateExtractDialog({
 
       const extract = await createExtract(input);
 
-      if (generateCards) {
+      if (action === "generate") {
         setIsGenerating(true);
         await generateLearningItemsFromExtract(extract.id);
       }
 
       onCreate?.(extract);
+      if (action === "cloze" || action === "qa") {
+        setSavedExtractId(extract.id);
+        setCreationMode(action);
+        return;
+      }
       onClose();
 
       // Reset form
@@ -177,6 +188,28 @@ export function CreateExtractDialog({
       setIsGenerating(false);
     }
   };
+
+  if (creationMode === "cloze" && savedExtractId) {
+    return (
+      <ClozeCreatorPopup
+        extractId={savedExtractId}
+        selectedText={content}
+        selectionRange={[0, content.length]}
+        onCreated={() => onClose()}
+        onCancel={onClose}
+      />
+    );
+  }
+
+  if (creationMode === "qa" && savedExtractId) {
+    return (
+      <QACreatorPopup
+        extractId={savedExtractId}
+        onCreated={() => onClose()}
+        onCancel={onClose}
+      />
+    );
+  }
 
   if (!isOpen) return null;
 
@@ -411,14 +444,14 @@ export function CreateExtractDialog({
             Cancel
           </button>
           <button
-            onClick={() => handleCreate(false)}
+            onClick={() => handleCreate("extract")}
             disabled={isCreating || isGenerating}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {isCreating ? "Creating..." : "Create Extract"}
           </button>
           <button
-            onClick={() => handleCreate(true)}
+            onClick={() => handleCreate("generate")}
             disabled={isCreating || isGenerating}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
@@ -432,6 +465,20 @@ export function CreateExtractDialog({
                 <span>Create & Generate Cards</span>
               </>
             )}
+          </button>
+          <button
+            onClick={() => handleCreate("cloze")}
+            disabled={isCreating || isGenerating}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            Create & Cloze
+          </button>
+          <button
+            onClick={() => handleCreate("qa")}
+            disabled={isCreating || isGenerating}
+            className="px-4 py-2 bg-muted text-foreground rounded-md hover:bg-muted/80 transition-colors disabled:opacity-50"
+          >
+            Create & Q&A
           </button>
         </div>
       </div>

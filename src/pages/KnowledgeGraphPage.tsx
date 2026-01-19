@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { invokeCommand } from "../lib/tauri";
 import { KnowledgeGraph, GraphNodeType, type GraphNode, type GraphEdge, type GraphData } from "../components/graph/KnowledgeGraph";
+import { useCollectionStore } from "../stores/collectionStore";
+import { useTabsStore } from "../stores/tabsStore";
+import { useReviewStore } from "../stores/reviewStore";
+import { DocumentViewer, ReviewTab } from "../components/tabs/TabRegistry";
 import {
   Network,
   Filter,
@@ -15,6 +19,9 @@ export function KnowledgeGraphPage() {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<string | undefined>();
+  const { addTab } = useTabsStore();
+  const activeCollectionId = useCollectionStore((state) => state.activeCollectionId);
+  const documentAssignments = useCollectionStore((state) => state.documentAssignments);
   const [filters, setFilters] = useState({
     documents: true,
     extracts: true,
@@ -24,7 +31,7 @@ export function KnowledgeGraphPage() {
 
   useEffect(() => {
     loadGraphData();
-  }, [filters]);
+  }, [filters, activeCollectionId, documentAssignments]);
 
   const loadGraphData = async () => {
     setIsLoading(true);
@@ -34,6 +41,12 @@ export function KnowledgeGraphPage() {
       const documents = await invokeCommand<any[]>("get_documents");
       const extracts = await invokeCommand<any[]>("get_extracts", { documentId: null });
       const learningItems = await invokeCommand<any[]>("get_learning_items");
+      const inActiveCollection = (documentId?: string | null) => {
+        if (!activeCollectionId) return true;
+        if (!documentId) return true;
+        const assigned = documentAssignments[documentId];
+        return assigned ? assigned === activeCollectionId : true;
+      };
 
       // Build graph nodes
       const nodes: GraphNode[] = [];
@@ -42,7 +55,7 @@ export function KnowledgeGraphPage() {
 
       // Add document nodes
       if (filters.documents) {
-        documents.forEach((doc: any) => {
+        documents.filter((doc: any) => inActiveCollection(doc.id)).forEach((doc: any) => {
           nodes.push({
             id: `doc-${doc.id}`,
             type: GraphNodeType.Document,
@@ -58,7 +71,7 @@ export function KnowledgeGraphPage() {
 
       // Add extract nodes
       if (filters.extracts) {
-        extracts.forEach((extract: any) => {
+        extracts.filter((extract: any) => inActiveCollection(extract.documentId)).forEach((extract: any) => {
           nodes.push({
             id: `extract-${extract.id}`,
             type: GraphNodeType.Extract,
@@ -82,7 +95,7 @@ export function KnowledgeGraphPage() {
 
       // Add flashcard nodes
       if (filters.flashcards) {
-        learningItems.forEach((item: any) => {
+        learningItems.filter((item: any) => inActiveCollection(item.documentId)).forEach((item: any) => {
           nodes.push({
             id: `card-${item.id}`,
             type: GraphNodeType.Flashcard,
@@ -126,16 +139,40 @@ export function KnowledgeGraphPage() {
     // Open the item in the relevant view
     switch (node.type) {
       case GraphNodeType.Document:
-        // Navigate to document
+        addTab({
+          title: node.label,
+          icon: "📄",
+          type: "document-viewer",
+          content: DocumentViewer,
+          closable: true,
+          data: { documentId: node.id.replace("doc-", "") },
+        });
         break;
       case GraphNodeType.Extract:
-        // Navigate to extract
+        addTab({
+          title: node.label,
+          icon: "📄",
+          type: "document-viewer",
+          content: DocumentViewer,
+          closable: true,
+          data: {
+            documentId: String(node.metadata?.documentId || "").replace("doc-", ""),
+            initialViewMode: "extracts",
+          },
+        });
         break;
       case GraphNodeType.Flashcard:
-        // Navigate to flashcard
+        addTab({
+          title: "Review",
+          icon: "🎴",
+          type: "review",
+          content: ReviewTab,
+          closable: true,
+        });
+        void useReviewStore.getState().startReviewAtItem(node.id.replace("card-", ""));
         break;
     }
-  }, []);
+  }, [addTab]);
 
   const exportGraph = async () => {
     try {

@@ -13,6 +13,7 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
+  Network,
 } from "lucide-react";
 
 interface SidebarItem {
@@ -26,6 +27,7 @@ const sidebarItems: SidebarItem[] = [
   { id: "dashboard", label: "Dashboard", icon: Home },
   { id: "documents", label: "Documents", icon: BookOpen },
   { id: "queue", label: "Queue", icon: Layers },
+  { id: "knowledge-graph", label: "Knowledge Graph", icon: Network },
   { id: "analytics", label: "Statistics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
 ];

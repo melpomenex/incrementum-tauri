@@ -41,6 +41,7 @@ export interface DocumentMetadata {
   language?: string;
   pageCount?: number;
   wordCount?: number;
+  collectionId?: string;
 }
 
 export interface Extract {

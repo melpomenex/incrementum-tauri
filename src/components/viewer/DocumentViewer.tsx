@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize, Share2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useDocumentStore, useTabsStore, useQueueStore } from "../../stores";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { EPUBViewer } from "./EPUBViewer";
@@ -57,6 +58,9 @@ interface DocumentViewerProps {
   disableHoverRating?: boolean;
   onSelectionChange?: (selection: string) => void;
   onScrollPositionChange?: (state: { pageNumber: number; scrollPercent: number }) => void;
+  initialViewMode?: ViewMode;
+  onPdfContextTextChange?: (text: string) => void;
+  contextPageWindow?: number;
 }
 
 export function DocumentViewer({
@@ -64,21 +68,26 @@ export function DocumentViewer({
   disableHoverRating = false,
   onSelectionChange,
   onScrollPositionChange,
+  initialViewMode,
+  onPdfContextTextChange,
+  contextPageWindow,
 }: DocumentViewerProps) {
   const toast = useToast();
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
   const { closeTab, tabs, updateTab } = useTabsStore();
   const { items: queueItems, loadQueue } = useQueueStore();
+  const { settings } = useSettingsStore();
 
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [zoomMode, setZoomMode] = useState<"custom" | "fit-width" | "fit-page">("fit-width");
   const [fileData, setFileData] = useState<Uint8Array | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("document");
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode ?? "document");
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [ocrContextText, setOcrContextText] = useState<string | null>(null);
   const restoreScrollAttemptsRef = useRef(0);
   const restoreScrollTimeoutRef = useRef<number | null>(null);
   const restoreScrollDoneRef = useRef(false);
@@ -209,6 +218,9 @@ export function DocumentViewer({
             ocrUsed: extractionResult.ocrUsed,
           });
         }
+        if (extractionResult.ocrUsed && extractionResult.text) {
+          setOcrContextText(extractionResult.text);
+        }
       } catch (error) {
         console.error("[DocumentViewer] Auto-extract failed:", error);
       }
@@ -217,6 +229,8 @@ export function DocumentViewer({
 
   useEffect(() => {
     if (!documentId) return;
+
+    setOcrContextText(null);
 
     // Only reload if documentId actually changed, OR if we haven't successfully loaded this document yet
     const shouldLoad = documentId !== lastDocumentIdRef.current ||
@@ -247,6 +261,14 @@ export function DocumentViewer({
       }
     }
   }, [documentId, documents, setCurrentDocument, loadDocumentData]);
+
+  useEffect(() => {
+    if (initialViewMode) {
+      setViewMode(initialViewMode);
+      return;
+    }
+    setViewMode("document");
+  }, [documentId, initialViewMode]);
 
   // Parse URL fragment and restore state after document is loaded
   useEffect(() => {
@@ -309,7 +331,7 @@ export function DocumentViewer({
       return;
     }
 
-    let parsed: { scrollPercent?: number; pageNumber?: number } | null = null;
+    let parsed: { scrollPercent?: number; pageNumber?: number; updatedAt?: number } | null = null;
     if (stored) {
       try {
         parsed = JSON.parse(stored);
@@ -317,11 +339,20 @@ export function DocumentViewer({
         parsed = null;
       }
     }
-    if (!parsed && typeof currentDocument?.currentScrollPercent === "number") {
-      parsed = {
-        scrollPercent: currentDocument.currentScrollPercent,
-        pageNumber: currentDocument.currentPage ?? undefined,
-      };
+    const remoteUpdatedAt = currentDocument?.dateModified
+      ? new Date(currentDocument.dateModified).getTime()
+      : 0;
+    const localUpdatedAt = parsed?.updatedAt ?? 0;
+    const hasRemoteProgress = typeof currentDocument?.currentScrollPercent === "number";
+
+    if ((hasRemoteProgress && remoteUpdatedAt > localUpdatedAt) || !parsed) {
+      parsed = hasRemoteProgress
+        ? {
+            scrollPercent: currentDocument.currentScrollPercent,
+            pageNumber: currentDocument.currentPage ?? undefined,
+            updatedAt: remoteUpdatedAt || Date.now(),
+          }
+        : null;
     }
     if (!parsed) return;
 
@@ -900,6 +931,8 @@ export function DocumentViewer({
               onPageChange={handlePageChange}
               onLoad={handleDocumentLoad}
               onScrollPositionChange={handleScrollPositionChange}
+              contextPageWindow={contextPageWindow}
+              onTextWindowChange={handlePdfContextTextChange}
             />
           </div>
         ) : docType === "epub" && fileData ? (
@@ -1014,3 +1047,15 @@ export function DocumentViewer({
     </div>
   );
 }
+  const handlePdfContextTextChange = useCallback(
+    (text: string) => {
+      if (!onPdfContextTextChange) return;
+      const preferOcr = settings.documents.ocr.autoOCR || settings.documents.ocr.autoExtractOnLoad;
+      if (preferOcr && ocrContextText) {
+        onPdfContextTextChange(ocrContextText);
+        return;
+      }
+      onPdfContextTextChange(text);
+    },
+    [onPdfContextTextChange, ocrContextText, settings.documents.ocr.autoOCR, settings.documents.ocr.autoExtractOnLoad]
+  );

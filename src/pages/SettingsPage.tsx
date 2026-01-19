@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useCollectionStore } from "../stores/collectionStore";
 import { UserProfilePanel } from "../components/settings/UserProfilePanel";
 import { AISettings } from "../components/settings/AISettings";
 import { SyncSettings } from "../components/settings/SyncSettings";
@@ -68,12 +69,88 @@ export function SettingsPage() {
 
 function GeneralSettings() {
   const { settings, updateSettings } = useSettingsStore();
+  const collections = useCollectionStore((state) => state.collections);
+  const activeCollectionId = useCollectionStore((state) => state.activeCollectionId);
+  const setActiveCollectionId = useCollectionStore((state) => state.setActiveCollectionId);
+  const createCollection = useCollectionStore((state) => state.createCollection);
+  const renameCollection = useCollectionStore((state) => state.renameCollection);
+  const removeCollection = useCollectionStore((state) => state.removeCollection);
+  const [newCollectionName, setNewCollectionName] = useState("");
 
   return (
     <div className="p-6 max-w-2xl">
       <h3 className="text-lg font-semibold text-foreground mb-4">General Settings</h3>
 
       <div className="space-y-6">
+        {/* Collections */}
+        <div className="bg-card border border-border rounded p-4">
+          <h4 className="text-sm font-medium text-foreground mb-3">Collections</h4>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm text-foreground">Active Collection</div>
+                <div className="text-xs text-foreground-secondary">
+                  Scope your queue, documents, and graph
+                </div>
+              </div>
+              <select
+                value={activeCollectionId ?? ""}
+                onChange={(e) => setActiveCollectionId(e.target.value || null)}
+                className="px-3 py-1.5 bg-background border border-border rounded text-sm min-w-[200px]"
+              >
+                {collections.map((collection) => (
+                  <option key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                value={newCollectionName}
+                onChange={(e) => setNewCollectionName(e.target.value)}
+                placeholder="New collection name"
+                className="flex-1 px-3 py-1.5 bg-background border border-border rounded text-sm"
+              />
+              <button
+                onClick={() => {
+                  if (!newCollectionName.trim()) return;
+                  createCollection(newCollectionName);
+                  setNewCollectionName("");
+                }}
+                className="px-3 py-1.5 bg-primary-100 text-primary-700 rounded text-sm hover:opacity-90 transition-opacity"
+              >
+                Create
+              </button>
+            </div>
+
+            {activeCollectionId && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const nextName = window.prompt("Rename collection:", "");
+                    if (nextName) {
+                      renameCollection(activeCollectionId, nextName);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-muted text-foreground rounded text-sm hover:bg-muted/80 transition-colors"
+                >
+                  Rename Active
+                </button>
+                {collections.length > 1 && (
+                  <button
+                    onClick={() => removeCollection(activeCollectionId)}
+                    className="px-3 py-1.5 bg-destructive/10 text-destructive rounded text-sm hover:bg-destructive/20 transition-colors"
+                  >
+                    Delete Active
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Appearance */}
         <div className="bg-card border border-border rounded p-4">
           <h4 className="text-sm font-medium text-foreground mb-3">Appearance</h4>

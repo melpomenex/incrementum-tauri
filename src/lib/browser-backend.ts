@@ -70,6 +70,24 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(doc);
     },
 
+    update_document_progress: async (args) => {
+        const id = args.id as string;
+        const updates: Partial<db.Document> = {
+            current_page: args.current_page as number | null | undefined,
+            current_scroll_percent: args.current_scroll_percent as number | null | undefined,
+            current_cfi: args.current_cfi as string | null | undefined,
+            sync_version: Date.now(),
+        };
+        const cleaned: any = {};
+        Object.entries(updates).forEach(([key, value]) => {
+            if (value !== undefined) {
+                cleaned[key] = value === null ? undefined : value;
+            }
+        });
+        const doc = await db.updateDocument(id, cleaned);
+        return toCamelCase(doc);
+    },
+
     update_document_content: async (args) => {
         const id = args.id as string;
         const content = args.content as string;
@@ -261,11 +279,29 @@ const commandHandlers: Record<string, CommandHandler> = {
     // Queue/Review commands
     get_queue: async () => {
         // Return a flat array of queue items matching Rust format
+        const docs = await db.getDocuments();
         const dueExtracts = await db.getDueExtracts();
         const dueLearningItems = await db.getDueLearningItems();
 
         // Convert to queue item format expected by the frontend
         const items: unknown[] = [];
+
+        for (const doc of docs) {
+            items.push({
+                id: doc.id,
+                document_id: doc.id,
+                document_title: doc.title || 'Untitled',
+                item_type: 'document',
+                priority_rating: doc.priority_rating,
+                priority_slider: doc.priority_slider,
+                priority: doc.priority_score ?? 50,
+                due_date: doc.next_reading_date,
+                estimated_time: 10,
+                tags: doc.tags || [],
+                category: doc.category,
+                progress: doc.current_scroll_percent ?? 0,
+            });
+        }
 
         for (const ext of dueExtracts) {
             const doc = await db.getDocument(ext.document_id);
@@ -306,17 +342,104 @@ const commandHandlers: Record<string, CommandHandler> = {
         return items;
     },
 
+    get_due_documents_only: async () => {
+        const docs = await db.getDocuments();
+        const now = new Date().toISOString();
+        const dueDocs = docs.filter((doc) => !doc.next_reading_date || doc.next_reading_date <= now);
+        return dueDocs.map((doc) => ({
+            id: doc.id,
+            document_id: doc.id,
+            document_title: doc.title || 'Untitled',
+            item_type: 'document',
+            priority_rating: doc.priority_rating,
+            priority_slider: doc.priority_slider,
+            priority: doc.priority_score ?? 50,
+            due_date: doc.next_reading_date,
+            estimated_time: 10,
+            tags: doc.tags || [],
+            category: doc.category,
+            progress: doc.current_scroll_percent ?? 0,
+        }));
+    },
+
+    get_due_queue_items: async () => {
+        const docs = await db.getDocuments();
+        const now = new Date().toISOString();
+        const dueDocs = docs.filter((doc) => !doc.next_reading_date || doc.next_reading_date <= now);
+        const dueExtracts = await db.getDueExtracts();
+        const dueLearningItems = await db.getDueLearningItems();
+
+        const items: unknown[] = [];
+
+        for (const doc of dueDocs) {
+            items.push({
+                id: doc.id,
+                document_id: doc.id,
+                document_title: doc.title || 'Untitled',
+                item_type: 'document',
+                priority_rating: doc.priority_rating,
+                priority_slider: doc.priority_slider,
+                priority: doc.priority_score ?? 50,
+                due_date: doc.next_reading_date,
+                estimated_time: 10,
+                tags: doc.tags || [],
+                category: doc.category,
+                progress: doc.current_scroll_percent ?? 0,
+            });
+        }
+
+        for (const ext of dueExtracts) {
+            const doc = await db.getDocument(ext.document_id);
+            items.push({
+                id: ext.id,
+                document_id: ext.document_id,
+                document_title: doc?.title || 'Unknown',
+                extract_id: ext.id,
+                item_type: 'extract',
+                priority: 50,
+                due_date: ext.next_review_date,
+                estimated_time: 5,
+                tags: ext.tags || [],
+                category: ext.category,
+                progress: 0,
+            });
+        }
+
+        for (const item of dueLearningItems) {
+            const doc = item.document_id ? await db.getDocument(item.document_id) : null;
+            items.push({
+                id: item.id,
+                document_id: item.document_id || '',
+                document_title: doc?.title || 'Unknown',
+                extract_id: item.extract_id,
+                learning_item_id: item.id,
+                item_type: 'learning-item',
+                priority: 50,
+                due_date: item.due_date,
+                estimated_time: 2,
+                tags: item.tags || [],
+                category: undefined,
+                progress: 0,
+            });
+        }
+
+        return items;
+    },
+
     get_queue_stats: async () => {
+        const docs = await db.getDocuments();
+        const now = new Date().toISOString();
+        const dueDocs = docs.filter((doc) => !doc.next_reading_date || doc.next_reading_date <= now);
         const dueExtracts = await db.getDueExtracts();
         const dueLearningItems = await db.getDueLearningItems();
         return {
-            total_items: dueExtracts.length + dueLearningItems.length,
-            due_today: dueExtracts.length + dueLearningItems.length,
+            total_items: docs.length + dueExtracts.length + dueLearningItems.length,
+            due_today: dueDocs.length + dueExtracts.length + dueLearningItems.length,
             overdue: 0,
             new_items: 0,
             learning_items: dueLearningItems.length,
             review_items: dueExtracts.length,
-            total_estimated_time: (dueExtracts.length * 5) + (dueLearningItems.length * 2),
+            total_estimated_time: (dueDocs.length * 10) + (dueExtracts.length * 5) + (dueLearningItems.length * 2),
             suspended: 0,
         };
     },

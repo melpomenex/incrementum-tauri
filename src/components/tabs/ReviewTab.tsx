@@ -4,7 +4,7 @@ import { ReviewHome } from "../../components/review/ReviewHome";
 import { ReviewSession } from "../../components/review/ReviewSession";
 
 export function ReviewTab() {
-  const { loadQueue, resetSession } = useReviewStore();
+  const { loadQueue, resetSession, queue, currentCard } = useReviewStore();
   const [mode, setMode] = useState<"home" | "session">("home");
 
   const handleStartReview = async () => {
@@ -19,6 +19,14 @@ export function ReviewTab() {
     resetSession();
     setMode("home");
   };
+
+  useEffect(() => {
+    if (queue.length > 0 && currentCard) {
+      setMode("session");
+    } else if (queue.length === 0 && mode === "session") {
+      setMode("home");
+    }
+  }, [queue.length, currentCard, mode]);
 
   useEffect(() => {
     return () => {

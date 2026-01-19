@@ -13,12 +13,14 @@ const ASSISTANT_POSITION_KEY = "assistant-panel-position";
 
 interface DocumentViewerWithAssistantProps {
   documentId: string;
+  initialViewMode?: "document" | "extracts" | "cards";
 }
 
-export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps) {
+export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWithAssistantProps) {
   const [assistantInputActive, setAssistantInputActive] = useState(false);
   const [selection, setSelection] = useState("");
   const [scrollState, setScrollState] = useState<{ pageNumber?: number; scrollPercent?: number }>({});
+  const [pdfContextText, setPdfContextText] = useState<string | undefined>(undefined);
   const currentDocument = useDocumentStore((state) => state.currentDocument);
   const contextWindowTokens = useSettingsStore((state) => state.settings.ai.maxTokens);
   const aiModel = useSettingsStore((state) => state.settings.ai.model);
@@ -33,6 +35,7 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
 
   useEffect(() => {
     let isActive = true;
+    setPdfContextText(undefined);
 
     const loadDocumentContent = async () => {
       try {
@@ -57,7 +60,7 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
 
   useEffect(() => {
     let isActive = true;
-    const baseContent = currentDocument?.content ?? documentContent;
+    const baseContent = pdfContextText ?? currentDocument?.content ?? documentContent;
     const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
 
     if (!baseContent) {
@@ -82,7 +85,7 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
     return () => {
       isActive = false;
     };
-  }, [currentDocument?.content, documentContent, selection, contextWindowTokens, aiModel]);
+  }, [currentDocument?.content, documentContent, selection, contextWindowTokens, aiModel, pdfContextText]);
 
   const assistantContext = useMemo<AssistantContext>(() => {
     const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
@@ -118,6 +121,9 @@ export function DocumentViewer({ documentId }: DocumentViewerWithAssistantProps)
         disableHoverRating={assistantInputActive}
         onSelectionChange={setSelection}
         onScrollPositionChange={setScrollState}
+        initialViewMode={initialViewMode}
+        onPdfContextTextChange={setPdfContextText}
+        contextPageWindow={2}
       />
     </div>
   );

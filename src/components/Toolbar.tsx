@@ -6,11 +6,15 @@ import {
   ReviewTab,
   DashboardTab,
   SettingsTab,
-  KnowledgeNetworkTab,
+  DocumentViewer,
   KnowledgeSphereTab,
   WebBrowserTab,
   RSSReader,
 } from "./tabs/TabRegistry";
+import { KnowledgeGraphPage } from "../pages/KnowledgeGraphPage";
+import { useQueueStore } from "../stores/queueStore";
+import { useReviewStore } from "../stores/reviewStore";
+import type { QueueItem } from "../types/queue";
 
 import {
   FileUp,
@@ -80,6 +84,7 @@ export function Toolbar() {
   const { addTab, addTabInBackground } = useTabsStore();
   const { openFilePickerAndImport, loadDocuments } = useDocumentStore();
   const { setCommandPaletteOpen } = useUIStore();
+  const { queueFilterMode } = useQueueStore();
 
   // Import File button
   const handleImportFile = async () => {
@@ -97,15 +102,53 @@ export function Toolbar() {
   };
 
   // Read Next button
-  const handleReadNext = () => {
-    // TODO: Get next item from queue
-    console.log("Read Next");
+  const handleReadNext = async () => {
+    const { loadQueue, loadDueDocumentsOnly, loadDueQueueItems } = useQueueStore.getState();
+    switch (queueFilterMode) {
+      case "due-today":
+        await loadDueDocumentsOnly();
+        break;
+      case "due-all":
+        await loadDueQueueItems();
+        break;
+      case "all-items":
+      case "new-only":
+      default:
+        await loadQueue();
+        break;
+    }
+    const { filteredItems } = useQueueStore.getState();
+    const nextItem = filteredItems[0];
+    if (!nextItem) {
+      console.log("No due items to read.");
+      return;
+    }
+    void openQueueItem(nextItem);
   };
 
   // Random Item button
-  const handleRandomItem = () => {
-    console.log("Random Item");
-    // TODO: Implement random queue item
+  const handleRandomItem = async () => {
+    const { loadQueue, loadDueDocumentsOnly, loadDueQueueItems } = useQueueStore.getState();
+    switch (queueFilterMode) {
+      case "due-today":
+        await loadDueDocumentsOnly();
+        break;
+      case "due-all":
+        await loadDueQueueItems();
+        break;
+      case "all-items":
+      case "new-only":
+      default:
+        await loadQueue();
+        break;
+    }
+    const { filteredItems } = useQueueStore.getState();
+    if (filteredItems.length === 0) {
+      console.log("No items available for random selection.");
+      return;
+    }
+    const randomItem = filteredItems[Math.floor(Math.random() * filteredItems.length)];
+    void openQueueItem(randomItem);
   };
 
   // Start Review button
@@ -160,7 +203,7 @@ export function Toolbar() {
       title: "Knowledge Network",
       icon: "🕸️",
       type: "knowledge-network",
-      content: KnowledgeNetworkTab,
+      content: KnowledgeGraphPage,
       closable: true,
     });
   };
@@ -170,7 +213,7 @@ export function Toolbar() {
       title: "Knowledge Network",
       icon: "🕸️",
       type: "knowledge-network",
-      content: KnowledgeNetworkTab,
+      content: KnowledgeGraphPage,
       closable: true,
     });
   };
@@ -259,6 +302,46 @@ export function Toolbar() {
   // Command Palette button
   const handleCommandPalette = () => {
     setCommandPaletteOpen(true);
+  };
+
+  const openQueueItem = async (item: QueueItem) => {
+    if (item.itemType === "document") {
+      addTab({
+        title: item.documentTitle,
+        icon: "📄",
+        type: "document-viewer",
+        content: DocumentViewer,
+        closable: true,
+        data: { documentId: item.documentId },
+      });
+      return;
+    }
+
+    if (item.itemType === "extract") {
+      addTab({
+        title: item.documentTitle,
+        icon: "📄",
+        type: "document-viewer",
+        content: DocumentViewer,
+        closable: true,
+        data: { documentId: item.documentId, initialViewMode: "extracts" },
+      });
+      return;
+    }
+
+    if (item.itemType === "learning-item") {
+      addTab({
+        title: "Review",
+        icon: "🎴",
+        type: "review",
+        content: ReviewTab,
+        closable: true,
+      });
+      const { startReviewAtItem } = useReviewStore.getState();
+      if (item.learningItemId || item.id) {
+        await startReviewAtItem(item.learningItemId || item.id);
+      }
+    }
   };
 
   const buttons: ToolbarButton[] = [

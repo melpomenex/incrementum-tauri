@@ -26,6 +26,8 @@ interface PDFViewerProps {
     clientHeight: number;
     scrollPercent: number;
   }) => void;
+  contextPageWindow?: number;
+  onTextWindowChange?: (text: string) => void;
 }
 
 type ZoomMode = "custom" | "fit-width" | "fit-page";
@@ -39,6 +41,8 @@ export function PDFViewer({
   onPageChange,
   onLoad,
   onScrollPositionChange,
+  contextPageWindow = 2,
+  onTextWindowChange,
 }: PDFViewerProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pageContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -48,6 +52,8 @@ export function PDFViewer({
   const renderIdRef = useRef(0);
   const scrollRafRef = useRef<number | null>(null);
   const isProgrammaticScrollRef = useRef(false);
+  const textCacheRef = useRef<Map<number, string>>(new Map());
+  const textWindowRef = useRef<{ start: number; end: number }>({ start: 1, end: 1 });
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -82,6 +88,7 @@ export function PDFViewer({
         if (!mounted) return;
 
         setPdf(pdfDoc);
+        textCacheRef.current.clear();
         setNumPages(pdfDoc.numPages);
         onLoad?.(pdfDoc.numPages, []);
 
@@ -129,6 +136,52 @@ export function PDFViewer({
       mounted = false;
     };
   }, [pdf, scale, zoomMode]);
+
+  useEffect(() => {
+    if (!pdf || !onTextWindowChange) return;
+
+    const start = Math.max(1, pageNumber - contextPageWindow);
+    const end = Math.min(pdf.numPages, pageNumber + contextPageWindow);
+    textWindowRef.current = { start, end };
+
+    const updateWindow = () => {
+      const { start: windowStart, end: windowEnd } = textWindowRef.current;
+      const chunks: string[] = [];
+      for (let page = windowStart; page <= windowEnd; page += 1) {
+        const cached = textCacheRef.current.get(page);
+        if (cached) {
+          chunks.push(cached);
+        }
+      }
+      if (chunks.length > 0) {
+        onTextWindowChange(chunks.join("\n\n"));
+      }
+    };
+
+    const extractPageText = async (pageNum: number) => {
+      if (textCacheRef.current.has(pageNum)) return;
+      try {
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
+        const text = content.items
+          .map((item: any) => ("str" in item ? item.str : ""))
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (text) {
+          textCacheRef.current.set(pageNum, text);
+          updateWindow();
+        }
+      } catch (err) {
+        console.warn("Failed to extract PDF text for page", pageNum, err);
+      }
+    };
+
+    updateWindow();
+    for (let page = start; page <= end; page += 1) {
+      void extractPageText(page);
+    }
+  }, [pdf, pageNumber, contextPageWindow, onTextWindowChange]);
 
   // ResizeObserver to handle container resize (e.g., when assistant panel is resized)
   useEffect(() => {

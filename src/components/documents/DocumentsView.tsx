@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Sparkles } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useStudyDeckStore } from "../../stores/studyDeckStore";
+import { useCollectionStore } from "../../stores/collectionStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
 import type { Document } from "../../types/document";
 import {
@@ -68,6 +69,11 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   } = useDocumentStore();
   const decks = useStudyDeckStore((state) => state.decks);
   const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
+  const activeCollectionId = useCollectionStore((state) => state.activeCollectionId);
+  const documentAssignments = useCollectionStore((state) => state.documentAssignments);
+  const collections = useCollectionStore((state) => state.collections);
+  const assignDocument = useCollectionStore((state) => state.assignDocument);
+  const createCollection = useCollectionStore((state) => state.createCollection);
 
   const [mode, setMode] = useState<DocumentViewMode>(() => {
     if (typeof window === "undefined") return "grid";
@@ -139,8 +145,13 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
 
   const filteredDocuments = useMemo(() => {
     const base = documents.filter((doc) => matchesDocumentSearch(doc, searchTokens));
-    return activeDeck ? filterByDeck(base, activeDeck) : base;
-  }, [documents, searchTokens, activeDeck]);
+    const deckFiltered = activeDeck ? filterByDeck(base, activeDeck) : base;
+    if (!activeCollectionId) return deckFiltered;
+    return deckFiltered.filter((doc) => {
+      const assigned = documentAssignments[doc.id];
+      return assigned ? assigned === activeCollectionId : true;
+    });
+  }, [documents, searchTokens, activeDeck, activeCollectionId, documentAssignments]);
 
   const sortedDocuments = useMemo(() => {
     return sortDocuments(filteredDocuments, sortKey, sortDirection);
@@ -275,6 +286,19 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     selectedIds.forEach((id) => {
       updateDocument(id, { priorityRating: nextRating, priorityScore: nextRating * 20 });
     });
+  };
+
+  const handleBulkMoveCollection = () => {
+    if (selectedIds.size === 0) return;
+    const names = collections.map((collection) => collection.name).join(", ");
+    const targetName = window.prompt(`Move to collection (available: ${names}):`);
+    if (!targetName) return;
+    const existing = collections.find((collection) => collection.name.toLowerCase() === targetName.toLowerCase());
+    const target = existing ?? createCollection(targetName);
+    selectedIds.forEach((id) => {
+      assignDocument(id, target.id);
+    });
+    setSelectedIds(new Set());
   };
 
   const handleSort = (key: DocumentSortKey) => {
@@ -526,6 +550,12 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
               className="px-3 py-1.5 bg-background border border-border rounded text-sm hover:bg-muted"
             >
               Tag
+            </button>
+            <button
+              onClick={handleBulkMoveCollection}
+              className="px-3 py-1.5 bg-background border border-border rounded text-sm hover:bg-muted"
+            >
+              Move
             </button>
             <button
               onClick={handleBulkReprioritize}

@@ -74,6 +74,8 @@ function App() {
         return <QueueScrollPage />;
       case "analytics":
         return <AnalyticsPage />;
+      case "knowledge-graph":
+        return <KnowledgeGraphPage />;
       case "settings":
         return <SettingsPage />;
       default:
