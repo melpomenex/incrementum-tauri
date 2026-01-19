@@ -503,6 +503,19 @@ export function DocumentViewer({
     console.log("Document loaded:", numPages, "pages", outline.length, "outline items");
   }, []);
 
+  const handlePdfContextTextChange = useCallback(
+    (text: string) => {
+      if (!onPdfContextTextChange) return;
+      const preferOcr = settings.documents.ocr.autoOCR || settings.documents.ocr.autoExtractOnLoad;
+      if (preferOcr && ocrContextText) {
+        onPdfContextTextChange(ocrContextText);
+        return;
+      }
+      onPdfContextTextChange(text);
+    },
+    [onPdfContextTextChange, ocrContextText, settings.documents.ocr.autoOCR, settings.documents.ocr.autoExtractOnLoad]
+  );
+
   // Handle extract creation
   const handleExtractCreated = () => {
     // Navigate to extracts tab to show the new extract
@@ -1047,15 +1060,3 @@ export function DocumentViewer({
     </div>
   );
 }
-  const handlePdfContextTextChange = useCallback(
-    (text: string) => {
-      if (!onPdfContextTextChange) return;
-      const preferOcr = settings.documents.ocr.autoOCR || settings.documents.ocr.autoExtractOnLoad;
-      if (preferOcr && ocrContextText) {
-        onPdfContextTextChange(ocrContextText);
-        return;
-      }
-      onPdfContextTextChange(text);
-    },
-    [onPdfContextTextChange, ocrContextText, settings.documents.ocr.autoOCR, settings.documents.ocr.autoExtractOnLoad]
-  );
