@@ -6,4 +6,5 @@ export { useSettingsStore } from "./settingsStore";
 export { useStudyDeckStore } from "./studyDeckStore";
 export { useUIStore } from "./uiStore";
 export { useTabsStore } from "./tabsStore";
+export { useLLMProvidersStore } from "./llmProvidersStore";
 export type { Tab, TabType } from "./tabsStore";

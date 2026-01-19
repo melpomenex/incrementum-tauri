@@ -10,6 +10,7 @@ import {
   KnowledgeSphereTab,
   WebBrowserTab,
   RSSReader,
+  DocumentQATab,
 } from "./tabs/TabRegistry";
 import { KnowledgeGraphPage } from "../pages/KnowledgeGraphPage";
 import { useQueueStore } from "../stores/queueStore";
@@ -262,8 +263,23 @@ export function Toolbar() {
 
   // Doc Q&A button
   const handleDocQA = () => {
-    console.log("Document Q&A");
-    // TODO: Implement document Q&A panel
+    addTab({
+      title: "Document Q&A",
+      icon: "🤖",
+      type: "doc-qa",
+      content: DocumentQATab,
+      closable: true,
+    });
+  };
+
+  const handleDocQABackground = () => {
+    addTabInBackground({
+      title: "Document Q&A",
+      icon: "🤖",
+      type: "doc-qa",
+      content: DocumentQATab,
+      closable: true,
+    });
   };
 
   // Screenshot button
@@ -438,6 +454,7 @@ export function Toolbar() {
       label: "Document Q&A",
       shortcut: "",
       action: handleDocQA,
+      backgroundAction: handleDocQABackground,
       group: 3,
     },
     {
