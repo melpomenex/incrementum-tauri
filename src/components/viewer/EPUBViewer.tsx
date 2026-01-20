@@ -35,6 +35,7 @@ export function EPUBViewer({
   const [progressPercent, setProgressPercent] = useState(0);
   const [currentChapter, setCurrentChapter] = useState("");
   const selectionActiveRef = useRef(false);
+  const initialDisplayCompleteRef = useRef(false);
 
   // Get current theme colors
   const theme = useThemeStore((state) => state.theme);
@@ -305,6 +306,11 @@ export function EPUBViewer({
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const resizeObserver = new ResizeObserver(() => {
+      // Skip resize events during initial load to prevent blank page
+      if (!initialDisplayCompleteRef.current) {
+        console.log("EPUBViewer: Skipping resize during initial load");
+        return;
+      }
       // Debounce resize calls to avoid excessive re-renders
       if (resizeTimeout) {
         clearTimeout(resizeTimeout);
@@ -314,7 +320,7 @@ export function EPUBViewer({
           console.log("EPUBViewer: Container resized, calling rendition.resize()");
           rendition.resize();
         }
-      }, 100);
+      }, 150);
     });
 
     resizeObserver.observe(viewerRef.current);
@@ -466,13 +472,18 @@ export function EPUBViewer({
             console.log("EPUBViewer: Book displayed successfully");
           }
 
-          // Force a resize to ensure proper rendering
+          // Mark initial display as complete after a delay to allow content to render
+          // This prevents resize events from causing blank page issues
           setTimeout(() => {
-            if (rendition && mounted) {
-              console.log("EPUBViewer: Forcing resize...");
-              rendition.resize();
+            if (mounted) {
+              initialDisplayCompleteRef.current = true;
+              console.log("EPUBViewer: Initial display complete, resize events now enabled");
+              // Force a resize to ensure proper rendering after content is stable
+              if (rendition) {
+                rendition.resize();
+              }
             }
-          }, 100);
+          }, 500);
 
           if (!mounted) return true;
 
