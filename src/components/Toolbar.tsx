@@ -7,12 +7,12 @@ import {
   DashboardTab,
   SettingsTab,
   DocumentViewer,
-  KnowledgeSphereTab,
   WebBrowserTab,
   RSSReader,
   DocumentQATab,
 } from "./tabs/TabRegistry";
 import { KnowledgeGraphPage } from "../pages/KnowledgeGraphPage";
+import { KnowledgeSpherePage } from "../pages/KnowledgeSpherePage";
 import { useQueueStore } from "../stores/queueStore";
 import { useReviewStore } from "../stores/reviewStore";
 import type { QueueItem } from "../types/queue";
@@ -225,7 +225,7 @@ export function Toolbar() {
       title: "Knowledge Sphere",
       icon: "🌐",
       type: "knowledge-sphere",
-      content: KnowledgeSphereTab,
+      content: KnowledgeSpherePage,
       closable: true,
     });
   };
@@ -235,7 +235,7 @@ export function Toolbar() {
       title: "Knowledge Sphere",
       icon: "🌐",
       type: "knowledge-sphere",
-      content: KnowledgeSphereTab,
+      content: KnowledgeSpherePage,
       closable: true,
     });
   };
@@ -479,7 +479,7 @@ export function Toolbar() {
       id: "command-palette",
       icon: Command,
       label: "Command Palette",
-      shortcut: "Ctrl+Shift+P",
+      shortcut: "Ctrl+K",
       action: handleCommandPalette,
       group: 4,
     },
