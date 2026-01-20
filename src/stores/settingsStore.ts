@@ -13,7 +13,7 @@ interface FSRSParams {
  * Learning Settings
  */
 interface LearningSettings {
-  algorithm: "fsrs" | "sm2" | "sm5" | "sm8" | "sm15";
+  algorithm: "fsrs";
   newCardsPerDay: number;
   reviewsPerDay: number;
   initialInterval: number;

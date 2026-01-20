@@ -7,62 +7,35 @@ export function LearningSettings() {
     <div className="space-y-6">
       {/* Algorithm Selection */}
       <div>
-        <h3 className="text-lg font-semibold mb-3 text-foreground">Algorithm Selection</h3>
+        <h3 className="text-lg font-semibold mb-3 text-foreground">Algorithm</h3>
         <div className="space-y-4">
           <div>
-            <label htmlFor="algorithm" className="block text-sm font-medium text-foreground mb-2">
-              Spaced Repetition Algorithm
+            <label htmlFor="fsrs-retention" className="block text-sm font-medium text-foreground mb-2">
+              Desired Retention: {Math.round(settings.learning.fsrsParams.desiredRetention * 100)}%
             </label>
-            <select
-              id="algorithm"
-              value={settings.learning.algorithm}
+            <input
+              type="range"
+              id="fsrs-retention"
+              min="70"
+              max="99"
+              value={settings.learning.fsrsParams.desiredRetention * 100}
               onChange={(e) =>
                 updateSettings({
-                  learning: { ...settings.learning, algorithm: e.target.value as any },
+                  learning: {
+                    ...settings.learning,
+                    fsrsParams: {
+                      ...settings.learning.fsrsParams,
+                      desiredRetention: parseInt(e.target.value) / 100,
+                    },
+                  },
                 })
               }
-              className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground"
-            >
-              <option value="fsrs">FSRS-5 (Recommended)</option>
-              <option value="sm2">SuperMemo 2 (SM-2)</option>
-              <option value="sm5">SuperMemo 5 (SM-5)</option>
-              <option value="sm8">SuperMemo 8 (SM-8)</option>
-              <option value="sm15">SuperMemo 15 (SM-15)</option>
-            </select>
+              className="w-full"
+            />
             <p className="text-xs text-muted-foreground mt-1">
-              FSRS-5 provides optimal retention with fewer reviews
+              Higher retention = more frequent reviews
             </p>
           </div>
-
-          {settings.learning.algorithm === "fsrs" && (
-            <div>
-              <label htmlFor="fsrs-retention" className="block text-sm font-medium text-foreground mb-2">
-                Desired Retention: {Math.round(settings.learning.fsrsParams.desiredRetention * 100)}%
-              </label>
-              <input
-                type="range"
-                id="fsrs-retention"
-                min="70"
-                max="99"
-                value={settings.learning.fsrsParams.desiredRetention * 100}
-                onChange={(e) =>
-                  updateSettings({
-                    learning: {
-                      ...settings.learning,
-                      fsrsParams: {
-                        ...settings.learning.fsrsParams,
-                        desiredRetention: parseInt(e.target.value) / 100,
-                      },
-                    },
-                  })
-                }
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Higher retention = more frequent reviews
-              </p>
-            </div>
-          )}
         </div>
       </div>
 

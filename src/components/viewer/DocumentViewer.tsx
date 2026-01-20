@@ -1032,6 +1032,7 @@ export function DocumentViewer({
               onScrollPositionChange={handleScrollPositionChange}
               contextPageWindow={contextPageWindow}
               onTextWindowChange={handlePdfContextTextChange}
+              onSelectionChange={updateSelection}
             />
           </div>
         ) : docType === "epub" && fileData ? (

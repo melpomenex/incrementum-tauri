@@ -30,6 +30,7 @@ interface PDFViewerProps {
   }) => void;
   contextPageWindow?: number;
   onTextWindowChange?: (text: string) => void;
+  onSelectionChange?: (text: string) => void;
 }
 
 type ZoomMode = "custom" | "fit-width" | "fit-page";
@@ -47,6 +48,7 @@ export function PDFViewer({
   onScrollPositionChange,
   contextPageWindow = 2,
   onTextWindowChange,
+  onSelectionChange,
 }: PDFViewerProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pageContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -228,6 +230,24 @@ export function PDFViewer({
       resizeObserver.disconnect();
     };
   }, [pdf, pageNumber, zoomMode]);
+
+  // Handle text selection changes
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !onSelectionChange) return;
+
+    const handleMouseUp = () => {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim() ?? "";
+      onSelectionChange(text);
+    };
+
+    container.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      container.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [onSelectionChange]);
 
   const renderPage = async (pdfDoc: pdfjsLib.PDFDocumentProxy, pageNum: number) => {
     const page = await pdfDoc.getPage(pageNum);
