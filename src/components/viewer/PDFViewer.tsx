@@ -476,6 +476,7 @@ export function PDFViewer({
 
       const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
       const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
+      console.log("[PDFViewer] Scroll position change:", { currentPage, scrollTop, scrollPercent });
       onScrollPositionChange?.({
         pageNumber: currentPage,
         scrollTop,
