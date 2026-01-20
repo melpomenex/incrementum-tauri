@@ -150,6 +150,9 @@ export function LLMProviderSettings({
         newProviderApiKey,
         newProviderBaseUrl || PROVIDER_INFO[newProviderType].baseUrl
       );
+      if (!models || !Array.isArray(models)) {
+        throw new Error("Failed to fetch models - invalid response");
+      }
       setDynamicModels({ ...dynamicModels, [newProviderType]: models });
       // Set the first model as default if current model is not in the list
       if (models.length > 0 && !models.includes(newProviderModel)) {

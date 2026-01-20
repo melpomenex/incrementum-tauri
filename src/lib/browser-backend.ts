@@ -636,6 +636,58 @@ const commandHandlers: Record<string, CommandHandler> = {
     get_available_mirrors: async () => {
         return [];
     },
+
+    // LLM commands
+    llm_get_models: async (args) => {
+        const provider = args.provider as string;
+        const apiKey = args.apiKey as string | undefined;
+        const baseUrl = args.baseUrl as string | undefined;
+
+        // Default models for each provider
+        const defaultModels: Record<string, string[]> = {
+            openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+            anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
+            ollama: ['llama3.2', 'mistral', 'codellama', 'phi3'],
+            openrouter: [
+                'anthropic/claude-3.5-sonnet',
+                'anthropic/claude-3.5-sonnet:beta',
+                'anthropic/claude-3.5-haiku',
+                'anthropic/claude-3-opus',
+                'openai/gpt-4o',
+                'openai/gpt-4o-mini',
+                'openai/gpt-4-turbo',
+                'google/gemini-pro-1.5',
+                'meta-llama/llama-3.1-405b-instruct',
+                'deepseek/deepseek-chat',
+            ],
+        };
+
+        // For OpenRouter, try to fetch models from API if API key is provided
+        if (provider === 'openrouter' && apiKey && apiKey.trim()) {
+            try {
+                const url = baseUrl || 'https://openrouter.ai/api/v1';
+                const response = await fetch(`${url}/models`, {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'HTTP-Referer': 'https://incrementum.app',
+                        'X-Title': 'Incrementum',
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.data && Array.isArray(data.data)) {
+                        const models = data.data.map((m: { id: string }) => m.id).sort();
+                        return models;
+                    }
+                }
+            } catch (error) {
+                console.warn('[Browser] Failed to fetch OpenRouter models, using defaults:', error);
+            }
+        }
+
+        return defaultModels[provider] || [];
+    },
 };
 
 /**
