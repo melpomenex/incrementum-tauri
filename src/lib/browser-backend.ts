@@ -688,6 +688,209 @@ const commandHandlers: Record<string, CommandHandler> = {
 
         return defaultModels[provider] || [];
     },
+
+    // MCP commands
+    mcp_get_incrementum_tools: async () => {
+        // Return the same tool definitions as the Rust backend
+        return [
+            {
+                name: 'create_document',
+                description: 'Create a new document in Incrementum',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        title: { type: 'string', description: 'Document title' },
+                        content: { type: 'string', description: 'Document content' },
+                        file_path: { type: 'string', description: 'File path' },
+                        file_type: { type: 'string', description: 'File type (pdf, epub, md, etc.)' },
+                    },
+                    required: ['title'],
+                },
+            },
+            {
+                name: 'get_document',
+                description: 'Retrieve details of a specific document',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        document_id: { type: 'string', description: 'Document ID' },
+                    },
+                    required: ['document_id'],
+                },
+            },
+            {
+                name: 'search_documents',
+                description: 'Search documents by content or metadata',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        query: { type: 'string', description: 'Search query' },
+                        limit: { type: 'number', description: 'Maximum results' },
+                    },
+                    required: ['query'],
+                },
+            },
+            {
+                name: 'create_cloze_card',
+                description: 'Create a cloze deletion flashcard',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        text: { type: 'string', description: 'Text with cloze deletions' },
+                        document_id: { type: 'string', description: 'Associated document ID' },
+                    },
+                    required: ['text'],
+                },
+            },
+            {
+                name: 'create_qa_card',
+                description: 'Create a question-answer flashcard',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        question: { type: 'string' },
+                        answer: { type: 'string' },
+                        document_id: { type: 'string' },
+                    },
+                    required: ['question', 'answer'],
+                },
+            },
+            {
+                name: 'create_extract',
+                description: 'Create an extract or note from content',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        content: { type: 'string', description: 'Extract content' },
+                        document_id: { type: 'string', description: 'Source document ID' },
+                        note: { type: 'string', description: 'Additional notes' },
+                        tags: { type: 'array', items: { type: 'string' } },
+                        color: { type: 'string', description: 'Highlight color' },
+                    },
+                    required: ['content', 'document_id'],
+                },
+            },
+            {
+                name: 'get_learning_items',
+                description: 'Get learning items for a document',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        document_id: { type: 'string' },
+                        item_type: { type: 'string', enum: ['flashcard', 'cloze', 'qa', 'basic'] },
+                    },
+                    required: ['document_id'],
+                },
+            },
+            {
+                name: 'get_document_extracts',
+                description: 'Get all extracts for a document',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        document_id: { type: 'string' },
+                    },
+                    required: ['document_id'],
+                },
+            },
+            {
+                name: 'get_review_queue',
+                description: 'Get items due for review',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        limit: { type: 'number', description: 'Maximum items' },
+                    },
+                },
+            },
+        ];
+    },
+
+    mcp_call_incrementum_tool: async (args) => {
+        const toolName = args.toolName as string;
+        const toolArgs = args.arguments as Record<string, unknown>;
+
+        // In browser mode, we can implement some of the tools using IndexedDB
+        switch (toolName) {
+            case 'create_document': {
+                const doc = await db.createDocument({
+                    title: toolArgs.title as string,
+                    content: toolArgs.content as string | undefined,
+                    file_path: toolArgs.file_path as string | undefined,
+                    file_type: toolArgs.file_type as string | undefined,
+                });
+                return {
+                    content: [{ type: 'text', text: `Created document: ${doc.id}` }],
+                    isError: false,
+                };
+            }
+            case 'get_document': {
+                const doc = await db.getDocument(toolArgs.document_id as string);
+                if (doc) {
+                    return {
+                        content: [{ type: 'text', text: JSON.stringify(toCamelCase(doc)) }],
+                        isError: false,
+                    };
+                }
+                return {
+                    content: [{ type: 'text', text: 'Document not found' }],
+                    isError: true,
+                };
+            }
+            case 'search_documents': {
+                const docs = await db.getDocuments();
+                const query = (toolArgs.query as string).toLowerCase();
+                const limit = (toolArgs.limit as number) || 10;
+                const filtered = docs
+                    .filter(d => d.title.toLowerCase().includes(query) || d.content?.toLowerCase().includes(query))
+                    .slice(0, limit);
+                return {
+                    content: [{ type: 'text', text: JSON.stringify(filtered.map(d => toCamelCase(d))) }],
+                    isError: false,
+                };
+            }
+            case 'create_qa_card': {
+                const item = await db.createLearningItem({
+                    document_id: toolArgs.document_id as string,
+                    item_type: 'qa',
+                    question: toolArgs.question as string,
+                    answer: toolArgs.answer as string,
+                });
+                return {
+                    content: [{ type: 'text', text: `Created Q&A card: ${item.id}` }],
+                    isError: false,
+                };
+            }
+            case 'create_cloze_card': {
+                const item = await db.createLearningItem({
+                    document_id: toolArgs.document_id as string,
+                    item_type: 'cloze',
+                    question: toolArgs.text as string,
+                    answer: toolArgs.text as string,
+                });
+                return {
+                    content: [{ type: 'text', text: `Created cloze card: ${item.id}` }],
+                    isError: false,
+                };
+            }
+            case 'create_extract': {
+                const extract = await db.createExtract({
+                    document_id: toolArgs.document_id as string,
+                    content: toolArgs.content as string,
+                    notes: toolArgs.note as string | undefined,
+                });
+                return {
+                    content: [{ type: 'text', text: `Created extract: ${extract.id}` }],
+                    isError: false,
+                };
+            }
+            default:
+                return {
+                    content: [{ type: 'text', text: `Tool '${toolName}' is not available in browser mode` }],
+                    isError: true,
+                };
+        }
+    },
 };
 
 /**

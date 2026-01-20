@@ -352,7 +352,7 @@ When the user asks you to:
 - Create extracts: Use the create_extract tool
 - Save information: Use the appropriate tool
 
-Available tools: ${(await getIncrementumMCPTools()).map((t) => t.name).join(", ")}
+Available tools: ${((await getIncrementumMCPTools()) || []).map((t) => t.name).join(", ")}
 
 For tool calls, use this exact format:
 \`\`\`tool_calls
