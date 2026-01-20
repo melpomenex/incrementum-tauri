@@ -138,8 +138,8 @@ export function useGlobalShortcuts() {
         {
           key: "k",
           metaKey: true,
-          description: "Open search",
-          handler: () => console.log("Search"), // TODO: Implement
+          description: "Open command palette",
+          handler: openCommandPalette,
         },
         {
           key: "p",

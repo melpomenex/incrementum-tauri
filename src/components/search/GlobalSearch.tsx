@@ -83,6 +83,8 @@ export function GlobalSearch({
   savedSearches = [],
   onSaveSearch,
   hideTrigger = false,
+  isOpen: controlledOpen,
+  onOpenChange,
 }: {
   onSearch: (query: SearchQuery) => Promise<SearchResult[]>;
   onResultClick: (result: SearchResult) => void;
@@ -90,8 +92,17 @@ export function GlobalSearch({
   savedSearches?: SavedSearch[];
   onSaveSearch?: (name: string, query: SearchQuery) => void;
   hideTrigger?: boolean;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isOpen = controlledOpen ?? uncontrolledOpen;
+  const setIsOpen = useCallback((open: boolean) => {
+    onOpenChange?.(open);
+    if (controlledOpen === undefined) {
+      setUncontrolledOpen(open);
+    }
+  }, [controlledOpen, onOpenChange]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -184,7 +195,7 @@ export function GlobalSearch({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, results, selectedIndex]);
+  }, [isOpen, results, selectedIndex, setIsOpen]);
 
   const handleResultClick = useCallback(
     (result: SearchResult) => {
@@ -193,7 +204,7 @@ export function GlobalSearch({
       setQuery("");
       setResults([]);
     },
-    [onResultClick]
+    [onResultClick, setIsOpen]
   );
 
   const toggleTypeFilter = useCallback((type: SearchResultType) => {

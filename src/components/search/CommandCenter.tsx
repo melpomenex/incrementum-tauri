@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { shallow } from "zustand/shallow";
 import { GlobalSearch, SearchResult, SearchQuery, SearchResultType } from "./GlobalSearch";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useTabsStore } from "../../stores/tabsStore";
 import { useStudyDeckStore } from "../../stores/studyDeckStore";
+import { useUIStore } from "../../stores/uiStore";
 import { matchesDeckTags } from "../../utils/studyDecks";
 import { 
   DocumentViewer, 
@@ -30,6 +31,8 @@ export function CommandCenter() {
   const addTab = useTabsStore((state) => state.addTab);
   const decks = useStudyDeckStore((state) => state.decks, shallow);
   const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
+  const commandPaletteOpen = useUIStore((state) => state.commandPaletteOpen);
+  const setCommandPaletteOpen = useUIStore((state) => state.setCommandPaletteOpen);
 
   const activeDeckTags = useMemo(() => {
     const deck = decks.find((item) => item.id === activeDeckId);
@@ -211,11 +214,23 @@ export function CommandCenter() {
     }
   }, [documents, addTab]);
 
+  useEffect(() => {
+    const handleToggle = () => {
+      const { commandPaletteOpen: isOpen } = useUIStore.getState();
+      setCommandPaletteOpen(!isOpen);
+    };
+
+    window.addEventListener("command-palette-toggle", handleToggle as EventListener);
+    return () => window.removeEventListener("command-palette-toggle", handleToggle as EventListener);
+  }, [setCommandPaletteOpen]);
+
   return (
     <GlobalSearch
       onSearch={handleSearch}
       onResultClick={handleResultClick}
       hideTrigger={true}
+      isOpen={commandPaletteOpen}
+      onOpenChange={setCommandPaletteOpen}
     />
   );
 }

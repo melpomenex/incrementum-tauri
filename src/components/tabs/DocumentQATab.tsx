@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useDocumentStore, useLLMProvidersStore, useSettingsStore } from "../../stores";
+import { useDocumentStore, useLLMProvidersStore, useSettingsStore, useDocumentQAStore, type QAMessage, type QAToolCall } from "../../stores";
 import { chatWithContext, type LLMMessage } from "../../api/llm";
 import { getDocument, extractDocumentText } from "../../api/documents";
 import { getExtracts } from "../../api/extracts";
@@ -11,26 +11,14 @@ import {
   FileText,
   Settings,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { callIncrementumMCPTool, getIncrementumMCPTools, type MCPTool } from "../../api/mcp";
 import { renderMarkdown } from "../../utils/markdown";
 
-interface Message {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: number;
-  mentionedDocumentIds?: string[];
-  toolCalls?: ToolCall[];
-  sourceDocuments?: string[]; // IDs of documents used for response
-}
-
-interface ToolCall {
-  name: string;
-  parameters: Record<string, unknown>;
-  result?: unknown;
-  status: "pending" | "success" | "error";
-}
+// Re-export types with simpler names for local use
+type Message = QAMessage;
+type ToolCall = QAToolCall;
 
 interface DocumentMention {
   id: string;
@@ -42,11 +30,21 @@ interface DocumentMention {
 const MENTION_REGEX = /@{([^}]+)}/g;
 
 export function DocumentQATab() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Use store for persistent state
+  const {
+    messages,
+    isProcessing,
+    addMessage,
+    setMessages,
+    clearMessages,
+    setIsProcessing,
+    updateToolCall,
+  } = useDocumentQAStore();
+
+  // Local UI state (doesn't need persistence)
   const [input, setInput] = useState("");
   const [rawInput, setRawInput] = useState(""); // Input with mention tokens
   const [mentions, setMentions] = useState<DocumentMention[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [showMentionPopup, setShowMentionPopup] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionCursorIndex, setMentionCursorIndex] = useState(0);
@@ -198,7 +196,7 @@ export function DocumentQATab() {
   };
 
   const clearConversation = () => {
-    setMessages([]);
+    clearMessages();
     setProviderError(null);
   };
 
@@ -323,18 +321,6 @@ export function DocumentQATab() {
     }
   };
 
-  const updateToolCall = (messageId: string, toolName: string, updates: Partial<ToolCall>) => {
-    setMessages((prev) =>
-      prev.map((message) => {
-        if (message.id !== messageId || !message.toolCalls) return message;
-        const updatedCalls = message.toolCalls.map((call) =>
-          call.name === toolName ? { ...call, ...updates } : call
-        );
-        return { ...message, toolCalls: updatedCalls };
-      })
-    );
-  };
-
   const handleSendMessage = async () => {
     if (!rawInput.trim() || isProcessing) return;
 
@@ -349,7 +335,7 @@ export function DocumentQATab() {
       mentionedDocumentIds,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    addMessage(userMessage);
     const savedRawInput = rawInput;
     setRawInput("");
     setInput("");
@@ -361,13 +347,13 @@ export function DocumentQATab() {
       // Check for LLM provider
       const enabledProviders = getEnabledProviders();
       if (!enabledProviders || enabledProviders.length === 0) {
-        const errorMsg: Message = {
+        const errorMsg = {
           id: `error-${Date.now()}`,
-          role: "system",
+          role: "system" as const,
           content: "No LLM provider configured. Please add an API key in Settings to use Document Q&A.",
           timestamp: Date.now(),
         };
-        setMessages((prev) => [...prev, errorMsg]);
+        addMessage(errorMsg);
         setIsProcessing(false);
         return;
       }
@@ -425,28 +411,28 @@ Tool call format (only if needed):
 
       const { cleanedContent, toolCalls } = parseToolCalls(response.content);
 
-      const assistantMessage: Message = {
+      const assistantMessage = {
         id: `assistant-${Date.now()}`,
-        role: "assistant",
+        role: "assistant" as const,
         content: cleanedContent || response.content,
         timestamp: Date.now(),
         sourceDocuments: mentionedDocumentIds.length > 0 ? mentionedDocumentIds : undefined,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      addMessage(assistantMessage);
 
       if (toolCalls.length > 0) {
         await executeToolCalls(assistantMessage.id, toolCalls);
       }
     } catch (error) {
-      const errorMessage: Message = {
+      const errorMessage = {
         id: `error-${Date.now()}`,
-        role: "system",
+        role: "system" as const,
         content: `Error: ${error instanceof Error ? error.message : "Failed to get response from AI. Please check your API key and try again."}`,
         timestamp: Date.now(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      addMessage(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -478,13 +464,16 @@ Tool call format (only if needed):
           <MessageSquare className="w-5 h-5 text-primary" />
           <h2 className="text-xl font-bold text-foreground">Document Q&A</h2>
         </div>
-        <button
-          onClick={clearConversation}
-          className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 transition-colors flex items-center gap-1"
-        >
-          <X className="w-4 h-4" />
-          Clear
-        </button>
+        {messages.length > 0 && (
+          <button
+            onClick={clearConversation}
+            className="px-3 py-1.5 text-sm bg-muted text-muted-foreground rounded hover:bg-destructive hover:text-destructive-foreground transition-colors flex items-center gap-1"
+            title="Clear conversation"
+          >
+            <Trash2 className="w-4 h-4" />
+            Clear Chat
+          </button>
+        )}
       </div>
 
       {/* Mention badges in input area */}
