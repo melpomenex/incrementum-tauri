@@ -68,6 +68,14 @@ export async function readDocumentFile(filePath: string): Promise<string> {
 }
 
 /**
+ * Extract text content from a document (for documents without content)
+ * Returns the extracted text and whether it was newly extracted
+ */
+export async function extractDocumentText(id: string): Promise<{ content: string; extracted: boolean }> {
+  return await invokeCommand<{ content: string; extracted: boolean }>("extract_document_text", { id });
+}
+
+/**
  * Open file picker dialog for selecting documents to import
  */
 export async function openFilePicker(options?: {

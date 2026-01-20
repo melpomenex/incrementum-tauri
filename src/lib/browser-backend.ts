@@ -11,8 +11,49 @@ import {
     importDemoContentManually,
     checkAndImportDemoContent as checkAndImportDemoContentInternal,
 } from '../lib/demoContent';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+).toString();
 
 type CommandHandler = (args: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * Extract text content from a PDF file
+ */
+async function extractPdfText(data: ArrayBuffer): Promise<string> {
+    try {
+        const loadingTask = pdfjsLib.getDocument({ data });
+        const pdfDoc = await loadingTask.promise;
+        const numPages = pdfDoc.numPages;
+        const textParts: string[] = [];
+
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+            try {
+                const page = await pdfDoc.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items
+                    .map((item: any) => ('str' in item ? item.str : ''))
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                if (pageText) {
+                    textParts.push(`[Page ${pageNum}]\n${pageText}`);
+                }
+            } catch (pageError) {
+                console.warn(`[Browser] Failed to extract text from page ${pageNum}:`, pageError);
+            }
+        }
+
+        return textParts.join('\n\n');
+    } catch (error) {
+        console.warn('[Browser] PDF text extraction failed:', error);
+        return '';
+    }
+}
 
 // Helper to convert snake_case DB objects to camelCase frontend objects
 function toCamelCase(obj: any): any {
@@ -95,6 +136,50 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(doc);
     },
 
+    // Extract text from existing document (for documents imported before text extraction was added)
+    extract_document_text: async (args) => {
+        const id = args.id as string;
+        const doc = await db.getDocument(id);
+        if (!doc) {
+            throw new Error(`Document ${id} not found`);
+        }
+
+        // If document already has content, return it
+        if (doc.content && doc.content.length > 0) {
+            return { content: doc.content, extracted: false };
+        }
+
+        // Try to get the file and extract text
+        const filePath = doc.file_path;
+        const fileType = doc.file_type?.toLowerCase() || '';
+
+        if (fileType === 'pdf' && filePath.startsWith('browser-file://')) {
+            // Try to get from in-memory store first, then from IndexedDB
+            const browserFile = getBrowserFile(filePath);
+            let arrayBuffer: ArrayBuffer | null = null;
+
+            if (browserFile) {
+                arrayBuffer = await browserFile.arrayBuffer();
+            } else {
+                // Try to get from IndexedDB file store
+                const storedFile = await db.getFile(filePath);
+                if (storedFile && storedFile.blob) {
+                    arrayBuffer = await storedFile.blob.arrayBuffer();
+                }
+            }
+
+            if (arrayBuffer) {
+                const extractedContent = await extractPdfText(arrayBuffer);
+                if (extractedContent) {
+                    await db.updateDocument(id, { content: extractedContent });
+                    return { content: extractedContent, extracted: true };
+                }
+            }
+        }
+
+        return { content: '', extracted: false };
+    },
+
     update_document_priority: async (args) => {
         const id = args.id as string;
         const rating = args.rating as number;
@@ -120,6 +205,7 @@ const commandHandlers: Record<string, CommandHandler> = {
         const filePath = args.filePath as string;
         const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'Untitled';
         const fileType = fileName.split('.').pop()?.toLowerCase() || 'pdf';
+        let extractedContent = '';
 
         // Check if this is a virtual browser file path
         if (filePath.startsWith('browser-file://')) {
@@ -127,6 +213,17 @@ const commandHandlers: Record<string, CommandHandler> = {
             if (file) {
                 // Store the file blob in IndexedDB
                 await db.storeFile(file);
+
+                // Extract text content from PDFs
+                if (fileType === 'pdf') {
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        extractedContent = await extractPdfText(arrayBuffer);
+                        console.log(`[Browser] Extracted ${extractedContent.length} characters from PDF`);
+                    } catch (error) {
+                        console.warn('[Browser] Failed to extract PDF text:', error);
+                    }
+                }
             } else {
                 console.warn('[Browser] File not found in browser store:', filePath);
             }
@@ -136,6 +233,7 @@ const commandHandlers: Record<string, CommandHandler> = {
             title: fileName.replace(/\.[^/.]+$/, ''),
             file_path: filePath,
             file_type: fileType,
+            content: extractedContent || undefined,
         });
         return toCamelCase(doc);
     },

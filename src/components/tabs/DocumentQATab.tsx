@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useDocumentStore, useLLMProvidersStore, useSettingsStore } from "../../stores";
 import { chatWithContext, type LLMMessage } from "../../api/llm";
-import { getDocument } from "../../api/documents";
+import { getDocument, extractDocumentText } from "../../api/documents";
 import { getExtracts } from "../../api/extracts";
 import {
   MessageSquare,
@@ -210,6 +210,17 @@ export function DocumentQATab() {
       // If document has content, use it
       if (doc && doc.content) {
         return `Document: ${docTitle}\n\n${doc.content}`;
+      }
+
+      // Try to extract text from the document (e.g., PDF)
+      try {
+        const extractionResult = await extractDocumentText(documentId);
+        if (extractionResult.content) {
+          console.log(`[Document Q&A] Extracted ${extractionResult.content.length} chars from document`);
+          return `Document: ${docTitle}\n\n${extractionResult.content}`;
+        }
+      } catch (extractionError) {
+        console.warn(`Failed to extract text from document ${documentId}:`, extractionError);
       }
 
       // Otherwise, try to get extracts (highlights/notes) from the document
