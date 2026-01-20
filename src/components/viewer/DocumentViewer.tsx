@@ -89,7 +89,8 @@ export function DocumentViewer({
   const [searchQuery, setSearchQuery] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [ocrContextText, setOcrContextText] = useState<string | null>(null);
-  const [suppressPdfAutoScroll, setSuppressPdfAutoScroll] = useState(false);
+  // Start with auto-scroll suppressed until restoration completes (or we confirm there's no saved position)
+  const [suppressPdfAutoScroll, setSuppressPdfAutoScroll] = useState(true);
   const restoreScrollAttemptsRef = useRef(0);
   const restoreScrollTimeoutRef = useRef<number | null>(null);
   const restoreScrollDoneRef = useRef(false);
@@ -391,6 +392,11 @@ export function DocumentViewer({
 
     const stored = localStorage.getItem(scrollStorageKey);
     if (!stored && typeof currentDocument?.currentScrollPercent !== "number") {
+      // No saved position - clear suppression so normal scrolling works
+      if (docType === "pdf") {
+        setSuppressPdfAutoScroll(false);
+      }
+      restoreScrollDoneRef.current = true;
       return;
     }
 
@@ -417,7 +423,14 @@ export function DocumentViewer({
         }
         : null;
     }
-    if (!parsed) return;
+    if (!parsed) {
+      // No valid saved position - clear suppression so normal scrolling works
+      if (docType === "pdf") {
+        setSuppressPdfAutoScroll(false);
+      }
+      restoreScrollDoneRef.current = true;
+      return;
+    }
 
     if (docType === "pdf") {
       setSuppressPdfAutoScroll(true);
