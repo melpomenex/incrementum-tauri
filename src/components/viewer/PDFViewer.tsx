@@ -53,6 +53,7 @@ export function PDFViewer({
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const textLayerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const textLayerBuildersRef = useRef<(TextLayerBuilder | null)[]>([]);
+  const renderTasksRef = useRef<(any | null)[]>([]);  // Track PDF.js render tasks to cancel
   const renderIdRef = useRef(0);
   const scrollRafRef = useRef<number | null>(null);
   const isProgrammaticScrollRef = useRef(false);
@@ -275,6 +276,17 @@ export function PDFViewer({
     textLayer.style.width = `${viewport.width}px`;
     textLayer.style.height = `${viewport.height}px`;
 
+    // Cancel any previous render task for this page
+    const previousTask = renderTasksRef.current[pageIndex];
+    if (previousTask) {
+      try {
+        previousTask.cancel();
+      } catch (e) {
+        // Ignore cancel errors
+      }
+      renderTasksRef.current[pageIndex] = null;
+    }
+
     // Render PDF page to canvas
     const renderContext = {
       canvasContext: context,
@@ -282,7 +294,18 @@ export function PDFViewer({
       transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
     };
 
-    await page.render(renderContext).promise;
+    const renderTask = page.render(renderContext);
+    renderTasksRef.current[pageIndex] = renderTask;
+
+    try {
+      await renderTask.promise;
+    } catch (err: any) {
+      // Ignore cancelled render errors
+      if (err?.name === 'RenderingCancelledException') {
+        return;
+      }
+      throw err;
+    }
     context.setTransform(1, 0, 0, 1, 0, 0);
 
     // Render text layer for text selection (PDF.js implementation)
@@ -491,16 +514,16 @@ export function PDFViewer({
                   ✕
                 </button>
               </div>
-            <nav className="p-2">
-              {outline.length > 0 ? (
-                renderOutline(outline)
-              ) : (
-                <p className="text-sm text-muted-foreground px-3 py-2">
-                  No table of contents available
-                </p>
-              )}
-            </nav>
-          </div>
+              <nav className="p-2">
+                {outline.length > 0 ? (
+                  renderOutline(outline)
+                ) : (
+                  <p className="text-sm text-muted-foreground px-3 py-2">
+                    No table of contents available
+                  </p>
+                )}
+              </nav>
+            </div>
           </>
         )}
 
