@@ -66,4 +66,11 @@ describe("ReviewQueueView", () => {
     expect(screen.getByText("Inspector")).toBeInTheDocument();
     expect(screen.getByText("Reading Item")).toBeInTheDocument();
   });
+
+  it("routes optimal session to scroll mode when available", () => {
+    const onOpenScrollMode = vi.fn();
+    render(<ReviewQueueView onOpenScrollMode={onOpenScrollMode} />);
+    fireEvent.click(screen.getByText("Start Optimal Session"));
+    expect(onOpenScrollMode).toHaveBeenCalledTimes(1);
+  });
 });

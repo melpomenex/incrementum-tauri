@@ -113,7 +113,7 @@ export function QueueScrollPage() {
     )));
   }, []);
 
-  // Filter documents (exclude YouTube videos - they crash in scroll mode)
+  // Filter documents
   // Memoize to prevent infinite loop since this is a dependency of the useEffect below
   const documentQueueItems = useMemo(() => allQueueItems.filter((item) => {
     if (item.itemType !== "document") return false;
@@ -122,12 +122,6 @@ export function QueueScrollPage() {
 
     // Skip if document not loaded yet (shouldn't happen after loadDocuments() awaits)
     if (!doc) return false;
-
-    // Exclude YouTube videos - they don't make sense in scroll mode and can crash
-    if (doc.fileType === "youtube") return false;
-    if (doc.filePath && (doc.filePath.includes("youtube.com") || doc.filePath.includes("youtu.be"))) {
-      return false;
-    }
 
     return true;
   }), [allQueueItems, documents]);
@@ -190,7 +184,9 @@ export function QueueScrollPage() {
     // Create document items
     const docItems: ScrollItem[] = documentQueueItems.map((item) => {
       const doc = documents.find(d => d.id === item.documentId);
-      const isImportedWebArticle = !!doc?.filePath && /^https?:\/\//.test(doc.filePath);
+      const isImportedWebArticle = !!doc?.filePath
+        && /^https?:\/\//.test(doc.filePath)
+        && doc?.fileType !== "youtube";
       return {
         id: item.id,
         type: "document" as const,
@@ -473,11 +469,15 @@ export function QueueScrollPage() {
       // EPUBs and PDFs can be lengthy documents, so we don't want to auto-advance when user reaches the end
       // User should be able to scroll through the entire document freely
       let isScrollableDocument = false;
+      let isYouTubeItem = false;
       if (currentItem?.type === "document" && currentItem.documentId) {
         const doc = documents.find(d => d.id === currentItem.documentId);
         if (doc) {
           const fileType = doc.fileType || doc.filePath?.split('.').pop()?.toLowerCase();
           isScrollableDocument = fileType === "epub" || fileType === "pdf";
+          isYouTubeItem = fileType === "youtube"
+            || !!doc.filePath?.includes("youtube.com")
+            || !!doc.filePath?.includes("youtu.be");
         }
       }
 
@@ -492,19 +492,25 @@ export function QueueScrollPage() {
       if (target.closest(".assistant-panel")) {
         return;
       }
-      const scrollableElement = target.closest('[class*="overflow"]') as HTMLElement || target.closest('.prose') as HTMLElement || document.documentElement;
+      const transcriptScrollElement = target.closest('[data-transcript-scroll="true"]') as HTMLElement | null;
+      const scrollableElement = transcriptScrollElement
+        || target.closest('[class*="overflow"]') as HTMLElement
+        || target.closest('.prose') as HTMLElement
+        || document.documentElement;
 
       if (scrollableElement) {
         const canScrollDown = scrollableElement.scrollTop < (scrollableElement.scrollHeight - scrollableElement.clientHeight - 10);
         const canScrollUp = scrollableElement.scrollTop > 10;
 
-        // If scrolling down and document can still scroll down, let it scroll
-        if (e.deltaY > 0 && canScrollDown) {
-          return; // Let the document scroll normally
-        }
-        // If scrolling up and document can still scroll up, let it scroll
-        if (e.deltaY < 0 && canScrollUp) {
-          return; // Let the document scroll normally
+        if (!(isYouTubeItem && !transcriptScrollElement)) {
+          // If scrolling down and document can still scroll down, let it scroll
+          if (e.deltaY > 0 && canScrollDown) {
+            return; // Let the document scroll normally
+          }
+          // If scrolling up and document can still scroll up, let it scroll
+          if (e.deltaY < 0 && canScrollUp) {
+            return; // Let the document scroll normally
+          }
         }
       }
 
@@ -719,19 +725,7 @@ export function QueueScrollPage() {
           )}
         >
           {renderedItem?.type === "document" ? (() => {
-            // Safety check: skip YouTube videos in scroll mode (they can crash)
             const doc = documents.find(d => d.id === renderedItem.documentId);
-            if (doc?.fileType === "youtube" || doc?.filePath?.includes("youtube.com") || doc?.filePath?.includes("youtu.be")) {
-              return (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center text-muted-foreground">
-                    <div className="text-4xl mb-4">📺</div>
-                    <p>YouTube videos are not supported in scroll mode</p>
-                    <p className="text-sm mt-2">Please view this video from the Documents page</p>
-                  </div>
-                </div>
-              );
-            }
             if (renderedItem.isImportedWebArticle && doc) {
               return (
                 <ScrollModeArticleEditor

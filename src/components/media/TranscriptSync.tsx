@@ -145,6 +145,7 @@ export function TranscriptSync({
       <div
         ref={containerRef}
         className="h-[400px] overflow-y-auto p-4 space-y-2"
+        data-transcript-scroll="true"
       >
         {filteredSegments.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">

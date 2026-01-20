@@ -211,6 +211,13 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   };
 
   const handleStartOptimalSession = () => {
+    if (queueMode !== "reading") {
+      setQueueMode("reading");
+    }
+    if (onOpenScrollMode) {
+      onOpenScrollMode();
+      return;
+    }
     onStartReview?.();
   };
 
