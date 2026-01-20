@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Sparkles } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { useCollectionStore } from "../../stores/collectionStore";
@@ -484,14 +484,6 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAnnaArchiveSearch(true)}
-              className="px-3 py-2 bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
-              title="Search and download books from Anna's Archive"
-            >
-              <Sparkles className="w-4 h-4" />
-              Anna's Archive
-            </button>
             <select
               value={activeViewId ?? ""}
               onChange={(event) => handleApplyView(event.target.value)}
