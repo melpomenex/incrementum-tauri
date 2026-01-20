@@ -490,7 +490,7 @@ export function PDFViewer({
         }
       }
 
-      if (currentPage !== pageNumber) {
+      if (currentPage !== pageNumber && !suppressAutoScroll) {
         onPageChange?.(currentPage);
       }
 

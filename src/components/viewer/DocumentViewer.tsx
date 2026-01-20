@@ -445,7 +445,8 @@ export function DocumentViewer({
           container.scrollTop = targetScroll;
           restoreScrollDoneRef.current = true;
           if (docType === "pdf") {
-            setSuppressPdfAutoScroll(false);
+            // Delay clearing suppression to allow scroll events to settle
+            setTimeout(() => setSuppressPdfAutoScroll(false), 500);
           }
           return;
         }
