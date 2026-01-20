@@ -12,6 +12,7 @@ import {
     checkAndImportDemoContent as checkAndImportDemoContentInternal,
 } from '../lib/demoContent';
 import * as pdfjsLib from 'pdfjs-dist';
+import ePub from 'epubjs';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -20,6 +21,57 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 type CommandHandler = (args: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * Extract text content from an EPUB file
+ */
+async function extractEpubText(data: ArrayBuffer): Promise<string> {
+    try {
+        const book = ePub(data);
+        await book.ready;
+
+        const spine = book.spine as any;
+        const textParts: string[] = [];
+
+        // Get all spine items (chapters)
+        const spineItems = spine.items || spine.spineItems || [];
+
+        for (let i = 0; i < spineItems.length; i++) {
+            const item = spineItems[i];
+            try {
+                // Load the chapter content
+                const doc = await book.load(item.href);
+                if (doc) {
+                    // Extract text from the document
+                    const container = document.createElement('div');
+                    if (typeof doc === 'string') {
+                        container.innerHTML = doc;
+                    } else if (doc instanceof Document) {
+                        container.innerHTML = doc.body?.innerHTML || '';
+                    }
+
+                    // Get text content, preserving some structure
+                    const text = container.innerText || container.textContent || '';
+                    const cleanedText = text
+                        .replace(/\s+/g, ' ')
+                        .trim();
+
+                    if (cleanedText && cleanedText.length > 50) {
+                        textParts.push(`[Chapter ${i + 1}]\n${cleanedText}`);
+                    }
+                }
+            } catch (chapterError) {
+                console.warn(`[Browser] Failed to extract text from EPUB chapter ${i + 1}:`, chapterError);
+            }
+        }
+
+        book.destroy();
+        return textParts.join('\n\n');
+    } catch (error) {
+        console.warn('[Browser] EPUB text extraction failed:', error);
+        return '';
+    }
+}
 
 /**
  * Extract text content from a PDF file
@@ -153,7 +205,7 @@ const commandHandlers: Record<string, CommandHandler> = {
         const filePath = doc.file_path;
         const fileType = doc.file_type?.toLowerCase() || '';
 
-        if (fileType === 'pdf' && filePath.startsWith('browser-file://')) {
+        if ((fileType === 'pdf' || fileType === 'epub') && filePath.startsWith('browser-file://')) {
             // Try to get from in-memory store first, then from IndexedDB
             const browserFile = getBrowserFile(filePath);
             let arrayBuffer: ArrayBuffer | null = null;
@@ -161,15 +213,24 @@ const commandHandlers: Record<string, CommandHandler> = {
             if (browserFile) {
                 arrayBuffer = await browserFile.arrayBuffer();
             } else {
-                // Try to get from IndexedDB file store
-                const storedFile = await db.getFile(filePath);
+                // Try to get from IndexedDB file store by path
+                let storedFile = await db.getFile(filePath);
+
+                // If not found by path, try by filename (for files stored before path-based storage)
+                if (!storedFile) {
+                    const filename = filePath.split('/').pop() || '';
+                    storedFile = await db.getFileByName(filename);
+                }
+
                 if (storedFile && storedFile.blob) {
                     arrayBuffer = await storedFile.blob.arrayBuffer();
                 }
             }
 
             if (arrayBuffer) {
-                const extractedContent = await extractPdfText(arrayBuffer);
+                const extractedContent = fileType === 'epub'
+                    ? await extractEpubText(arrayBuffer)
+                    : await extractPdfText(arrayBuffer);
                 if (extractedContent) {
                     await db.updateDocument(id, { content: extractedContent });
                     return { content: extractedContent, extracted: true };
@@ -211,17 +272,19 @@ const commandHandlers: Record<string, CommandHandler> = {
         if (filePath.startsWith('browser-file://')) {
             const file = getBrowserFile(filePath);
             if (file) {
-                // Store the file blob in IndexedDB
-                await db.storeFile(file);
+                // Store the file blob in IndexedDB with the filePath as key
+                await db.storeFile(file, filePath);
 
-                // Extract text content from PDFs
-                if (fileType === 'pdf') {
+                // Extract text content from PDFs and EPUBs
+                if (fileType === 'pdf' || fileType === 'epub') {
                     try {
                         const arrayBuffer = await file.arrayBuffer();
-                        extractedContent = await extractPdfText(arrayBuffer);
-                        console.log(`[Browser] Extracted ${extractedContent.length} characters from PDF`);
+                        extractedContent = fileType === 'epub'
+                            ? await extractEpubText(arrayBuffer)
+                            : await extractPdfText(arrayBuffer);
+                        console.log(`[Browser] Extracted ${extractedContent.length} characters from ${fileType.toUpperCase()}`);
                     } catch (error) {
-                        console.warn('[Browser] Failed to extract PDF text:', error);
+                        console.warn(`[Browser] Failed to extract ${fileType.toUpperCase()} text:`, error);
                     }
                 }
             } else {

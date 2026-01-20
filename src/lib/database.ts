@@ -508,9 +508,11 @@ export interface StoredFile {
     created_at: string;
 }
 
-export async function storeFile(file: File): Promise<StoredFile> {
+export async function storeFile(file: File, filePath?: string): Promise<StoredFile> {
+    // Use the filePath as the id if provided (for browser-file:// paths)
+    const fileId = filePath || uuidv4();
     const storedFile: StoredFile = {
-        id: uuidv4(),
+        id: fileId,
         filename: file.name,
         content_type: file.type,
         blob: file,
@@ -521,6 +523,11 @@ export async function storeFile(file: File): Promise<StoredFile> {
 
 export async function getFile(id: string): Promise<StoredFile | null> {
     return getById<StoredFile>(STORES.files, id);
+}
+
+export async function getFileByName(filename: string): Promise<StoredFile | null> {
+    const allFiles = await getAll<StoredFile>(STORES.files);
+    return allFiles.find(f => f.filename === filename) || null;
 }
 
 export async function deleteFile(id: string): Promise<void> {
