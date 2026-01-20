@@ -89,15 +89,55 @@ export function DocumentViewer({
   const [searchQuery, setSearchQuery] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [ocrContextText, setOcrContextText] = useState<string | null>(null);
+  const [suppressPdfAutoScroll, setSuppressPdfAutoScroll] = useState(false);
   const restoreScrollAttemptsRef = useRef(0);
   const restoreScrollTimeoutRef = useRef<number | null>(null);
   const restoreScrollDoneRef = useRef(false);
   const scrollSaveTimeoutRef = useRef<number | null>(null);
+  const lastScrollStateRef = useRef<{
+    pageNumber: number;
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+    scrollPercent: number;
+  } | null>(null);
+  const lastScrollMetaRef = useRef<{ storageKey?: string; documentId?: string | null } | null>(null);
   const skipStoredScrollRef = useRef(false);
 
   const scrollStorageKey = currentDocument?.id
     ? `document-scroll-position:${currentDocument.id}`
     : undefined;
+
+  // Infer fileType from filePath if it's missing (legacy data or import issue)
+  const inferFileType = (doc?: typeof currentDocument): DocumentType => {
+    if (!doc) return "other";
+    if (doc.fileType && doc.fileType !== "other") {
+      return doc.fileType as DocumentType;
+    }
+    // Fallback: infer from file extension
+    const ext = doc.filePath?.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") return "pdf";
+    if (ext === "epub") return "epub";
+    if (ext === "md" || ext === "markdown") return "markdown";
+    if (ext === "html" || ext === "htm") return "html";
+    // Check if filePath is a YouTube URL or ID
+    if (doc.filePath?.includes("youtube.com") ||
+        doc.filePath?.includes("youtu.be") ||
+        doc.fileType === "youtube") {
+      return "youtube";
+    }
+    // If document has content, treat as markdown
+    if (doc.content) {
+      return "markdown";
+    }
+    return "other";
+  };
+
+  const docType = inferFileType(currentDocument);
+
+  useEffect(() => {
+    lastScrollMetaRef.current = { storageKey: scrollStorageKey, documentId: currentDocument?.id ?? null };
+  }, [scrollStorageKey, currentDocument?.id]);
 
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
@@ -116,6 +156,37 @@ export function DocumentViewer({
     }
   }, []);
 
+  const persistScrollState = useCallback(
+    (
+      state: {
+        pageNumber: number;
+        scrollTop: number;
+        scrollHeight: number;
+        clientHeight: number;
+        scrollPercent: number;
+      },
+      override?: { storageKey?: string; documentId?: string | null; updatedAt?: number }
+    ) => {
+      const storageKey = override?.storageKey ?? scrollStorageKey;
+      if (!storageKey) return;
+      const payload = {
+        pageNumber: state.pageNumber,
+        scrollPercent: state.scrollPercent,
+        scrollTop: state.scrollTop,
+        scrollHeight: state.scrollHeight,
+        clientHeight: state.clientHeight,
+        updatedAt: override?.updatedAt ?? Date.now(),
+      };
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+      const docId = override?.documentId ?? currentDocument?.id;
+      if (docId) {
+        updateDocumentProgressAuto(docId, state.pageNumber, state.scrollPercent, null)
+          .catch((error) => console.warn("Failed to save document progress:", error));
+      }
+    },
+    [scrollStorageKey, currentDocument?.id]
+  );
+
   const handleScrollPositionChange = useCallback(
     (state: {
       pageNumber: number;
@@ -124,6 +195,7 @@ export function DocumentViewer({
       clientHeight: number;
       scrollPercent: number;
     }) => {
+      lastScrollStateRef.current = state;
       onScrollPositionChange?.({
         pageNumber: state.pageNumber,
         scrollPercent: state.scrollPercent,
@@ -134,22 +206,10 @@ export function DocumentViewer({
 
       scrollSaveTimeoutRef.current = window.setTimeout(() => {
         scrollSaveTimeoutRef.current = null;
-        const payload = {
-          pageNumber: state.pageNumber,
-          scrollPercent: state.scrollPercent,
-          scrollTop: state.scrollTop,
-          scrollHeight: state.scrollHeight,
-          clientHeight: state.clientHeight,
-          updatedAt: Date.now(),
-        };
-        localStorage.setItem(scrollStorageKey, JSON.stringify(payload));
-        if (currentDocument?.id) {
-          updateDocumentProgressAuto(currentDocument.id, state.pageNumber, state.scrollPercent, null)
-            .catch((error) => console.warn("Failed to save document progress:", error));
-        }
+        persistScrollState(state);
       }, 500);
     },
-    [onScrollPositionChange, scrollStorageKey, currentDocument?.id]
+    [onScrollPositionChange, scrollStorageKey, persistScrollState]
   );
 
   // Timer for tracking reading time
@@ -359,6 +419,14 @@ export function DocumentViewer({
     }
     if (!parsed) return;
 
+    if (docType === "pdf") {
+      setSuppressPdfAutoScroll(true);
+    }
+
+    if (typeof parsed.pageNumber === "number" && parsed.pageNumber > 0) {
+      setPageNumber(parsed.pageNumber);
+    }
+
     const tryRestore = () => {
       const container = document.querySelector(
         "[data-document-scroll-container]"
@@ -367,9 +435,18 @@ export function DocumentViewer({
         restoreScrollAttemptsRef.current += 1;
       } else {
         const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-        if (maxScroll > 0 && typeof parsed?.scrollPercent === "number") {
-          container.scrollTop = (parsed.scrollPercent / 100) * maxScroll;
+        let targetScroll: number | null = null;
+        if (typeof parsed?.scrollTop === "number") {
+          targetScroll = Math.min(Math.max(0, parsed.scrollTop), maxScroll);
+        } else if (maxScroll > 0 && typeof parsed?.scrollPercent === "number") {
+          targetScroll = (parsed.scrollPercent / 100) * maxScroll;
+        }
+        if (targetScroll !== null) {
+          container.scrollTop = targetScroll;
           restoreScrollDoneRef.current = true;
+          if (docType === "pdf") {
+            setSuppressPdfAutoScroll(false);
+          }
           return;
         }
         restoreScrollAttemptsRef.current += 1;
@@ -377,11 +454,13 @@ export function DocumentViewer({
 
       if (restoreScrollAttemptsRef.current < 6) {
         restoreScrollTimeoutRef.current = window.setTimeout(tryRestore, 200);
+      } else if (docType === "pdf") {
+        setSuppressPdfAutoScroll(false);
       }
     };
 
     tryRestore();
-  }, [isLoading, pagesRendered, scrollStorageKey, viewMode, currentDocument?.currentScrollPercent, currentDocument?.currentPage]);
+  }, [isLoading, pagesRendered, scrollStorageKey, viewMode, currentDocument?.currentScrollPercent, currentDocument?.currentPage, docType]);
 
   useEffect(() => {
     loadQueue();
@@ -395,8 +474,16 @@ export function DocumentViewer({
       if (scrollSaveTimeoutRef.current !== null) {
         clearTimeout(scrollSaveTimeoutRef.current);
       }
+      const lastState = lastScrollStateRef.current;
+      const lastMeta = lastScrollMetaRef.current;
+      if (lastState && lastMeta?.storageKey) {
+        persistScrollState(lastState, {
+          storageKey: lastMeta.storageKey,
+          documentId: lastMeta.documentId ?? undefined,
+        });
+      }
     };
-  }, []);
+  }, [persistScrollState]);
 
   // Handle text selection
   useEffect(() => {
@@ -644,31 +731,6 @@ export function DocumentViewer({
     );
   }
 
-  // Infer fileType from filePath if it's missing (legacy data or import issue)
-  const inferFileType = (): DocumentType => {
-    if (currentDocument.fileType && currentDocument.fileType !== 'other') {
-      return currentDocument.fileType as DocumentType;
-    }
-    // Fallback: infer from file extension
-    const ext = currentDocument.filePath?.split('.').pop()?.toLowerCase();
-    if (ext === 'pdf') return 'pdf';
-    if (ext === 'epub') return 'epub';
-    if (ext === 'md' || ext === 'markdown') return 'markdown';
-    if (ext === 'html' || ext === 'htm') return 'html';
-    // Check if filePath is a YouTube URL or ID
-    if (currentDocument.filePath?.includes('youtube.com') ||
-        currentDocument.filePath?.includes('youtu.be') ||
-        currentDocument.fileType === 'youtube') {
-      return 'youtube';
-    }
-    // If document has content, treat as markdown
-    if (currentDocument.content) {
-      return 'markdown';
-    }
-    return 'other';
-  };
-
-  const docType = inferFileType();
   const hasPageNavigation = docType === "pdf" || docType === "epub";
 
   console.log("[DocumentViewer] Render:", {
@@ -944,6 +1006,7 @@ export function DocumentViewer({
               pageNumber={pageNumber}
               scale={scale}
               zoomMode={zoomMode}
+              suppressAutoScroll={suppressPdfAutoScroll}
               onPageChange={handlePageChange}
               onLoad={handleDocumentLoad}
               onPagesRendered={() => setPagesRendered(true)}

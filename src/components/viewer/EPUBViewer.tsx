@@ -548,6 +548,13 @@ export function EPUBViewer({
         clearTimeout(savePositionTimer);
       }
       if (renditionInstance) {
+        const location = renditionInstance.currentLocation?.();
+        const cfi = location?.start?.cfi;
+        if (cfi) {
+          void saveReadingPosition(cfi);
+        }
+      }
+      if (renditionInstance) {
         renditionInstance.destroy();
       }
       if (bookInstance) {

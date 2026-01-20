@@ -17,6 +17,7 @@ interface PDFViewerProps {
   pageNumber: number;
   scale: number;
   zoomMode?: ZoomMode;
+  suppressAutoScroll?: boolean;
   onPageChange?: (pageNumber: number) => void;
   onLoad?: (numPages: number, outline: any[]) => void;
   onPagesRendered?: () => void;
@@ -39,6 +40,7 @@ export function PDFViewer({
   pageNumber,
   scale,
   zoomMode: externalZoomMode,
+  suppressAutoScroll = false,
   onPageChange,
   onLoad,
   onPagesRendered,
@@ -56,6 +58,7 @@ export function PDFViewer({
   const isProgrammaticScrollRef = useRef(false);
   const textCacheRef = useRef<Map<number, string>>(new Map());
   const textWindowRef = useRef<{ start: number; end: number }>({ start: 1, end: 1 });
+  const skipAutoScrollOnceRef = useRef(false);
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -309,6 +312,15 @@ export function PDFViewer({
     const pageContainer = pageContainerRefs.current[pageNumber - 1];
     if (!container || !pageContainer) return;
 
+    if (suppressAutoScroll) {
+      skipAutoScrollOnceRef.current = true;
+      return;
+    }
+    if (skipAutoScrollOnceRef.current) {
+      skipAutoScrollOnceRef.current = false;
+      return;
+    }
+
     isProgrammaticScrollRef.current = true;
     container.scrollTo({ top: Math.max(0, pageContainer.offsetTop - 16), behavior: "smooth" });
 
@@ -319,7 +331,7 @@ export function PDFViewer({
     return () => {
       clearTimeout(timeout);
     };
-  }, [pageNumber, numPages]);
+  }, [pageNumber, numPages, suppressAutoScroll]);
 
 
   const handlePrevPage = () => {
