@@ -53,10 +53,33 @@ interface ScrollItem {
 export function QueueScrollPage() {
   const { filteredItems: allQueueItems, loadQueue } = useQueueStore();
   const { documents, loadDocuments } = useDocumentStore();
-  const { tabs, activeTabId, closeTab } = useTabsStore();
+  const { tabs, activeTabId, closeTab, updateTab } = useTabsStore();
   const { settings, updateSettingsCategory } = useSettingsStore();
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [renderedIndex, setRenderedIndex] = useState(0);
+
+  // Restore currentIndex from tab data on mount
+  const getInitialIndex = useCallback(() => {
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (activeTab?.data?.currentIndex !== undefined) {
+      const index = activeTab.data.currentIndex as number;
+      // Ensure index is valid (not negative and within scroll items range)
+      if (typeof index === 'number' && index >= 0) {
+        return index;
+      }
+    }
+    return 0;
+  }, [tabs, activeTabId]);
+
+  const [currentIndex, setCurrentIndex] = useState(getInitialIndex);
+  const [renderedIndex, setRenderedIndex] = useState(() => {
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (activeTab?.data?.renderedIndex !== undefined) {
+      const index = activeTab.data.renderedIndex as number;
+      if (typeof index === 'number' && index >= 0) {
+        return index;
+      }
+    }
+    return 0;
+  });
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -138,6 +161,18 @@ export function QueueScrollPage() {
   useEffect(() => {
     setRenderedIndex(currentIndex);
   }, []);
+
+  // Save current position to tab data for restoration when user returns
+  useEffect(() => {
+    if (activeTabId && (currentIndex > 0 || renderedIndex > 0)) {
+      updateTab(activeTabId, {
+        data: {
+          currentIndex,
+          renderedIndex,
+        },
+      });
+    }
+  }, [currentIndex, renderedIndex, activeTabId, updateTab]);
 
   // Update scroll items when queue or flashcards change
   // Interleave: Due flashcards first, then documents, then RSS
