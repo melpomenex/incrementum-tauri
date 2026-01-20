@@ -122,8 +122,8 @@ export function DocumentViewer({
     if (ext === "html" || ext === "htm") return "html";
     // Check if filePath is a YouTube URL or ID
     if (doc.filePath?.includes("youtube.com") ||
-        doc.filePath?.includes("youtu.be") ||
-        doc.fileType === "youtube") {
+      doc.filePath?.includes("youtu.be") ||
+      doc.fileType === "youtube") {
       return "youtube";
     }
     // If document has content, treat as markdown
@@ -295,7 +295,7 @@ export function DocumentViewer({
 
     // Only reload if documentId actually changed, OR if we haven't successfully loaded this document yet
     const shouldLoad = documentId !== lastDocumentIdRef.current ||
-                       documentId !== lastLoadedDocumentIdRef.current;
+      documentId !== lastLoadedDocumentIdRef.current;
 
     if (shouldLoad) {
       lastDocumentIdRef.current = documentId;
@@ -411,10 +411,10 @@ export function DocumentViewer({
     if ((hasRemoteProgress && remoteUpdatedAt > localUpdatedAt) || !parsed) {
       parsed = hasRemoteProgress
         ? {
-            scrollPercent: currentDocument.currentScrollPercent,
-            pageNumber: currentDocument.currentPage ?? undefined,
-            updatedAt: remoteUpdatedAt || Date.now(),
-          }
+          scrollPercent: currentDocument.currentScrollPercent,
+          pageNumber: currentDocument.currentPage ?? undefined,
+          updatedAt: remoteUpdatedAt || Date.now(),
+        }
         : null;
     }
     if (!parsed) return;
@@ -477,13 +477,24 @@ export function DocumentViewer({
       const lastState = lastScrollStateRef.current;
       const lastMeta = lastScrollMetaRef.current;
       if (lastState && lastMeta?.storageKey) {
-        persistScrollState(lastState, {
-          storageKey: lastMeta.storageKey,
-          documentId: lastMeta.documentId ?? undefined,
-        });
+        // Save directly using refs to avoid stale closure issues on unmount
+        // The persistScrollState callback may reference old document IDs
+        const payload = {
+          pageNumber: lastState.pageNumber,
+          scrollPercent: lastState.scrollPercent,
+          scrollTop: lastState.scrollTop,
+          scrollHeight: lastState.scrollHeight,
+          clientHeight: lastState.clientHeight,
+          updatedAt: Date.now(),
+        };
+        localStorage.setItem(lastMeta.storageKey, JSON.stringify(payload));
+        if (lastMeta.documentId) {
+          updateDocumentProgressAuto(lastMeta.documentId, lastState.pageNumber, lastState.scrollPercent, null)
+            .catch((error) => console.warn("Failed to save document progress on cleanup:", error));
+        }
       }
     };
-  }, [persistScrollState]);
+  }, []);
 
   // Handle text selection
   useEffect(() => {
@@ -510,7 +521,7 @@ export function DocumentViewer({
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if typing in input
       if ((e.target as HTMLElement).tagName === "INPUT" ||
-          (e.target as HTMLElement).tagName === "TEXTAREA") {
+        (e.target as HTMLElement).tagName === "TEXTAREA") {
         return;
       }
 
@@ -646,14 +657,14 @@ export function DocumentViewer({
   const handleRating = async (rating: ReviewRating) => {
     try {
       const timeTaken = Math.round((Date.now() - startTimeRef.current) / 1000);
-      
+
       console.log(`DocumentViewer: Rating document ${documentId} as ${rating} (time: ${timeTaken}s)`);
-      
+
       await rateDocument(documentId, rating, timeTaken);
-      
+
       // Reset timer
       startTimeRef.current = Date.now();
-      
+
       const documentQueueItems = queueItems.filter((item) => item.itemType === "document");
       const currentIndex = documentQueueItems.findIndex((item) => item.documentId === documentId);
       const nextItem = currentIndex >= 0 ? documentQueueItems[currentIndex + 1] : undefined;
