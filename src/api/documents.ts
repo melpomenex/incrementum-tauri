@@ -220,6 +220,9 @@ export async function updateDocumentProgressAuto(
   currentScrollPercent?: number | null,
   currentCfi?: string | null
 ): Promise<any> {
+  if (isWebMode()) {
+    return await updateDocumentProgressHttp(id, currentPage, currentScrollPercent, currentCfi);
+  }
   return await invokeCommand<Document>("update_document_progress", {
     id,
     current_page: currentPage ?? null,
