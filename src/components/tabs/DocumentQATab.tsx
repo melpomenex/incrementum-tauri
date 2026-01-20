@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { callIncrementumMCPTool, getIncrementumMCPTools, type MCPTool } from "../../api/mcp";
+import { renderMarkdown } from "../../utils/markdown";
 
 interface Message {
   id: string;
@@ -449,31 +450,6 @@ Tool call format (only if needed):
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  // Simple markdown rendering
-  const renderMarkdown = (text: string): string => {
-    let html = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-
-    // Code blocks
-    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="bg-muted p-2 rounded mt-2 mb-2 overflow-x-auto"><code>$2</code></pre>');
-
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code class="bg-muted px-1 rounded">$1</code>');
-
-    // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-
-    // Italic
-    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-
-    // Line breaks
-    html = html.replace(/\n/g, "<br>");
-
-    return html;
   };
 
   // Empty state when no documents
