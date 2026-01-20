@@ -171,7 +171,13 @@ function isWebMode(): boolean {
  * Get document by ID via HTTP API
  */
 export async function getDocumentHttp(id: string): Promise<any | null> {
-  const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}`);
+  const token = localStorage.getItem('incrementum_auth_token');
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}`, { headers });
 
   if (!response.ok) {
     if (response.status === 404) {
@@ -181,6 +187,17 @@ export async function getDocumentHttp(id: string): Promise<any | null> {
   }
 
   return response.json();
+}
+
+/**
+ * Get auth headers for HTTP requests
+ */
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('incrementum_auth_token');
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` };
+  }
+  return {};
 }
 
 /**
@@ -195,7 +212,10 @@ export async function updateDocumentProgressHttp(
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}/progress`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({
         current_page: currentPage ?? null,
         current_scroll_percent: currentScrollPercent ?? null,

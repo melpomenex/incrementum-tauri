@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS documents (
   content_hash VARCHAR(64),
   total_pages INTEGER,
   current_page INTEGER DEFAULT 1,
+  current_scroll_percent DOUBLE PRECISION,
+  current_cfi TEXT,
   category VARCHAR(255),
   tags JSONB DEFAULT '[]',
   date_added TIMESTAMPTZ NOT NULL,
@@ -131,22 +133,24 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 
 -- Migrations
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'free';
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS current_scroll_percent DOUBLE PRECISION;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS current_cfi TEXT;
 `;
 
 export async function migrate(): Promise<void> {
-    const pool = getPool();
-    await pool.query(schema);
-    console.log('Database migration completed');
+  const pool = getPool();
+  await pool.query(schema);
+  console.log('Database migration completed');
 }
 
 // CLI entry point
 if (import.meta.url === `file://${process.argv[1]}`) {
-    import('./connection.js').then(async ({ initDatabase }) => {
-        await initDatabase();
-        await migrate();
-        process.exit(0);
-    }).catch((err) => {
-        console.error('Migration failed:', err);
-        process.exit(1);
-    });
+  import('./connection.js').then(async ({ initDatabase }) => {
+    await initDatabase();
+    await migrate();
+    process.exit(0);
+  }).catch((err) => {
+    console.error('Migration failed:', err);
+    process.exit(1);
+  });
 }

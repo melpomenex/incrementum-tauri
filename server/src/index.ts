@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.js';
 import { oauthRouter } from './routes/oauth.js';
 import { syncRouter } from './routes/sync.js';
 import { filesRouter } from './routes/files.js';
+import { documentsRouter } from './routes/documents.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { initDatabase } from './db/connection.js';
 
@@ -35,6 +36,7 @@ app.use('/auth', authRouter);
 app.use('/auth', oauthRouter);
 app.use('/sync', syncRouter);
 app.use('/files', filesRouter);
+app.use('/api/documents', documentsRouter);
 
 // Error handling
 app.use(errorHandler);

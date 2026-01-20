@@ -32,3 +32,32 @@ export function authMiddleware(
         throw createError('Invalid token', 401, 'INVALID_TOKEN');
     }
 }
+
+export function optionalAuthMiddleware(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+): void {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        next();
+        return;
+    }
+
+    const token = authHeader.slice(7);
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+        next();
+        return;
+    }
+
+    try {
+        const payload = jwt.verify(token, secret) as { userId: string };
+        req.userId = payload.userId;
+    } catch (error) {
+        // Invalid token - continue as unauthenticated
+    }
+    next();
+}
