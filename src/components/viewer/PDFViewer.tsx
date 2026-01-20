@@ -211,14 +211,37 @@ export function PDFViewer({
         clearTimeout(resizeTimeout);
       }
       resizeTimeout = setTimeout(async () => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        // Skip resize handling during restoration to prevent scroll position reset
+        const isInRestorationWindow = Date.now() < restorationWindowRef.current;
+        if (isInRestorationWindow) {
+          console.log("PDFViewer: Skipping resize during restoration window");
+          return;
+        }
+
         if (pdf && (zoomMode === "fit-width" || zoomMode === "fit-page")) {
-          console.log("PDFViewer: Container resized, re-rendering page");
+          console.log("PDFViewer: Container resized, re-rendering pages");
+
+          // Save current scroll position before re-render
+          const scrollTop = container.scrollTop;
+          const scrollHeight = container.scrollHeight;
+          const scrollPercent = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
+
           const renderId = ++renderIdRef.current;
           for (let i = 1; i <= pdf.numPages; i += 1) {
             if (renderId !== renderIdRef.current) {
               return;
             }
             await renderPage(pdf, i);
+          }
+
+          // Restore scroll position after re-render (based on percentage)
+          if (container.scrollHeight > 0 && scrollPercent > 0) {
+            const newScrollTop = scrollPercent * container.scrollHeight;
+            container.scrollTop = newScrollTop;
+            console.log("PDFViewer: Restored scroll position after resize", { scrollPercent, newScrollTop });
           }
         }
       }, 100);
