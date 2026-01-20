@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useDocumentStore, useLLMProvidersStore, useSettingsStore } from "../../stores";
 import { chatWithContext, type LLMMessage } from "../../api/llm";
 import { getDocument } from "../../api/documents";
+import { getExtracts } from "../../api/extracts";
 import {
   MessageSquare,
   Send,
@@ -204,10 +205,33 @@ export function DocumentQATab() {
   const getDocumentContent = async (documentId: string): Promise<string> => {
     try {
       const doc = await getDocument(documentId);
+      const docTitle = doc?.title || "Unknown Document";
+
+      // If document has content, use it
       if (doc && doc.content) {
-        return `Document: ${doc.title}\n\n${doc.content}`;
+        return `Document: ${docTitle}\n\n${doc.content}`;
       }
-      return `Document: ${doc?.title || "Unknown"}\n\n(Content not available)`;
+
+      // Otherwise, try to get extracts (highlights/notes) from the document
+      try {
+        const extracts = await getExtracts(documentId);
+        if (extracts && extracts.length > 0) {
+          const extractContent = extracts
+            .map((e, i) => {
+              let text = `[Extract ${i + 1}]`;
+              if (e.page_number) text += ` (Page ${e.page_number})`;
+              text += `\n${e.content}`;
+              if (e.notes) text += `\nNote: ${e.notes}`;
+              return text;
+            })
+            .join("\n\n");
+          return `Document: ${docTitle}\n\nExtracts and highlights from this document:\n\n${extractContent}`;
+        }
+      } catch (extractError) {
+        console.warn(`Failed to get extracts for document ${documentId}:`, extractError);
+      }
+
+      return `Document: ${docTitle}\n\n(No content or extracts available. This document may be a PDF or file that hasn't been processed yet.)`;
     } catch (error) {
       console.error(`Failed to get document ${documentId}:`, error);
       return `Document ID: ${documentId}\n\n(Error loading content)`;
@@ -339,25 +363,28 @@ export function DocumentQATab() {
       const provider = enabledProviders[0];
 
       // Build system prompt with document context
+      const mcpTools = (await getIncrementumMCPTools()) || [];
       const systemPrompt: LLMMessage = {
         role: "system",
-        content: `You are a helpful assistant that answers questions about documents. ${
-          mentionedDocumentIds.length > 0
-            ? "The user has mentioned specific documents. Use the provided document content to answer their question."
-            : "Search across the user's document library to find relevant information."
-        }
+        content: `You are a helpful assistant that answers questions about documents.
 
-When the user asks you to:
-- Create flashcards/cards: Use the create_qa_card or create_cloze_card tool
-- Create extracts: Use the create_extract tool
-- Save information: Use the appropriate tool
+${mentionedDocumentIds.length > 0
+  ? `IMPORTANT: The user has provided document content below. Answer their question directly using ONLY the provided document content. Do NOT use tools to fetch the document - the content is already provided in the user's message.`
+  : `The user is asking a general question. Answer based on your knowledge.`}
 
-Available tools: ${((await getIncrementumMCPTools()) || []).map((t) => t.name).join(", ")}
+ONLY use tools when the user explicitly asks you to CREATE or SAVE something:
+- "Create flashcards" or "make cards" → use create_qa_card or create_cloze_card
+- "Create an extract" or "save this" → use create_extract
+- "Save this note" → use create_extract
 
-For tool calls, use this exact format:
+For regular questions like "summarize", "explain", "what is", etc. - just answer directly from the provided content. Do NOT use tools for questions.
+
+${mcpTools.length > 0 ? `Available tools (only use when asked to create/save): ${mcpTools.map((t) => t.name).join(", ")}
+
+Tool call format (only if needed):
 \`\`\`tool_calls
 {"tool_calls":[{"name":"tool_name","arguments":{"key":"value"}}]}
-\`\`\``,
+\`\`\`` : ''}`,
       };
 
       // Get document context
