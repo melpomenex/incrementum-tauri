@@ -67,13 +67,15 @@ export function EPUBViewer({
   const saveReadingPosition = useCallback(async (cfi: string) => {
     if (!documentId || !cfi) return;
 
-    try {
-      // Save to localStorage as fallback and for quick access
-      localStorage.setItem(`epub-position-${documentId}`, cfi);
+    // Always save to localStorage first (works in both Tauri and web mode)
+    localStorage.setItem(`epub-position-${documentId}`, cfi);
 
+    // Then try to save to backend (may fail in web mode if endpoint doesn't exist)
+    try {
       await updateDocumentProgressAuto(documentId, null, null, cfi);
     } catch (error) {
-      console.error("EPUBViewer: Failed to save position:", error);
+      // Fail gracefully - localStorage already has the position saved
+      console.warn("EPUBViewer: Failed to save position to backend (localStorage saved):", error);
     }
   }, [documentId]);
 
@@ -81,15 +83,29 @@ export function EPUBViewer({
   const loadReadingPosition = useCallback(async (): Promise<string | null> => {
     if (!documentId) return null;
 
+    // First check localStorage (always available, fast)
+    const localCfi = localStorage.getItem(`epub-position-${documentId}`);
+
     try {
       const doc = await getDocumentAuto(documentId);
-      const saved = doc?.current_cfi || doc?.currentCfi || localStorage.getItem(`epub-position-${documentId}`);
-      if (saved) {
-        console.log("EPUBViewer: Found saved position:", saved);
-        return saved;
+      const remoteCfi = doc?.current_cfi || doc?.currentCfi;
+
+      // Prefer remote if available and newer, otherwise use local
+      if (remoteCfi) {
+        console.log("EPUBViewer: Found remote saved position:", remoteCfi);
+        return remoteCfi;
+      }
+      if (localCfi) {
+        console.log("EPUBViewer: Found local saved position:", localCfi);
+        return localCfi;
       }
     } catch (error) {
-      console.error("EPUBViewer: Failed to load position:", error);
+      // API failed - use localStorage as fallback
+      console.warn("EPUBViewer: Failed to load position from backend, using localStorage");
+      if (localCfi) {
+        console.log("EPUBViewer: Found local saved position:", localCfi);
+        return localCfi;
+      }
     }
     return null;
   }, [documentId]);

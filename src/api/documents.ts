@@ -184,21 +184,30 @@ export async function updateDocumentProgressHttp(
   currentScrollPercent?: number | null,
   currentCfi?: string | null
 ): Promise<any> {
-  const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}/progress`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      current_page: currentPage ?? null,
-      current_scroll_percent: currentScrollPercent ?? null,
-      current_cfi: currentCfi ?? null,
-    }),
-  });
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}/progress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current_page: currentPage ?? null,
+        current_scroll_percent: currentScrollPercent ?? null,
+        current_cfi: currentCfi ?? null,
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to update progress: ${response.statusText}`);
+    if (!response.ok) {
+      // Server may not have this endpoint yet - fail gracefully
+      console.warn(`Document progress API not available: ${response.status}`);
+      return { success: false, localStorage: true };
+    }
+
+    return response.json();
+  } catch (error) {
+    // Network error or server unavailable - fail gracefully
+    // localStorage-based persistence will still work
+    console.warn('Failed to save document progress to server:', error);
+    return { success: false, localStorage: true };
   }
-
-  return response.json();
 }
 
 /**
