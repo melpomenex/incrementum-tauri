@@ -284,8 +284,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <button
               onClick={handleStartOptimalSession}
-              className="flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2 bg-primary text-white rounded-md hover:opacity-90 flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
-              style={{ color: 'var(--color-primary-foreground, white)' }}
+              className="flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
             >
               <Play className="w-4 h-4" />
               <span className="hidden sm:inline">Start Optimal Session</span>
