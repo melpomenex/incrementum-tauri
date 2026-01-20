@@ -62,6 +62,9 @@ export function PDFViewer({
   const textCacheRef = useRef<Map<number, string>>(new Map());
   const textWindowRef = useRef<{ start: number; end: number }>({ start: 1, end: 1 });
   const skipAutoScrollOnceRef = useRef(false);
+  // Track the last restored page to prevent scroll events from resetting backwards
+  const restoredPageRef = useRef<number | null>(null);
+  const restorationWindowRef = useRef<number>(0);
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -357,6 +360,10 @@ export function PDFViewer({
 
     if (suppressAutoScroll) {
       skipAutoScrollOnceRef.current = true;
+      // Track the restored page to prevent scroll events from resetting it backwards
+      restoredPageRef.current = pageNumber;
+      // Set a protection window - ignore backward page changes for 2 seconds after restoration
+      restorationWindowRef.current = Date.now() + 2000;
       return;
     }
     if (skipAutoScrollOnceRef.current) {
@@ -491,7 +498,21 @@ export function PDFViewer({
       }
 
       if (currentPage !== pageNumber && !suppressAutoScroll) {
-        onPageChange?.(currentPage);
+        // Check if we're in a restoration protection window
+        const now = Date.now();
+        const isInRestorationWindow = now < restorationWindowRef.current;
+        const restoredPage = restoredPageRef.current;
+
+        // Block backward page changes during restoration window to prevent reset to page 1
+        if (isInRestorationWindow && restoredPage !== null && currentPage < restoredPage) {
+          console.log("[PDFViewer] Blocking backward page change during restoration:", { currentPage, restoredPage });
+        } else {
+          // Clear restoration tracking if we've moved past the window or forward
+          if (!isInRestorationWindow) {
+            restoredPageRef.current = null;
+          }
+          onPageChange?.(currentPage);
+        }
       }
 
       const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);

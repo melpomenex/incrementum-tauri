@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Rss,
   Plus,
@@ -53,6 +53,9 @@ import { RSSCustomizationPanel, RSSUserPreferenceUpdate } from "./RSSCustomizati
 type ViewMode = "all" | "unread" | "favorites" | "search";
 type SortOrder = "date" | "title";
 
+// Default auto-refresh interval in milliseconds (5 minutes)
+const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 export function RSSReader() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [selectedFeed, setSelectedFeed] = useState<Feed | null>(null);
@@ -66,6 +69,11 @@ export function RSSReader() {
   const [isAdding, setIsAdding] = useState(false);
   const [folders, setFolders] = useState(getFeedFolders());
   const [preferences, setPreferences] = useState<RssUserPreference | null>(null);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
+  const [lastAutoRefresh, setLastAutoRefresh] = useState<Date | null>(null);
+
+  // Reference to the auto-refresh interval
+  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Apply preferences when saved
   const handleSavePreferences = async (newPreferences: RSSUserPreferenceUpdate) => {
@@ -117,6 +125,69 @@ export function RSSReader() {
     setFeeds(feeds);
     setFolders(getFeedFolders());
   };
+
+  // Refresh all feeds (for auto-refresh and manual refresh all)
+  const refreshAllFeeds = useCallback(async () => {
+    if (isAutoRefreshing) return; // Prevent concurrent refreshes
+
+    setIsAutoRefreshing(true);
+    console.log("[RSS Auto-Refresh] Starting periodic refresh...");
+
+    try {
+      const currentFeeds = await getSubscribedFeedsAuto();
+
+      for (const feed of currentFeeds) {
+        try {
+          const updated = await fetchFeed(feed.feedUrl);
+          if (updated) {
+            // Preserve read/favorite status from existing items
+            const existing = getSubscribedFeeds().find((f) => f.id === feed.id);
+            if (existing) {
+              updated.items.forEach((newItem) => {
+                const existingItem = existing.items.find((i) => i.id === newItem.id);
+                if (existingItem) {
+                  newItem.read = existingItem.read;
+                  newItem.favorite = existingItem.favorite;
+                }
+              });
+            }
+            subscribeToFeed(updated);
+          }
+        } catch (error) {
+          console.warn(`[RSS Auto-Refresh] Failed to refresh feed ${feed.title}:`, error);
+          // Continue with other feeds even if one fails
+        }
+      }
+
+      // Reload feeds after updating
+      await loadFeeds();
+      setLastAutoRefresh(new Date());
+      console.log("[RSS Auto-Refresh] Completed periodic refresh");
+    } catch (error) {
+      console.error("[RSS Auto-Refresh] Failed to refresh feeds:", error);
+    } finally {
+      setIsAutoRefreshing(false);
+    }
+  }, [isAutoRefreshing]);
+
+  // Set up periodic auto-refresh
+  useEffect(() => {
+    // Start the auto-refresh interval
+    autoRefreshIntervalRef.current = setInterval(() => {
+      refreshAllFeeds();
+    }, DEFAULT_REFRESH_INTERVAL_MS);
+
+    console.log(`[RSS Auto-Refresh] Set up periodic refresh every ${DEFAULT_REFRESH_INTERVAL_MS / 1000 / 60} minutes`);
+
+    // Cleanup on unmount
+    return () => {
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current);
+        autoRefreshIntervalRef.current = null;
+        console.log("[RSS Auto-Refresh] Cleared periodic refresh interval");
+      }
+    };
+  }, [refreshAllFeeds]);
 
   const handleAddFeed = async () => {
     if (!newFeedUrl.trim()) return;
@@ -273,21 +344,19 @@ export function RSSReader() {
           <div className="flex gap-1 mb-3">
             <button
               onClick={() => setViewMode("all")}
-              className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
-                viewMode === "all"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
+              className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${viewMode === "all"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted"
+                }`}
             >
               All
             </button>
             <button
               onClick={() => setViewMode("unread")}
-              className={`flex-1 px-2 py-1 text-xs rounded transition-colors relative ${
-                viewMode === "unread"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
+              className={`flex-1 px-2 py-1 text-xs rounded transition-colors relative ${viewMode === "unread"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted"
+                }`}
             >
               Unread
               {unreadCount > 0 && (
@@ -298,11 +367,10 @@ export function RSSReader() {
             </button>
             <button
               onClick={() => setViewMode("favorites")}
-              className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
-                viewMode === "favorites"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
+              className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${viewMode === "favorites"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted"
+                }`}
             >
               Favorites
             </button>
@@ -356,9 +424,8 @@ export function RSSReader() {
                     setSelectedFeed(feed);
                     setViewMode("all");
                   }}
-                  className={`w-full px-3 py-2 text-left hover:bg-muted transition-colors flex items-start gap-2 ${
-                    selectedFeed?.id === feed.id ? "bg-muted/50" : ""
-                  }`}
+                  className={`w-full px-3 py-2 text-left hover:bg-muted transition-colors flex items-start gap-2 ${selectedFeed?.id === feed.id ? "bg-muted/50" : ""
+                    }`}
                 >
                   {/* Icon */}
                   <div className="w-6 h-6 rounded bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -441,21 +508,18 @@ export function RSSReader() {
                 <article
                   key={`${feed.id}-${item.id}`}
                   onClick={() => handleItemClick(feed, item)}
-                  className={`p-4 hover:bg-muted/30 cursor-pointer transition-colors mobile-density-list-item ${
-                    !item.read ? "bg-primary/5" : ""
-                  }`}
+                  className={`p-4 hover:bg-muted/30 cursor-pointer transition-colors mobile-density-list-item ${!item.read ? "bg-primary/5" : ""
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     {/* Read status */}
-                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                      item.read ? "bg-muted" : "bg-orange-500"
-                    }`} />
+                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${item.read ? "bg-muted" : "bg-orange-500"
+                      }`} />
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-sm font-medium mb-1 ${
-                        item.read ? "text-muted-foreground" : "text-foreground"
-                      }`}>
+                      <h3 className={`text-sm font-medium mb-1 ${item.read ? "text-muted-foreground" : "text-foreground"
+                        }`}>
                         {item.title}
                       </h3>
                       {item.description && (
