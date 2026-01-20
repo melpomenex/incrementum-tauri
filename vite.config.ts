@@ -25,7 +25,8 @@ export default defineConfig(async ({ mode }) => {
 
     // Use relative asset paths so the production build works with
     // Tauri's custom protocol and when opening the file directly.
-    base: isPWA ? "/" : "./",
+    // Always use relative paths to avoid CORS issues with dynamic imports.
+    base: "./",
 
     // Define environment variables
     define: {
@@ -67,24 +68,43 @@ export default defineConfig(async ({ mode }) => {
     // Performance: Code splitting optimization
     build: {
       // For PWA, we can use normal code splitting
-      // For Tauri, inline everything to avoid CORS issues
+      // For Tauri, inline everything to avoid CORS issues with dynamic imports
       modulePreload: isPWA || !isProd,
       cssCodeSplit: isPWA || !isProd,
       rollupOptions: {
         output:
           isProd && !isPWA
             ? {
+              // Inline all dynamic imports for Tauri to avoid CORS issues
               inlineDynamicImports: true,
             }
             : {
-              manualChunks: {
+              manualChunks: (id) => {
+                // Don't split lazy-loaded tab components - keep them in the main bundle
+                // to avoid dynamic import issues in Tauri
+                if (id.includes("DocumentQATab") || id.includes("tabs/")) {
+                  return undefined;
+                }
                 // Vendor chunks for large libraries
-                "react-vendor": ["react", "react-dom", "react-router-dom"],
-                "query-vendor": ["@tanstack/react-query"],
-                "pdf-vendor": ["pdfjs-dist"],
-                "epub-vendor": ["epubjs"],
-                "ui-vendor": ["lucide-react"],
-                zustand: ["zustand"],
+                if (id.includes("node_modules/react") || id.includes("node_modules/react-dom") || id.includes("node_modules/react-router-dom")) {
+                  return "react-vendor";
+                }
+                if (id.includes("node_modules/@tanstack/react-query")) {
+                  return "query-vendor";
+                }
+                if (id.includes("node_modules/pdfjs-dist")) {
+                  return "pdf-vendor";
+                }
+                if (id.includes("node_modules/epubjs")) {
+                  return "epub-vendor";
+                }
+                if (id.includes("node_modules/lucide-react")) {
+                  return "ui-vendor";
+                }
+                if (id.includes("node_modules/zustand")) {
+                  return "zustand";
+                }
+                return undefined;
               },
             },
       },
