@@ -65,6 +65,8 @@ export function PDFViewer({
   // Track the last restored page to prevent scroll events from resetting backwards
   const restoredPageRef = useRef<number | null>(null);
   const restorationWindowRef = useRef<number>(0);
+  // Track initial load to suppress resize during first render
+  const initialLoadWindowRef = useRef<number>(Date.now() + 5000); // 5 second initial protection
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -214,10 +216,12 @@ export function PDFViewer({
         const container = scrollContainerRef.current;
         if (!container) return;
 
-        // Skip resize handling during restoration to prevent scroll position reset
-        const isInRestorationWindow = Date.now() < restorationWindowRef.current;
-        if (isInRestorationWindow) {
-          console.log("PDFViewer: Skipping resize during restoration window");
+        // Skip resize handling during initial load or restoration to prevent scroll position reset
+        const now = Date.now();
+        const isInInitialLoadWindow = now < initialLoadWindowRef.current;
+        const isInRestorationWindow = now < restorationWindowRef.current;
+        if (isInInitialLoadWindow || isInRestorationWindow) {
+          console.log("PDFViewer: Skipping resize during protection window", { isInInitialLoadWindow, isInRestorationWindow });
           return;
         }
 
