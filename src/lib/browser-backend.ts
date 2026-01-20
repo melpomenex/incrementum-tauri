@@ -638,6 +638,146 @@ const commandHandlers: Record<string, CommandHandler> = {
     },
 
     // LLM commands
+    llm_chat: async (args) => {
+        const provider = args.provider as string;
+        const model = args.model as string | undefined;
+        const messages = args.messages as Array<{ role: string; content: string }>;
+        const temperature = (args.temperature as number) ?? 0.7;
+        const maxTokens = (args.maxTokens as number) || 2000;
+        const apiKey = args.apiKey as string | undefined;
+        const baseUrl = args.baseUrl as string | undefined;
+
+        if (!apiKey && provider !== 'ollama') {
+            throw new Error('API key is required');
+        }
+
+        // In browser mode, we support OpenRouter and OpenAI-compatible APIs
+        const providerConfig: Record<string, { url: string; defaultModel: string }> = {
+            openrouter: { url: baseUrl || 'https://openrouter.ai/api/v1', defaultModel: 'anthropic/claude-3.5-sonnet' },
+            openai: { url: baseUrl || 'https://api.openai.com/v1', defaultModel: 'gpt-4o' },
+            anthropic: { url: baseUrl || 'https://api.anthropic.com/v1', defaultModel: 'claude-3-5-sonnet-20241022' },
+        };
+
+        const config = providerConfig[provider];
+        if (!config) {
+            throw new Error(`Provider '${provider}' is not supported in browser mode. Supported: openrouter, openai`);
+        }
+
+        const actualModel = model || config.defaultModel;
+
+        // Handle Anthropic separately due to different API format
+        if (provider === 'anthropic') {
+            const response = await fetch(`${config.url}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey!,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true',
+                },
+                body: JSON.stringify({
+                    model: actualModel,
+                    max_tokens: maxTokens,
+                    temperature,
+                    messages: messages.filter(m => m.role !== 'system').map(m => ({
+                        role: m.role,
+                        content: m.content,
+                    })),
+                    system: messages.find(m => m.role === 'system')?.content,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
+            }
+
+            const data = await response.json();
+            return {
+                content: data.content?.[0]?.text || '',
+                usage: data.usage ? {
+                    promptTokens: data.usage.input_tokens,
+                    completionTokens: data.usage.output_tokens,
+                    totalTokens: data.usage.input_tokens + data.usage.output_tokens,
+                } : undefined,
+            };
+        }
+
+        // OpenAI-compatible API (OpenAI, OpenRouter)
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+        };
+
+        // Add OpenRouter-specific headers
+        if (provider === 'openrouter') {
+            headers['HTTP-Referer'] = 'https://incrementum.app';
+            headers['X-Title'] = 'Incrementum';
+        }
+
+        const response = await fetch(`${config.url}/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                model: actualModel,
+                messages: messages.map(m => ({ role: m.role, content: m.content })),
+                temperature,
+                max_tokens: maxTokens,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`${provider} API error (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+        return {
+            content: data.choices?.[0]?.message?.content || '',
+            usage: data.usage ? {
+                promptTokens: data.usage.prompt_tokens,
+                completionTokens: data.usage.completion_tokens,
+                totalTokens: data.usage.total_tokens,
+            } : undefined,
+        };
+    },
+
+    llm_chat_with_context: async (args) => {
+        const provider = args.provider as string;
+        const model = args.model as string | undefined;
+        const messages = args.messages as Array<{ role: string; content: string }>;
+        const context = args.context as { type: string; documentId?: string; content?: string };
+        const apiKey = args.apiKey as string | undefined;
+        const baseUrl = args.baseUrl as string | undefined;
+
+        // Build context prompt
+        let contextPrompt = '';
+        if (context.type === 'document' && context.content) {
+            contextPrompt = `You are a helpful assistant analyzing the following document content:\n\n${context.content}\n\nAnswer questions based on this document.`;
+        } else if (context.type === 'web') {
+            contextPrompt = 'You are a helpful assistant that can search the web for information.';
+        } else {
+            contextPrompt = 'You are a helpful assistant.';
+        }
+
+        // Prepend context as system message
+        const messagesWithContext = [
+            { role: 'system', content: contextPrompt },
+            ...messages,
+        ];
+
+        // Call llm_chat with the enhanced messages
+        return await commandHandlers.llm_chat({
+            provider,
+            model,
+            messages: messagesWithContext,
+            temperature: 0.7,
+            maxTokens: 2000,
+            apiKey,
+            baseUrl,
+        });
+    },
+
     llm_get_models: async (args) => {
         const provider = args.provider as string;
         const apiKey = args.apiKey as string | undefined;
