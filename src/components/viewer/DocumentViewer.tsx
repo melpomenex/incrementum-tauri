@@ -476,6 +476,13 @@ export function DocumentViewer({
       }
       const lastState = lastScrollStateRef.current;
       const lastMeta = lastScrollMetaRef.current;
+      console.log("[DocumentViewer] Cleanup - saving position:", {
+        hasLastState: !!lastState,
+        lastState,
+        hasLastMeta: !!lastMeta,
+        storageKey: lastMeta?.storageKey,
+        documentId: lastMeta?.documentId,
+      });
       if (lastState && lastMeta?.storageKey) {
         // Save directly using refs to avoid stale closure issues on unmount
         // The persistScrollState callback may reference old document IDs
@@ -487,6 +494,7 @@ export function DocumentViewer({
           clientHeight: lastState.clientHeight,
           updatedAt: Date.now(),
         };
+        console.log("[DocumentViewer] Saving to localStorage:", lastMeta.storageKey, payload);
         localStorage.setItem(lastMeta.storageKey, JSON.stringify(payload));
         if (lastMeta.documentId) {
           updateDocumentProgressAuto(lastMeta.documentId, lastState.pageNumber, lastState.scrollPercent, null)
