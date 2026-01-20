@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2 } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { useCollectionStore } from "../../stores/collectionStore";
@@ -66,6 +66,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     openFilePickerAndImport,
     importFromFiles,
     updateDocument,
+    deleteDocument,
   } = useDocumentStore();
   const decks = useStudyDeckStore((state) => state.decks);
   const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
@@ -262,6 +263,26 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
       updateDocument(id, { isArchived: true });
     });
     setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(`Are you sure you want to delete ${selectedIds.size} document(s)? This cannot be undone.`);
+    if (!confirmed) return;
+    for (const id of selectedIds) {
+      await deleteDocument(id);
+    }
+    setSelectedIds(new Set());
+    setActiveId(null);
+  };
+
+  const handleDeleteDocument = async (doc: Document) => {
+    const confirmed = window.confirm(`Are you sure you want to delete "${doc.title}"? This cannot be undone.`);
+    if (!confirmed) return;
+    await deleteDocument(doc.id);
+    if (activeId === doc.id) {
+      setActiveId(null);
+    }
   };
 
   const handleBulkTag = () => {
@@ -557,9 +578,16 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
             </button>
             <button
               onClick={handleBulkArchive}
-              className="px-3 py-1.5 bg-destructive text-destructive-foreground rounded text-sm hover:opacity-90"
+              className="px-3 py-1.5 bg-muted text-foreground rounded text-sm hover:bg-muted/80"
             >
               Archive
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="px-3 py-1.5 bg-destructive text-destructive-foreground rounded text-sm hover:opacity-90 flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              Delete
             </button>
           </div>
         </div>
@@ -858,9 +886,16 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                     </button>
                     <button
                       onClick={() => updateDocument(activeDocument.id, { isArchived: true })}
-                      className="px-3 py-2 bg-destructive text-destructive-foreground rounded text-sm"
+                      className="px-3 py-2 bg-muted text-foreground rounded text-sm hover:bg-muted/80"
                     >
                       Archive
+                    </button>
+                    <button
+                      onClick={() => handleDeleteDocument(activeDocument)}
+                      className="px-3 py-2 bg-destructive text-destructive-foreground rounded text-sm hover:opacity-90 flex items-center justify-center gap-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
                     </button>
                   </div>
                 </div>
