@@ -127,7 +127,8 @@ export function CloudStorageSettings({ onChange }: { onChange: () => void }) {
       // Clean up URL params
       window.history.replaceState({}, "", "/settings");
     }
-  }, [searchParams, onChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const handleConnect = async (providerType: CloudProviderType) => {
     setConnectingProvider(providerType);

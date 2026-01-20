@@ -434,22 +434,22 @@ export function QueueScrollPage() {
         return;
       }
 
-      // Check if current item is an EPUB document
-      // EPUBs can be lengthy books, so we don't want to auto-advance when user reaches the end
-      // User should explicitly rate or navigate to show they've finished reading
-      let isEPUB = false;
+      // Check if current item is an EPUB or PDF document
+      // EPUBs and PDFs can be lengthy documents, so we don't want to auto-advance when user reaches the end
+      // User should be able to scroll through the entire document freely
+      let isScrollableDocument = false;
       if (currentItem?.type === "document" && currentItem.documentId) {
         const doc = documents.find(d => d.id === currentItem.documentId);
         if (doc) {
           const fileType = doc.fileType || doc.filePath?.split('.').pop()?.toLowerCase();
-          isEPUB = fileType === "epub";
+          isScrollableDocument = fileType === "epub" || fileType === "pdf";
         }
       }
 
-      // For EPUB documents, don't auto-advance on scroll boundary
+      // For EPUB and PDF documents, don't auto-advance on scroll boundary
       // User must explicitly rate or use keyboard navigation to move to next item
-      if (isEPUB) {
-        return; // Let the EPUB scroll normally, no auto-advance
+      if (isScrollableDocument) {
+        return; // Let the document scroll normally, no auto-advance
       }
 
       // Find the scrollable content element
@@ -1085,8 +1085,8 @@ export function QueueScrollPage() {
           {currentItem?.type === "document" && (() => {
             const doc = documents.find(d => d.id === currentItem.documentId);
             const fileType = doc?.fileType || doc?.filePath?.split('.').pop()?.toLowerCase();
-            return fileType === "epub"
-              ? "EPUB: Rate or use Alt+Arrows to navigate • H to toggle controls • Esc to exit"
+            return fileType === "epub" || fileType === "pdf"
+              ? "Rate or use Alt+Arrows to navigate • H to toggle controls • Esc to exit"
               : "Scroll to edge to navigate • Alt+Arrows/Space to skip • H to toggle controls • Esc to exit";
           })()}
           {currentItem?.type !== "document" && "Scroll to edge to navigate • Alt+Arrows/Space to skip • H to toggle controls • Esc to exit"}
