@@ -362,12 +362,27 @@ export function PDFViewer({
       skipAutoScrollOnceRef.current = true;
       // Track the restored page to prevent scroll events from resetting it backwards
       restoredPageRef.current = pageNumber;
-      // Set a protection window - ignore backward page changes for 2 seconds after restoration
+      // Set a protection window - ignore ALL auto-scrolls for 2 seconds after restoration
       restorationWindowRef.current = Date.now() + 2000;
       return;
     }
+
+    // Check if we're still in the restoration protection window
+    const now = Date.now();
+    const isInRestorationWindow = now < restorationWindowRef.current;
+
     if (skipAutoScrollOnceRef.current) {
       skipAutoScrollOnceRef.current = false;
+      // Don't scroll during restoration window
+      if (isInRestorationWindow) {
+        console.log("[PDFViewer] Skipping auto-scroll during restoration window", { pageNumber, restoredPage: restoredPageRef.current });
+        return;
+      }
+    }
+
+    // Block any auto-scroll that would take us to a different page during restoration window
+    if (isInRestorationWindow && restoredPageRef.current !== null && pageNumber !== restoredPageRef.current) {
+      console.log("[PDFViewer] Blocking auto-scroll to different page during restoration:", { pageNumber, restoredPage: restoredPageRef.current });
       return;
     }
 
