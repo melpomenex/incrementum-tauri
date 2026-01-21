@@ -40,6 +40,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const documentIdRef = useRef(documentId);
   const onLoadRef = useRef(onLoad);
   const titleRef = useRef(title);
+  const startTimeRef = useRef(0);
   const isPlayingRef = useRef(false);
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -64,6 +65,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   useEffect(() => {
     titleRef.current = title;
   }, [title]);
+
+  useEffect(() => {
+    startTimeRef.current = startTime;
+  }, [startTime]);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -166,7 +171,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       // Only load if videoId changed
       if (videoId !== lastVideoIdRef.current) {
         if (typeof playerRef.current.loadVideoById === 'function') {
-          playerRef.current.loadVideoById(videoId, startTime);
+          playerRef.current.loadVideoById(videoId, startTimeRef.current);
           lastVideoIdRef.current = videoId;
         }
       }
@@ -181,7 +186,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         controls: 1,
         rel: 0,
         modestbranding: 1,
-        start: startTime,
+        start: startTimeRef.current,
         origin: window.location.origin,
       },
       events: {
@@ -192,9 +197,9 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
           onLoadRef.current?.({ duration: playerDuration, title: titleRef.current || "" });
 
           // Seek to saved position if we have one
-          if (startTime > 0) {
-            event.target.seekTo(startTime, true);
-            console.log(`Seeked to saved position: ${startTime}s`);
+          if (startTimeRef.current > 0) {
+            event.target.seekTo(startTimeRef.current, true);
+            console.log(`Seeked to saved position: ${startTimeRef.current}s`);
           }
 
           // Start time tracking
@@ -235,7 +240,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       },
     });
     lastVideoIdRef.current = videoId;
-  }, [videoId, startTime, saveCurrentPosition]);
+  }, [videoId, saveCurrentPosition]);
 
   // Load YouTube IFrame API
   useEffect(() => {
