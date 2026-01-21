@@ -216,7 +216,14 @@ export function PDFViewer({
         const container = scrollContainerRef.current;
         if (!container) return;
 
-        // Skip resize handling during initial load or restoration to prevent scroll position reset
+        // Skip resize handling while scroll position restoration is in progress
+        // suppressAutoScroll is controlled by DocumentViewer and stays true until restoration completes
+        if (suppressAutoScroll) {
+          console.log("PDFViewer: Skipping resize - suppressAutoScroll is true");
+          return;
+        }
+
+        // Also skip during protection windows
         const now = Date.now();
         const isInInitialLoadWindow = now < initialLoadWindowRef.current;
         const isInRestorationWindow = now < restorationWindowRef.current;
@@ -259,7 +266,7 @@ export function PDFViewer({
       }
       resizeObserver.disconnect();
     };
-  }, [pdf, pageNumber, zoomMode]);
+  }, [pdf, pageNumber, zoomMode, suppressAutoScroll]);
 
   // Handle text selection changes
   useEffect(() => {
