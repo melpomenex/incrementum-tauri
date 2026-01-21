@@ -126,7 +126,10 @@ export function PDFViewer({
     return () => {
       mounted = false;
     };
-  }, [fileData, onLoad]);
+    // Note: onLoad is intentionally excluded from deps - it's a callback that
+    // shouldn't trigger reloading the PDF, only fileData changes should
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileData]);
 
   useEffect(() => {
     let mounted = true;
@@ -202,7 +205,10 @@ export function PDFViewer({
     for (let page = start; page <= end; page += 1) {
       void extractPageText(page);
     }
-  }, [pdf, pageNumber, contextPageWindow, onTextWindowChange]);
+    // Note: onTextWindowChange is intentionally excluded from deps - callbacks
+    // shouldn't trigger effect re-runs, only data changes should
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdf, pageNumber, contextPageWindow]);
 
   // ResizeObserver to handle container resize (e.g., when assistant panel is resized)
   useEffect(() => {

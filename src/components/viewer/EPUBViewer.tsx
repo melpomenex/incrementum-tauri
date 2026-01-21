@@ -588,7 +588,10 @@ export function EPUBViewer({
         bookInstance.destroy();
       }
     };
-  }, [fileData, onLoad, documentId]);
+    // Note: onLoad is intentionally excluded from deps - it's a callback that
+    // shouldn't trigger reloading the EPUB, only fileData changes should
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileData, documentId]);
 
   // Re-apply styles when settings or theme change
   useEffect(() => {
