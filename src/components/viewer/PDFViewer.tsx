@@ -153,7 +153,10 @@ export function PDFViewer({
     return () => {
       mounted = false;
     };
-  }, [pdf, scale, zoomMode, onPagesRendered]);
+    // Note: onPagesRendered is intentionally excluded from deps as it's a callback
+    // that shouldn't trigger re-renders - only pdf, scale, and zoomMode changes should re-render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdf, scale, zoomMode]);
 
   useEffect(() => {
     if (!pdf || !onTextWindowChange) return;
