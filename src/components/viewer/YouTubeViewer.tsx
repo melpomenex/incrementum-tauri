@@ -211,7 +211,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       },
     });
     lastVideoIdRef.current = videoId;
-  }, [videoId, startTime, title, onLoad, saveCurrentPosition, isPlaying]);
+  }, [videoId, startTime, title, onLoad, saveCurrentPosition]);
 
   // Load YouTube IFrame API
   useEffect(() => {
