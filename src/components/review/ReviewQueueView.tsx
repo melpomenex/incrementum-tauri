@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { shallow } from "zustand/shallow";
 import {
   AlertTriangle,
   ChevronDown,
@@ -70,7 +71,32 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     setQueueFilterMode,
     loadDueDocumentsOnly,
     loadDueQueueItems,
-  } = useQueueStore();
+  } = useQueueStore(
+    (state) => ({
+      items: state.items,
+      isLoading: state.isLoading,
+      error: state.error,
+      searchQuery: state.searchQuery,
+      setSearchQuery: state.setSearchQuery,
+      loadQueue: state.loadQueue,
+      loadStats: state.loadStats,
+      selectedIds: state.selectedIds,
+      setSelected: state.setSelected,
+      selectAll: state.selectAll,
+      clearSelection: state.clearSelection,
+      bulkSuspend: state.bulkSuspend,
+      bulkUnsuspend: state.bulkUnsuspend,
+      bulkDelete: state.bulkDelete,
+      bulkOperationLoading: state.bulkOperationLoading,
+      bulkOperationResult: state.bulkOperationResult,
+      clearBulkResult: state.clearBulkResult,
+      queueFilterMode: state.queueFilterMode,
+      setQueueFilterMode: state.setQueueFilterMode,
+      loadDueDocumentsOnly: state.loadDueDocumentsOnly,
+      loadDueQueueItems: state.loadDueQueueItems,
+    }),
+    shallow
+  );
   const decks = useStudyDeckStore((state) => state.decks);
   const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
   const [queueMode, setQueueMode] = useState<QueueMode>("reading");

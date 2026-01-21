@@ -12,8 +12,15 @@ import { captureAndSaveScreenshot } from "../../utils/screenshotCaptureFlow";
 import { MobileLayoutWrapper } from "../mobile/MobileLayoutWrapper";
 
 export function MainLayout() {
-  const { tabs, addTab, loadTabs, activeTabId, setActiveTab, updateTab, closeTab, reopenLastClosedTab } = useTabsStore();
-  const { loadDocuments } = useDocumentStore();
+  const tabs = useTabsStore((state) => state.tabs);
+  const addTab = useTabsStore((state) => state.addTab);
+  const loadTabs = useTabsStore((state) => state.loadTabs);
+  const activeTabId = useTabsStore((state) => state.activeTabId);
+  const setActiveTab = useTabsStore((state) => state.setActiveTab);
+  const updateTab = useTabsStore((state) => state.updateTab);
+  const closeTab = useTabsStore((state) => state.closeTab);
+  const reopenLastClosedTab = useTabsStore((state) => state.reopenLastClosedTab);
+  const loadDocuments = useDocumentStore((state) => state.loadDocuments);
   const initializedRef = useRef(false);
   const [vimiumEnabled] = useVimiumEnabled();
 

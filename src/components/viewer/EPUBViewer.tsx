@@ -152,7 +152,7 @@ export function EPUBViewer({
         background: ${bgColor} !important;
         max-width: ${contentMaxWidth} !important;
         overflow-x: hidden !important;
-        overflow-y: auto !important;
+        overflow-y: visible !important;
         -webkit-overflow-scrolling: touch !important;
       }
       body {
@@ -402,9 +402,9 @@ export function EPUBViewer({
             width: "100%",
             height: "100%",
             spread: "none",
-            flow: "scrolled-doc",  // Use "scrolled-doc" for better Linux scroll support
+            flow: "scrolled",
             allowScriptedContent: true,
-            manager: "default",      // Use default manager for better scroll handling
+            manager: "continuous",
           });
 
           renditionInstance = rendition;
@@ -615,18 +615,23 @@ export function EPUBViewer({
 
     try {
       console.log("EPUBViewer: TOC clicked, href:", href);
+      const normalizeHref = (value: string) =>
+        value.replace(/^\.?\//, "").split("#")[0];
+      const [rawPath, rawFragment] = href.split("#");
+      const normalizedPath = normalizeHref(rawPath);
 
       // Get the spine to find the correct section
       const spine = await book.loaded.spine;
 
       // Try to find the spine item by href
-      let spineItem = spine.get(href);
+      let spineItem = spine.get(normalizedPath);
 
       // If not found directly, try to find by searching the spine
       if (!spineItem) {
         // Search through spine items for a match
         for (const item of spine.items) {
-          if (item.href === href || item.href?.endsWith?.(href) || item.url === href) {
+          const itemHref = normalizeHref(item.href || "");
+          if (itemHref === normalizedPath || itemHref?.endsWith?.(normalizedPath)) {
             spineItem = item;
             break;
           }
@@ -635,7 +640,8 @@ export function EPUBViewer({
 
       // If we found the spine item, navigate to it
       if (spineItem) {
-        console.log("EPUBViewer: Found spine item, navigating to:", spineItem.href, "index:", spineItem.index);
+        const targetHref = rawFragment ? `${spineItem.href}#${rawFragment}` : spineItem.href;
+        console.log("EPUBViewer: Found spine item, navigating to:", targetHref, "index:", spineItem.index);
 
         // Try multiple navigation methods for better Linux compatibility
         // Method 1: Use spine.goto with index (most reliable on Linux/WebKitGTK)
@@ -651,7 +657,7 @@ export function EPUBViewer({
 
         // Method 2: Use rendition.display with the spine href
         try {
-          await rendition.display(spineItem.href);
+          await rendition.display(targetHref);
           console.log("EPUBViewer: Successfully navigated using rendition.display");
           return;
         } catch (e) {
@@ -660,7 +666,7 @@ export function EPUBViewer({
 
         // Method 3: Try navigating to the URL directly
         try {
-          await rendition.display(spineItem.url || spineItem.href);
+          await rendition.display(spineItem.url || targetHref);
           console.log("EPUBViewer: Successfully navigated using URL");
           return;
         } catch (e) {
@@ -673,7 +679,7 @@ export function EPUBViewer({
 
       // Fallback: Try to navigate to the href directly
       try {
-        await rendition.display(href);
+        await rendition.display(rawFragment ? `${normalizedPath}#${rawFragment}` : normalizedPath);
         console.log("EPUBViewer: Successfully navigated using href directly");
         return;
       } catch (e) {
@@ -697,7 +703,8 @@ export function EPUBViewer({
       const tocItem = searchToc(toc);
       if (tocItem) {
         console.log("EPUBViewer: Found TOC item, attempting navigation:", tocItem.href);
-        await rendition.display(tocItem.href);
+        const tocPath = normalizeHref(tocItem.href || "");
+        await rendition.display(tocPath || tocItem.href);
         return;
       }
 

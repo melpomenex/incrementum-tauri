@@ -49,19 +49,15 @@ export function NewMainLayout({
   onLoginClick?: () => void;
   onLogout?: () => void;
 }) {
-  const { settings } = useSettingsStore();
-  const { dashboardStats, loadAll } = useAnalyticsStore();
-
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+  const settingsTheme = useSettingsStore((state) => state.settings.theme);
+  const dashboardStats = useAnalyticsStore((state) => state.dashboardStats);
 
   // Apply theme
   useEffect(() => {
     const root = document.documentElement;
     const isDark =
-      settings.theme === "dark" ||
-      (settings.theme === "system" &&
+      settingsTheme === "dark" ||
+      (settingsTheme === "system" &&
         window.matchMedia("(prefers-color-scheme: dark)").matches);
 
     if (isDark) {
@@ -69,7 +65,7 @@ export function NewMainLayout({
     } else {
       root.classList.remove("dark");
     }
-  }, [settings.theme]);
+  }, [settingsTheme]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-cream">

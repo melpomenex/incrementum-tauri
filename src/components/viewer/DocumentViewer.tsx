@@ -213,6 +213,32 @@ export function DocumentViewer({
     [onScrollPositionChange, scrollStorageKey, persistScrollState]
   );
 
+  const captureScrollState = useCallback(() => {
+    const container = document.querySelector(
+      "[data-document-scroll-container]"
+    ) as HTMLElement | null;
+    if (!container) return null;
+    const scrollTop = container.scrollTop;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
+    return {
+      pageNumber,
+      scrollTop,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+      scrollPercent,
+    };
+  }, [pageNumber]);
+
+  const savePdfProgress = useCallback((reason: string) => {
+    if (docType !== "pdf" || viewMode !== "document") return;
+    if (!scrollStorageKey) return;
+    const state = lastScrollStateRef.current ?? captureScrollState();
+    if (!state) return;
+    console.log("[DocumentViewer] Saving PDF progress:", reason, state);
+    persistScrollState(state);
+  }, [captureScrollState, docType, persistScrollState, scrollStorageKey, viewMode]);
+
   // Timer for tracking reading time
   const startTimeRef = useRef(Date.now());
 
@@ -479,6 +505,26 @@ export function DocumentViewer({
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        savePdfProgress("visibilitychange");
+      }
+    };
+    const handlePageHide = () => {
+      savePdfProgress("pagehide");
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [savePdfProgress]);
+
 
   useEffect(() => {
     return () => {

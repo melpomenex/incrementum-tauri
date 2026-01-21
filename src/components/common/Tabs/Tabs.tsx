@@ -8,7 +8,11 @@ import { TabContent } from "./TabContent";
  * Manages tab display and integrates with the tabs store
  */
 export function Tabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, moveTab } = useTabsStore();
+  const tabs = useTabsStore((state) => state.tabs);
+  const activeTabId = useTabsStore((state) => state.activeTabId);
+  const setActiveTab = useTabsStore((state) => state.setActiveTab);
+  const closeTab = useTabsStore((state) => state.closeTab);
+  const moveTab = useTabsStore((state) => state.moveTab);
 
   // Handle keyboard shortcuts for tab navigation
   useEffect(() => {

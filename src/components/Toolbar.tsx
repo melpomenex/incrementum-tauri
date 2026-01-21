@@ -82,10 +82,12 @@ function ToolbarButton({ button }: ToolbarButtonProps) {
 }
 
 export function Toolbar() {
-  const { addTab, addTabInBackground } = useTabsStore();
-  const { openFilePickerAndImport, loadDocuments } = useDocumentStore();
-  const { setCommandPaletteOpen } = useUIStore();
-  const { queueFilterMode } = useQueueStore();
+  const addTab = useTabsStore((state) => state.addTab);
+  const addTabInBackground = useTabsStore((state) => state.addTabInBackground);
+  const openFilePickerAndImport = useDocumentStore((state) => state.openFilePickerAndImport);
+  const loadDocuments = useDocumentStore((state) => state.loadDocuments);
+  const setCommandPaletteOpen = useUIStore((state) => state.setCommandPaletteOpen);
+  const queueFilterMode = useQueueStore((state) => state.queueFilterMode);
 
   // Import File button
   const handleImportFile = async () => {

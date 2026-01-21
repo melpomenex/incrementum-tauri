@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { NewMainLayout, MainContent } from "./components/layout/NewMainLayout";
 import { useAnalyticsStore } from "./stores/analyticsStore";
 import { useDocumentStore } from "./stores/documentStore";
-import { useQueueStore } from "./stores/queueStore";
-import { useReviewStore } from "./stores/reviewStore";
 import { invokeCommand } from "./lib/tauri";
 import * as syncClient from "./lib/sync-client";
 import { LoginModal } from "./components/auth/LoginModal";
@@ -24,9 +22,8 @@ import { CommandCenter } from "./components/search/CommandCenter";
 function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [activeTab, setActiveTab] = useState("review");
-  const { dashboardStats, loadAll } = useAnalyticsStore();
-  const { documents, loadDocuments } = useDocumentStore();
-  const { queue: reviewQueue } = useReviewStore();
+  const loadAll = useAnalyticsStore((state) => state.loadAll);
+  const loadDocuments = useDocumentStore((state) => state.loadDocuments);
 
   const [isAuthenticated, setIsAuthenticated] = useState(syncClient.isAuthenticated());
   const [user, setUser] = useState(syncClient.getUser());
@@ -115,14 +112,13 @@ interface DashboardPageProps {
 }
 
 function DashboardPage({ onNavigate }: DashboardPageProps) {
-  const { dashboardStats, loadAll } = useAnalyticsStore();
+  const dashboardStats = useAnalyticsStore((state) => state.dashboardStats);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState("review");
 
   useEffect(() => {
-    loadAll();
     loadRecentActivity();
-  }, [loadAll]);
+  }, []);
 
   const loadRecentActivity = async () => {
     try {
