@@ -37,6 +37,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastVideoIdRef = useRef<string | null>(null);
   const lastSavedTimeRef = useRef<number>(0);
+  const documentIdRef = useRef(documentId);
+  const onLoadRef = useRef(onLoad);
+  const titleRef = useRef(title);
+  const isPlayingRef = useRef(false);
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -47,6 +51,23 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
   const [startTime, setStartTime] = useState(0);
+
+  // Update refs when values change
+  useEffect(() => {
+    documentIdRef.current = documentId;
+  }, [documentId]);
+
+  useEffect(() => {
+    onLoadRef.current = onLoad;
+  }, [onLoad]);
+
+  useEffect(() => {
+    titleRef.current = title;
+  }, [title]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // Load transcript from backend
   const loadTranscript = useCallback(async () => {
@@ -112,9 +133,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     }
   }, [documentId]);
 
-  // Save current position to document
+  // Save current position to document (use ref to avoid recreation)
   const saveCurrentPosition = useCallback(async (time: number) => {
-    if (!documentId) return;
+    const currentDocumentId = documentIdRef.current;
+    if (!currentDocumentId) return;
 
     // Avoid saving if time hasn't changed significantly (more than 1 second)
     if (Math.abs(time - lastSavedTimeRef.current) < 1) {
@@ -122,20 +144,20 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     }
 
     try {
-      await updateDocumentProgressAuto(documentId, Math.floor(time));
+      await updateDocumentProgressAuto(currentDocumentId, Math.floor(time));
       lastSavedTimeRef.current = time;
       console.log(`Saved video position: ${Math.floor(time)}s`);
     } catch (error) {
       console.log("Failed to save position:", error);
     }
-  }, [documentId]);
+  }, []);
 
   // Load saved position when component mounts
   useEffect(() => {
     loadSavedPosition();
   }, [loadSavedPosition]);
 
-  // Initialize player
+  // Initialize player (use refs to avoid circular dependencies)
   const initializePlayer = useCallback(() => {
     if (!containerRef.current) return;
 
@@ -167,7 +189,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
           setIsReady(true);
           const playerDuration = event.target.getDuration() || 0;
           setDuration(playerDuration);
-          onLoad?.({ duration: playerDuration, title: title || "" });
+          onLoadRef.current?.({ duration: playerDuration, title: titleRef.current || "" });
 
           // Seek to saved position if we have one
           if (startTime > 0) {
@@ -184,10 +206,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
             }
           }, 500);
 
-          // Start auto-save interval
+          // Start auto-save interval (use ref to check playing state)
           if (autoSaveIntervalRef.current) clearInterval(autoSaveIntervalRef.current);
           autoSaveIntervalRef.current = setInterval(() => {
-            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlaying) {
+            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlayingRef.current) {
               const time = playerRef.current.getCurrentTime();
               saveCurrentPosition(time);
             }
@@ -195,8 +217,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         },
         onStateChange: (event: any) => {
           const playerState = event.target.getPlayerState();
-          const wasPlaying = isPlaying;
-          setIsPlaying(playerState === window.YT.PlayerState.PLAYING);
+          const wasPlaying = isPlayingRef.current;
+          const isNowPlaying = playerState === window.YT.PlayerState.PLAYING;
+          isPlayingRef.current = isNowPlaying;
+          setIsPlaying(isNowPlaying);
 
           // Save position when pausing
           if (wasPlaying && playerState === window.YT.PlayerState.PAUSED) {
@@ -211,7 +235,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       },
     });
     lastVideoIdRef.current = videoId;
-  }, [videoId, startTime, title, onLoad, saveCurrentPosition]);
+  }, [videoId, startTime, saveCurrentPosition]);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -243,8 +267,8 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         clearInterval(autoSaveIntervalRef.current);
         autoSaveIntervalRef.current = null;
       }
-      // Save position before unmount
-      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && documentId) {
+      // Save position before unmount (use ref to avoid dependency)
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && documentIdRef.current) {
         const time = playerRef.current.getCurrentTime();
         saveCurrentPosition(time);
       }
@@ -256,7 +280,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         playerRef.current = null;
       }
     };
-  }, [initializePlayer, saveCurrentPosition, documentId]);
+  }, [initializePlayer, saveCurrentPosition]);
 
   // Seek to time
   const handleSeek = useCallback((time: number) => {
