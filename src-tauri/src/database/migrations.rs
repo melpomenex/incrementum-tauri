@@ -513,6 +513,13 @@ pub const MIGRATIONS: &[Migration] = &[
         ALTER TABLE documents ADD COLUMN cover_image_source TEXT;
         "#,
     ),
+    // Migration 016: Add document view state
+    Migration::new(
+        "016_add_document_view_state",
+        r#"
+        ALTER TABLE documents ADD COLUMN current_view_state TEXT;
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

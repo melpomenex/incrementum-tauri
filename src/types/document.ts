@@ -1,3 +1,5 @@
+import type { ViewState } from "./readerPosition";
+
 // Document types matching the C++ schema
 export interface Document {
   id: string;
@@ -10,6 +12,7 @@ export interface Document {
   currentPage?: number;
   currentScrollPercent?: number;
   currentCfi?: string;
+  currentViewState?: ViewState | string;
   category?: string;
   tags: string[];
   dateAdded: string;

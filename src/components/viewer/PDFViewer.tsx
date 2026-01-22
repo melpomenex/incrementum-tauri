@@ -3,6 +3,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs";
 import { List, ChevronLeft, ChevronRight, Maximize, Minimize } from "lucide-react";
 import { cn } from "../../utils";
+import type { PdfDest, ViewState } from "../../types/readerPosition";
 import "./PDFViewer.css";
 
 // Set up PDF.js worker
@@ -27,7 +28,12 @@ interface PDFViewerProps {
     scrollHeight: number;
     clientHeight: number;
     scrollPercent: number;
+    scale?: number;
+    dest?: PdfDest | null;
   }) => void;
+  onPdfInfo?: (info: { fingerprint?: string | null }) => void;
+  restoreState?: ViewState | null;
+  restoreRequestId?: number;
   contextPageWindow?: number;
   onTextWindowChange?: (text: string) => void;
   onSelectionChange?: (text: string) => void;
@@ -46,6 +52,9 @@ export function PDFViewer({
   onLoad,
   onPagesRendered,
   onScrollPositionChange,
+  onPdfInfo,
+  restoreState,
+  restoreRequestId,
   contextPageWindow = 2,
   onTextWindowChange,
   onSelectionChange,
@@ -55,6 +64,8 @@ export function PDFViewer({
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const textLayerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const textLayerBuildersRef = useRef<(TextLayerBuilder | null)[]>([]);
+  const pageViewportRefs = useRef<(pdfjsLib.PDFPageViewport | null)[]>([]);
+  const pageScaleRefs = useRef<(number | null)[]>([]);
   const renderTasksRef = useRef<(any | null)[]>([]);  // Track PDF.js render tasks to cancel
   const renderIdRef = useRef(0);
   const scrollRafRef = useRef<number | null>(null);
@@ -101,6 +112,7 @@ export function PDFViewer({
         if (!mounted) return;
 
         setPdf(pdfDoc);
+        onPdfInfo?.({ fingerprint: (pdfDoc as any).fingerprint ?? null });
         textCacheRef.current.clear();
         setNumPages(pdfDoc.numPages);
         onLoad?.(pdfDoc.numPages, []);
@@ -328,6 +340,8 @@ export function PDFViewer({
     }
 
     const viewport = page.getViewport({ scale: actualScale });
+    pageViewportRefs.current[pageIndex] = viewport;
+    pageScaleRefs.current[pageIndex] = actualScale;
     const outputScale = window.devicePixelRatio || 1;
     canvas.width = Math.floor(viewport.width * outputScale);
     canvas.height = Math.floor(viewport.height * outputScale);
@@ -440,6 +454,46 @@ export function PDFViewer({
       clearTimeout(timeout);
     };
   }, [pageNumber, numPages, suppressAutoScroll]);
+
+  useEffect(() => {
+    if (!restoreState || restoreRequestId === undefined) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const pageIndex = Math.max(0, restoreState.pageNumber - 1);
+    const pageEl = pageContainerRefs.current[pageIndex];
+    const viewport = pageViewportRefs.current[pageIndex];
+
+    let targetScrollTop: number | null = null;
+    if (restoreState.dest && pageEl && viewport) {
+      const left = restoreState.dest.left ?? 0;
+      const top = restoreState.dest.top ?? 0;
+      const [, viewportY] = viewport.convertToViewportPoint(left, top);
+      targetScrollTop = pageEl.offsetTop + viewportY;
+    } else if (typeof restoreState.scrollTop === "number") {
+      targetScrollTop = restoreState.scrollTop;
+    } else if (typeof restoreState.scrollPercent === "number") {
+      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+      targetScrollTop = (restoreState.scrollPercent / 100) * maxScroll;
+    }
+
+    if (targetScrollTop === null) return;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    const clamped = Math.min(Math.max(0, targetScrollTop), maxScroll);
+
+    restoredPageRef.current = restoreState.pageNumber;
+    restorationWindowRef.current = Date.now() + 2000;
+    isProgrammaticScrollRef.current = true;
+    container.scrollTop = clamped;
+
+    const timeout = setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 300);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [restoreRequestId, restoreState]);
 
 
   const handlePrevPage = () => {
@@ -573,6 +627,23 @@ export function PDFViewer({
         }
       }
 
+      let dest: PdfDest | null = null;
+      const pageIndex = currentPage - 1;
+      const pageEl = pageContainerRefs.current[pageIndex];
+      const viewport = pageViewportRefs.current[pageIndex];
+      const pageScale = pageScaleRefs.current[pageIndex] ?? scale;
+      if (pageEl && viewport) {
+        const relativeTop = Math.max(0, scrollTop - pageEl.offsetTop);
+        const relativeLeft = Math.max(0, container.scrollLeft);
+        const [pdfX, pdfY] = viewport.convertToPdfPoint(relativeLeft, relativeTop);
+        dest = {
+          kind: "XYZ",
+          left: Number.isFinite(pdfX) ? pdfX : null,
+          top: Number.isFinite(pdfY) ? pdfY : null,
+          zoom: Number.isFinite(pageScale) ? pageScale : null,
+        };
+      }
+
       const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
       const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
       console.log("[PDFViewer] Scroll position change:", { currentPage, scrollTop, scrollPercent });
@@ -582,6 +653,8 @@ export function PDFViewer({
         scrollHeight: container.scrollHeight,
         clientHeight: container.clientHeight,
         scrollPercent,
+        scale: pageScaleRefs.current[pageIndex] ?? scale,
+        dest,
       });
     });
   };
@@ -736,6 +809,8 @@ export function PDFViewer({
                     ref={(el) => {
                       pageContainerRefs.current[index] = el;
                     }}
+                    data-pdf-page
+                    data-page-number={index + 1}
                     className="relative shadow-lg border border-border bg-white transition-transform duration-200"
                   >
                     <canvas

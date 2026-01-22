@@ -3,7 +3,9 @@
  */
 
 import { invokeCommand, openFilePicker as tauriOpenFilePicker, openFolderPicker as tauriOpenFolderPicker } from "../lib/tauri";
+import { serializeViewState } from "../lib/readerPosition";
 import { Document } from "../types/document";
+import type { ViewState } from "../types/readerPosition";
 
 export async function getDocuments(): Promise<Document[]> {
   return await invokeCommand<Document[]>("get_documents");
@@ -211,9 +213,11 @@ export async function updateDocumentProgressHttp(
   id: string,
   currentPage?: number | null,
   currentScrollPercent?: number | null,
-  currentCfi?: string | null
+  currentCfi?: string | null,
+  currentViewState?: ViewState | string | null
 ): Promise<any> {
   try {
+    const viewStatePayload = serializeViewState(currentViewState);
     const response = await fetch(`${getApiBaseUrl()}/api/documents/${id}/progress`, {
       method: 'POST',
       headers: {
@@ -224,6 +228,7 @@ export async function updateDocumentProgressHttp(
         current_page: currentPage ?? null,
         current_scroll_percent: currentScrollPercent ?? null,
         current_cfi: currentCfi ?? null,
+        current_view_state: viewStatePayload,
       }),
     });
 
@@ -259,15 +264,18 @@ export async function updateDocumentProgressAuto(
   id: string,
   currentPage?: number | null,
   currentScrollPercent?: number | null,
-  currentCfi?: string | null
+  currentCfi?: string | null,
+  currentViewState?: ViewState | string | null
 ): Promise<any> {
   if (isWebMode()) {
-    return await updateDocumentProgressHttp(id, currentPage, currentScrollPercent, currentCfi);
+    return await updateDocumentProgressHttp(id, currentPage, currentScrollPercent, currentCfi, currentViewState);
   }
+  const viewStatePayload = serializeViewState(currentViewState);
   return await invokeCommand<Document>("update_document_progress", {
     id,
     current_page: currentPage ?? null,
     current_scroll_percent: currentScrollPercent ?? null,
     current_cfi: currentCfi ?? null,
+    current_view_state: viewStatePayload,
   });
 }

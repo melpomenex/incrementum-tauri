@@ -300,6 +300,7 @@ pub async fn import_from_obsidian_internal(
         current_page: None,
         current_scroll_percent: None,
         current_cfi: None,
+        current_view_state: None,
         category: None,
         tags: vec![],
         date_added: chrono::Utc::now(),

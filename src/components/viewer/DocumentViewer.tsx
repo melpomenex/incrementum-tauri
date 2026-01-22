@@ -22,6 +22,8 @@ import { rateDocument } from "../../api/algorithm";
 import type { ReviewRating } from "../../api/review";
 import { autoExtractWithCache, isAutoExtractEnabled } from "../../utils/documentAutoExtract";
 import { generateShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
+import { getViewState, getViewStateKey, parseViewState, setViewState } from "../../lib/readerPosition";
+import type { ViewState } from "../../types/readerPosition";
 
 type ViewMode = "document" | "extracts" | "cards";
 
@@ -92,27 +94,48 @@ export function DocumentViewer({
   const [searchQuery, setSearchQuery] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [ocrContextText, setOcrContextText] = useState<string | null>(null);
+  const [restoreRequestId, setRestoreRequestId] = useState(0);
+  const [restoreState, setRestoreState] = useState<ViewState | null>(null);
   // Start with auto-scroll suppressed until restoration completes (or we confirm there's no saved position)
   const [suppressPdfAutoScroll, setSuppressPdfAutoScroll] = useState(true);
   const restoreScrollAttemptsRef = useRef(0);
   const restoreScrollTimeoutRef = useRef<number | null>(null);
   const restoreScrollDoneRef = useRef(false);
   const scrollSaveTimeoutRef = useRef<number | null>(null);
+  const restoreRequestIdRef = useRef(0);
+  const restoreAttemptRef = useRef(0);
+  const pendingViewStateRef = useRef<ViewState | null>(null);
+  const lastViewStateRef = useRef<ViewState | null>(null);
+  const pdfFingerprintRef = useRef<string | null>(null);
   const lastScrollStateRef = useRef<{
     pageNumber: number;
     scrollTop: number;
     scrollHeight: number;
     clientHeight: number;
     scrollPercent: number;
+    scale?: number;
   } | null>(null);
   const lastScrollMetaRef = useRef<{ storageKey?: string; documentId?: string | null } | null>(null);
   const skipStoredScrollRef = useRef(false);
   // Track current page number for cleanup to use
   const currentPageRef = useRef(pageNumber);
+  const scaleRef = useRef(scale);
+  const zoomModeRef = useRef(zoomMode);
+  const viewModeRef = useRef(viewMode);
 
   const scrollStorageKey = currentDocument?.id
     ? `document-scroll-position:${currentDocument.id}`
     : undefined;
+
+  const resolveViewStateKey = useCallback(
+    (docId?: string | null) =>
+      getViewStateKey({
+        documentId: docId ?? currentDocument?.id ?? null,
+        contentHash: currentDocument?.contentHash ?? null,
+        pdfFingerprint: pdfFingerprintRef.current,
+      }),
+    [currentDocument?.contentHash, currentDocument?.id]
+  );
 
   // Infer fileType from filePath if it's missing (legacy data or import issue)
   const inferFileType = (doc?: typeof currentDocument): DocumentType => {
@@ -153,6 +176,18 @@ export function DocumentViewer({
     currentPageRef.current = pageNumber;
   }, [pageNumber]);
 
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  useEffect(() => {
+    zoomModeRef.current = zoomMode;
+  }, [zoomMode]);
+
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
   // Track the last page user viewed, independent of scroll suppression
   // This ensures we save the correct page even if scroll handler was suppressed
   const lastViewedPageRef = useRef(pageNumber);
@@ -186,27 +221,55 @@ export function DocumentViewer({
         scrollHeight: number;
         clientHeight: number;
         scrollPercent: number;
+        scale?: number;
       },
-      override?: { storageKey?: string; documentId?: string | null; updatedAt?: number }
+      override?: { storageKey?: string; documentId?: string | null; updatedAt?: number },
+      viewStateOverride?: ViewState | null
     ) => {
       const storageKey = override?.storageKey ?? scrollStorageKey;
       if (!storageKey) return;
+      const docId = override?.documentId ?? currentDocument?.id;
+      const updatedAt = override?.updatedAt ?? Date.now();
       const payload = {
         pageNumber: state.pageNumber,
         scrollPercent: state.scrollPercent,
         scrollTop: state.scrollTop,
         scrollHeight: state.scrollHeight,
         clientHeight: state.clientHeight,
-        updatedAt: override?.updatedAt ?? Date.now(),
+        updatedAt,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
-      const docId = override?.documentId ?? currentDocument?.id;
+
+      const viewStateKey = docId ? resolveViewStateKey(docId) : null;
+      const viewState =
+        viewStateOverride ??
+        (docId
+          ? {
+            docId,
+            pageNumber: state.pageNumber,
+            scale: state.scale ?? scale,
+            zoomMode,
+            rotation: 0,
+            viewMode,
+            dest: lastViewStateRef.current?.dest ?? null,
+            scrollTop: state.scrollTop,
+            scrollPercent: state.scrollPercent,
+            updatedAt,
+            version: 1,
+          }
+          : null);
+
+      if (viewStateKey && viewState) {
+        setViewState(viewStateKey, viewState);
+        lastViewStateRef.current = viewState;
+      }
+
       if (docId) {
-        updateDocumentProgressAuto(docId, state.pageNumber, state.scrollPercent, null)
+        updateDocumentProgressAuto(docId, state.pageNumber, state.scrollPercent, null, viewState ?? undefined)
           .catch((error) => console.warn("Failed to save document progress:", error));
       }
     },
-    [scrollStorageKey, currentDocument?.id]
+    [currentDocument?.id, resolveViewStateKey, scale, scrollStorageKey, viewMode, zoomMode]
   );
 
   const handleScrollPositionChange = useCallback(
@@ -216,12 +279,35 @@ export function DocumentViewer({
       scrollHeight: number;
       clientHeight: number;
       scrollPercent: number;
+      scale?: number;
+      dest?: ViewState["dest"];
     }) => {
       lastScrollStateRef.current = state;
       onScrollPositionChange?.({
         pageNumber: state.pageNumber,
         scrollPercent: state.scrollPercent,
       });
+
+      const docId = currentDocument?.id;
+      const viewStateKey = docId ? resolveViewStateKey(docId) : null;
+      if (docId && viewStateKey) {
+        const updatedAt = Date.now();
+        const viewState: ViewState = {
+          docId,
+          pageNumber: state.pageNumber,
+          scale: state.scale ?? scale,
+          zoomMode,
+          rotation: 0,
+          viewMode,
+          dest: state.dest ?? null,
+          scrollTop: state.scrollTop,
+          scrollPercent: state.scrollPercent,
+          updatedAt,
+          version: 1,
+        };
+        lastViewStateRef.current = viewState;
+        setViewState(viewStateKey, viewState);
+      }
 
       if (!scrollStorageKey) return;
       if (scrollSaveTimeoutRef.current !== null) return;
@@ -231,7 +317,7 @@ export function DocumentViewer({
         persistScrollState(state);
       }, 500);
     },
-    [onScrollPositionChange, scrollStorageKey, persistScrollState]
+    [currentDocument?.id, onScrollPositionChange, persistScrollState, resolveViewStateKey, scale, scrollStorageKey, viewMode, zoomMode]
   );
 
   const captureScrollState = useCallback(() => {
@@ -248,16 +334,20 @@ export function DocumentViewer({
       scrollHeight: container.scrollHeight,
       clientHeight: container.clientHeight,
       scrollPercent,
+      scale,
     };
-  }, [pageNumber]);
+  }, [pageNumber, scale]);
 
   const savePdfProgress = useCallback((reason: string) => {
     if (docType !== "pdf" || viewMode !== "document") return;
     if (!scrollStorageKey) return;
     const state = lastScrollStateRef.current ?? captureScrollState();
     if (!state) return;
+    const viewState = lastViewStateRef.current
+      ? { ...lastViewStateRef.current, updatedAt: Date.now() }
+      : null;
     console.log("[DocumentViewer] Saving PDF progress:", reason, state);
-    persistScrollState(state);
+    persistScrollState(state, undefined, viewState);
   }, [captureScrollState, docType, persistScrollState, scrollStorageKey, viewMode]);
 
   // Timer for tracking reading time
@@ -366,7 +456,10 @@ export function DocumentViewer({
         };
         console.log("[DocumentViewer] Saving before document switch:", storageKey, payload);
         localStorage.setItem(storageKey, JSON.stringify(payload));
-        updateDocumentProgressAuto(prevDocId, state.pageNumber, state.scrollPercent, null)
+        const viewState = lastViewStateRef.current
+          ? { ...lastViewStateRef.current, updatedAt: Date.now() }
+          : null;
+        updateDocumentProgressAuto(prevDocId, state.pageNumber, state.scrollPercent, null, viewState ?? undefined)
           .catch((error) => console.warn("Failed to save document progress before switch:", error));
       }
     }
@@ -410,6 +503,11 @@ export function DocumentViewer({
     }
     setViewMode("document");
   }, [documentId, initialViewMode]);
+
+  useEffect(() => {
+    if (docType !== "pdf") return;
+    setPagesRendered(false);
+  }, [docType, scale, zoomMode, currentDocument?.id]);
 
   // Save PDF progress when switching away from document view (e.g., to extracts or cards)
   const prevViewModeRef = useRef<ViewMode | null>(null);
@@ -463,7 +561,14 @@ export function DocumentViewer({
   useEffect(() => {
     restoreScrollDoneRef.current = false;
     restoreScrollAttemptsRef.current = 0;
+    restoreAttemptRef.current = 0;
+    restoreRequestIdRef.current = 0;
+    setRestoreRequestId(0);
     setPagesRendered(false);
+    pendingViewStateRef.current = null;
+    lastViewStateRef.current = null;
+    lastScrollStateRef.current = null;
+    setRestoreState(null);
     if (restoreScrollTimeoutRef.current !== null) {
       clearTimeout(restoreScrollTimeoutRef.current);
       restoreScrollTimeoutRef.current = null;
@@ -472,97 +577,168 @@ export function DocumentViewer({
 
   useEffect(() => {
     if (viewMode !== "document") return;
+    if (docType !== "pdf") return;
+    if (isLoading) return;
+    if (!currentDocument?.id) return;
+    if (restoreScrollDoneRef.current) return;
+    if (skipStoredScrollRef.current) {
+      setSuppressPdfAutoScroll(false);
+      restoreScrollDoneRef.current = true;
+      return;
+    }
+
+    const docId = currentDocument.id;
+    const viewStateKey = resolveViewStateKey(docId);
+    const localViewState = viewStateKey ? getViewState(viewStateKey) : null;
+    const remoteRaw = (currentDocument as any)?.currentViewState ?? (currentDocument as any)?.current_view_state;
+    let remoteViewState: ViewState | null = null;
+    if (typeof remoteRaw === "string") {
+      remoteViewState = parseViewState(remoteRaw);
+    } else if (remoteRaw && typeof remoteRaw === "object" && typeof (remoteRaw as ViewState).updatedAt === "number") {
+      remoteViewState = remoteRaw as ViewState;
+    }
+
+    let selectedViewState = localViewState;
+    if (remoteViewState && (!selectedViewState || remoteViewState.updatedAt > selectedViewState.updatedAt)) {
+      selectedViewState = {
+        ...remoteViewState,
+        docId: remoteViewState.docId || docId,
+      };
+    }
+
+    if (!selectedViewState) {
+      let legacyParsed: { scrollPercent?: number; scrollTop?: number; pageNumber?: number; updatedAt?: number } | null = null;
+      const stored = scrollStorageKey ? localStorage.getItem(scrollStorageKey) : null;
+      if (stored) {
+        try {
+          legacyParsed = JSON.parse(stored);
+        } catch {
+          legacyParsed = null;
+        }
+      }
+      const remoteUpdatedAt = currentDocument?.dateModified
+        ? new Date(currentDocument.dateModified).getTime()
+        : 0;
+      const localUpdatedAt = legacyParsed?.updatedAt ?? 0;
+      const hasRemoteProgress = typeof currentDocument?.currentScrollPercent === "number";
+
+      if ((hasRemoteProgress && remoteUpdatedAt > localUpdatedAt) || !legacyParsed) {
+        legacyParsed = hasRemoteProgress
+          ? {
+            scrollPercent: currentDocument.currentScrollPercent,
+            pageNumber: currentDocument.currentPage ?? undefined,
+            updatedAt: remoteUpdatedAt || Date.now(),
+          }
+          : null;
+      }
+
+      if (legacyParsed) {
+        selectedViewState = {
+          docId,
+          pageNumber: legacyParsed.pageNumber ?? 1,
+          scale,
+          zoomMode,
+          rotation: 0,
+          viewMode,
+          dest: null,
+          scrollTop: legacyParsed.scrollTop ?? null,
+          scrollPercent: legacyParsed.scrollPercent ?? null,
+          updatedAt: legacyParsed.updatedAt ?? Date.now(),
+          version: 1,
+        };
+      }
+    }
+
+    if (!selectedViewState) {
+      setSuppressPdfAutoScroll(false);
+      restoreScrollDoneRef.current = true;
+      return;
+    }
+
+    pendingViewStateRef.current = selectedViewState;
+    setRestoreState(selectedViewState);
+    setSuppressPdfAutoScroll(true);
+
+    if (selectedViewState.zoomMode) {
+      setZoomMode(selectedViewState.zoomMode);
+    }
+    if (typeof selectedViewState.scale === "number") {
+      setScale(selectedViewState.scale);
+    }
+    if (typeof selectedViewState.pageNumber === "number" && selectedViewState.pageNumber > 0) {
+      setPageNumber(selectedViewState.pageNumber);
+    }
+  }, [currentDocument, docType, isLoading, resolveViewStateKey, scale, scrollStorageKey, viewMode, zoomMode]);
+
+  useEffect(() => {
+    if (viewMode !== "document") return;
+    if (docType !== "pdf") return;
     if (isLoading) return;
     if (!pagesRendered) return;
-    if (!scrollStorageKey) return;
     if (restoreScrollDoneRef.current) return;
-    if (skipStoredScrollRef.current) return;
 
-    const stored = localStorage.getItem(scrollStorageKey);
-    if (!stored && typeof currentDocument?.currentScrollPercent !== "number") {
-      // No saved position - clear suppression so normal scrolling works
-      if (docType === "pdf") {
-        setSuppressPdfAutoScroll(false);
-      }
+    const state = restoreState ?? pendingViewStateRef.current;
+    if (!state) {
+      setSuppressPdfAutoScroll(false);
       restoreScrollDoneRef.current = true;
       return;
     }
 
-    let parsed: { scrollPercent?: number; pageNumber?: number; updatedAt?: number } | null = null;
-    if (stored) {
-      try {
-        parsed = JSON.parse(stored);
-      } catch {
-        parsed = null;
-      }
-    }
-    const remoteUpdatedAt = currentDocument?.dateModified
-      ? new Date(currentDocument.dateModified).getTime()
-      : 0;
-    const localUpdatedAt = parsed?.updatedAt ?? 0;
-    const hasRemoteProgress = typeof currentDocument?.currentScrollPercent === "number";
+    restoreRequestIdRef.current += 1;
+    setRestoreRequestId(restoreRequestIdRef.current);
 
-    if ((hasRemoteProgress && remoteUpdatedAt > localUpdatedAt) || !parsed) {
-      parsed = hasRemoteProgress
-        ? {
-          scrollPercent: currentDocument.currentScrollPercent,
-          pageNumber: currentDocument.currentPage ?? undefined,
-          updatedAt: remoteUpdatedAt || Date.now(),
-        }
-        : null;
-    }
-    if (!parsed) {
-      // No valid saved position - clear suppression so normal scrolling works
-      if (docType === "pdf") {
-        setSuppressPdfAutoScroll(false);
-      }
-      restoreScrollDoneRef.current = true;
-      return;
-    }
-
-    if (docType === "pdf") {
-      setSuppressPdfAutoScroll(true);
-    }
-
-    if (typeof parsed.pageNumber === "number" && parsed.pageNumber > 0) {
-      setPageNumber(parsed.pageNumber);
-    }
-
-    const tryRestore = () => {
+    const verifyRestore = () => {
       const container = document.querySelector(
         "[data-document-scroll-container]"
       ) as HTMLElement | null;
-      if (!container) {
-        restoreScrollAttemptsRef.current += 1;
-      } else {
-        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-        let targetScroll: number | null = null;
-        if (typeof parsed?.scrollTop === "number") {
-          targetScroll = Math.min(Math.max(0, parsed.scrollTop), maxScroll);
-        } else if (maxScroll > 0 && typeof parsed?.scrollPercent === "number") {
-          targetScroll = (parsed.scrollPercent / 100) * maxScroll;
+      if (!container) return false;
+
+      const pages = Array.from(container.querySelectorAll<HTMLElement>("[data-pdf-page]"));
+      let currentPage = 1;
+      for (const pageEl of pages) {
+        const pageNum = Number(pageEl.dataset.pageNumber);
+        if (!Number.isNaN(pageNum) && pageEl.offsetTop - 24 <= container.scrollTop) {
+          currentPage = pageNum;
         }
-        if (targetScroll !== null) {
-          container.scrollTop = targetScroll;
-          restoreScrollDoneRef.current = true;
-          if (docType === "pdf") {
-            // Delay clearing suppression to allow scroll events to settle
-            setTimeout(() => setSuppressPdfAutoScroll(false), 500);
-          }
-          return;
-        }
-        restoreScrollAttemptsRef.current += 1;
       }
 
-      if (restoreScrollAttemptsRef.current < 6) {
-        restoreScrollTimeoutRef.current = window.setTimeout(tryRestore, 200);
-      } else if (docType === "pdf") {
-        setSuppressPdfAutoScroll(false);
+      const withinPage = Math.abs(currentPage - state.pageNumber) <= 1;
+      if (!withinPage) return false;
+
+      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+      const expectedScroll = typeof state.scrollTop === "number"
+        ? Math.min(Math.max(0, state.scrollTop), maxScroll)
+        : typeof state.scrollPercent === "number"
+          ? (state.scrollPercent / 100) * maxScroll
+          : null;
+      if (expectedScroll !== null) {
+        return Math.abs(container.scrollTop - expectedScroll) <= 200;
       }
+      return true;
     };
 
-    tryRestore();
-  }, [isLoading, pagesRendered, scrollStorageKey, viewMode, currentDocument?.currentScrollPercent, currentDocument?.currentPage, docType]);
+    const attemptVerify = () => {
+      const ok = verifyRestore();
+      if (ok) {
+        restoreScrollDoneRef.current = true;
+        setTimeout(() => setSuppressPdfAutoScroll(false), 500);
+        return;
+      }
+
+      if (restoreAttemptRef.current < 1) {
+        restoreAttemptRef.current += 1;
+        restoreRequestIdRef.current += 1;
+        setRestoreRequestId(restoreRequestIdRef.current);
+        restoreScrollTimeoutRef.current = window.setTimeout(attemptVerify, 200);
+        return;
+      }
+
+      restoreScrollDoneRef.current = true;
+      setSuppressPdfAutoScroll(false);
+    };
+
+    restoreScrollTimeoutRef.current = window.setTimeout(attemptVerify, 200);
+  }, [docType, isLoading, pagesRendered, restoreState, viewMode]);
 
   useEffect(() => {
     loadQueue();
@@ -650,7 +826,28 @@ export function DocumentViewer({
 
       console.log("[DocumentViewer] Saving to localStorage:", storageKey, payload);
       localStorage.setItem(storageKey, JSON.stringify(payload));
-      updateDocumentProgressAuto(documentId, stateToSave.pageNumber, stateToSave.scrollPercent, null)
+      const viewStateKey = getViewStateKey({ documentId });
+      const viewState = lastViewStateRef.current
+        ? { ...lastViewStateRef.current, updatedAt: Date.now() }
+        : {
+          docId: documentId,
+          pageNumber: stateToSave.pageNumber,
+          scale: scaleRef.current,
+          zoomMode: zoomModeRef.current,
+          rotation: 0,
+          viewMode: viewModeRef.current,
+          dest: null,
+          scrollTop: stateToSave.scrollTop,
+          scrollPercent: stateToSave.scrollPercent,
+          updatedAt: Date.now(),
+          version: 1,
+        };
+
+      if (viewStateKey) {
+        setViewState(viewStateKey, viewState);
+      }
+
+      updateDocumentProgressAuto(documentId, stateToSave.pageNumber, stateToSave.scrollPercent, null, viewState)
         .catch((error) => console.warn("Failed to save document progress on cleanup:", error));
     };
   }, []);
@@ -756,6 +953,10 @@ export function DocumentViewer({
   const handleZoomModeChange = (mode: "custom" | "fit-width" | "fit-page") => {
     setZoomMode(mode);
   };
+
+  const handlePdfInfo = useCallback((info: { fingerprint?: string | null }) => {
+    pdfFingerprintRef.current = info.fingerprint ?? null;
+  }, []);
 
   // Handle PDF/EPUB load
   const handleDocumentLoad = useCallback((numPages: number, outline: any[] = []) => {
@@ -1180,8 +1381,11 @@ export function DocumentViewer({
               suppressAutoScroll={suppressPdfAutoScroll}
               onPageChange={handlePageChange}
               onLoad={handleDocumentLoad}
+              onPdfInfo={handlePdfInfo}
               onPagesRendered={() => setPagesRendered(true)}
               onScrollPositionChange={handleScrollPositionChange}
+              restoreState={restoreState}
+              restoreRequestId={restoreRequestId}
               contextPageWindow={contextPageWindow}
               onTextWindowChange={handlePdfContextTextChange}
               onSelectionChange={updateSelection}

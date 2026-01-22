@@ -249,6 +249,7 @@ pub struct UpdateProgressRequest {
     pub current_page: Option<i32>,
     pub current_scroll_percent: Option<f64>,
     pub current_cfi: Option<String>,
+    pub current_view_state: Option<String>,
 }
 
 /// Document response
@@ -261,6 +262,7 @@ pub struct DocumentResponse {
     pub current_page: Option<i32>,
     pub current_scroll_percent: Option<f64>,
     pub current_cfi: Option<String>,
+    pub current_view_state: Option<String>,
     pub total_pages: Option<i32>,
     pub content: Option<String>,
     pub category: Option<String>,
@@ -501,6 +503,7 @@ async fn handle_import_request(
         current_page: None,
         current_scroll_percent: None,
         current_cfi: None,
+        current_view_state: None,
         category,
         tags: payload.tags.clone().unwrap_or_default(),
         date_added: chrono::Utc::now(),
@@ -560,6 +563,7 @@ async fn handle_extract_request(
             current_page: None,
             current_scroll_percent: None,
             current_cfi: None,
+            current_view_state: None,
             category: None,
             tags: payload.tags.clone().unwrap_or_default(),
             date_added: chrono::Utc::now(),
@@ -1371,6 +1375,7 @@ async fn handle_get_document(
                 current_page: doc.current_page,
                 current_scroll_percent: doc.current_scroll_percent,
                 current_cfi: doc.current_cfi,
+                current_view_state: doc.current_view_state,
                 total_pages: doc.total_pages,
                 content: doc.content,
                 category: doc.category,
@@ -1398,7 +1403,13 @@ async fn handle_update_progress(
 
     match state
         .repo
-        .update_document_progress(&id, payload.current_page, payload.current_scroll_percent, payload.current_cfi)
+        .update_document_progress(
+            &id,
+            payload.current_page,
+            payload.current_scroll_percent,
+            payload.current_cfi,
+            payload.current_view_state,
+        )
         .await
     {
         Ok(updated_doc) => {
@@ -1410,6 +1421,7 @@ async fn handle_update_progress(
                 current_page: updated_doc.current_page,
                 current_scroll_percent: updated_doc.current_scroll_percent,
                 current_cfi: updated_doc.current_cfi,
+                current_view_state: updated_doc.current_view_state,
                 total_pages: updated_doc.total_pages,
                 content: updated_doc.content,
                 category: updated_doc.category,
