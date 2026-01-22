@@ -325,6 +325,38 @@ export function DocumentViewer({
   useEffect(() => {
     if (!documentId) return;
 
+    // Save scroll position BEFORE switching to a new document
+    const prevDocId = lastDocumentIdRef.current;
+    if (prevDocId && prevDocId !== documentId) {
+      // Capture and save scroll position for the previous document
+      const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
+      if (container) {
+        const scrollTop = container.scrollTop;
+        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+        const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
+        const state = {
+          pageNumber: currentPageRef.current,
+          scrollTop,
+          scrollHeight: container.scrollHeight,
+          clientHeight: container.clientHeight,
+          scrollPercent,
+        };
+        const storageKey = `document-scroll-position:${prevDocId}`;
+        const payload = {
+          pageNumber: state.pageNumber,
+          scrollPercent: state.scrollPercent,
+          scrollTop: state.scrollTop,
+          scrollHeight: state.scrollHeight,
+          clientHeight: state.clientHeight,
+          updatedAt: Date.now(),
+        };
+        console.log("[DocumentViewer] Saving before document switch:", storageKey, payload);
+        localStorage.setItem(storageKey, JSON.stringify(payload));
+        updateDocumentProgressAuto(prevDocId, state.pageNumber, state.scrollPercent, null)
+          .catch((error) => console.warn("Failed to save document progress before switch:", error));
+      }
+    }
+
     setOcrContextText(null);
 
     // Only reload if documentId actually changed, OR if we haven't successfully loaded this document yet
@@ -579,45 +611,33 @@ export function DocumentViewer({
         clearTimeout(scrollSaveTimeoutRef.current);
       }
 
-      // Capture scroll state directly from DOM to handle all unmount scenarios
-      // Don't rely solely on lastScrollStateRef which might be null if user never scrolled
-      const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
-      const storageKey = currentDocument?.id ? `document-scroll-position:${currentDocument.id}` : null;
-      const documentId = currentDocument?.id ?? null;
+      // Use refs to get the latest values - these should be populated by:
+      // 1. Initial scroll state capture effect
+      // 2. Scroll position change handler (debounced)
+      // 3. Document switch save (above)
+      const lastState = lastScrollStateRef.current;
+      const storageKey = lastScrollMetaRef.current?.storageKey;
+      const documentId = lastScrollMetaRef.current?.documentId;
 
-      if (!container || !storageKey || !documentId) {
-        console.log("[DocumentViewer] Cleanup - missing data:", { hasContainer: !!container, storageKey, documentId });
+      if (!lastState || !storageKey || !documentId) {
+        console.log("[DocumentViewer] Cleanup - no state to save:", { hasLastState: !!lastState, storageKey, documentId });
         return;
       }
 
-      // Use lastScrollStateRef if available, otherwise capture current state
-      const stateToSave = lastScrollStateRef.current ?? (() => {
-        const scrollTop = container.scrollTop;
-        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-        const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
-        return {
-          pageNumber: currentPageRef.current,
-          scrollTop,
-          scrollHeight: container.scrollHeight,
-          clientHeight: container.clientHeight,
-          scrollPercent,
-        };
-      })();
-
-      console.log("[DocumentViewer] Cleanup - saving position:", stateToSave);
+      console.log("[DocumentViewer] Cleanup - saving position:", lastState);
 
       const payload = {
-        pageNumber: stateToSave.pageNumber,
-        scrollPercent: stateToSave.scrollPercent,
-        scrollTop: stateToSave.scrollTop,
-        scrollHeight: stateToSave.scrollHeight,
-        clientHeight: stateToSave.clientHeight,
+        pageNumber: lastState.pageNumber,
+        scrollPercent: lastState.scrollPercent,
+        scrollTop: lastState.scrollTop,
+        scrollHeight: lastState.scrollHeight,
+        clientHeight: lastState.clientHeight,
         updatedAt: Date.now(),
       };
 
       console.log("[DocumentViewer] Saving to localStorage:", storageKey, payload);
       localStorage.setItem(storageKey, JSON.stringify(payload));
-      updateDocumentProgressAuto(documentId, stateToSave.pageNumber, stateToSave.scrollPercent, null)
+      updateDocumentProgressAuto(documentId, lastState.pageNumber, lastState.scrollPercent, null)
         .catch((error) => console.warn("Failed to save document progress on cleanup:", error));
     };
   }, []);
