@@ -56,30 +56,11 @@ export function QueueScrollPage() {
   const { tabs, activeTabId, closeTab, updateTab } = useTabsStore();
   const { settings, updateSettingsCategory } = useSettingsStore();
 
-  // Restore currentIndex from tab data on mount
-  const getInitialIndex = useCallback(() => {
-    const activeTab = tabs.find(t => t.id === activeTabId);
-    if (activeTab?.data?.currentIndex !== undefined) {
-      const index = activeTab.data.currentIndex as number;
-      // Ensure index is valid (not negative and within scroll items range)
-      if (typeof index === 'number' && index >= 0) {
-        return index;
-      }
-    }
-    return 0;
-  }, [tabs, activeTabId]);
-
-  const [currentIndex, setCurrentIndex] = useState(getInitialIndex);
-  const [renderedIndex, setRenderedIndex] = useState(() => {
-    const activeTab = tabs.find(t => t.id === activeTabId);
-    if (activeTab?.data?.renderedIndex !== undefined) {
-      const index = activeTab.data.renderedIndex as number;
-      if (typeof index === 'number' && index >= 0) {
-        return index;
-      }
-    }
-    return 0;
-  });
+  // Always start at index 0 for fresh queue on each scroll mode session
+  // Previous logic to restore indices from tab data was causing reviewed items to replay
+  // because the restored index would point to a stale position in a now-different queue
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [renderedIndex, setRenderedIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -128,12 +109,32 @@ export function QueueScrollPage() {
 
   // Load queue, documents, and due flashcards/extracts on mount
   // IMPORTANT: Await loadDocuments() to prevent race condition in YouTube filter
+  // CRITICAL: Always start fresh at index 0 to prevent replaying already-reviewed items
   useEffect(() => {
     const loadAllData = async () => {
+      // Reset indices to 0 at the start of each scroll mode session
+      // This ensures we get a fresh queue and don't replay items from a stale index
+      setCurrentIndex(0);
+      setRenderedIndex(0);
+      startTimeRef.current = Date.now();
+
+      // Clear any stale tab data that might have old indices
+      if (activeTabId) {
+        updateTab(activeTabId, {
+          data: {
+            currentIndex: 0,
+            renderedIndex: 0,
+            sessionTimestamp: Date.now(), // Track when this session started
+          },
+        });
+      }
+
       // Load documents first and wait for completion
       // This ensures the YouTube filter has all documents loaded before computing
       await loadDocuments();
-      loadQueue();
+
+      // Load queue fresh - this will fetch current due items only
+      await loadQueue();
 
       // Load due learning items and extracts
       try {
@@ -149,12 +150,11 @@ export function QueueScrollPage() {
       }
     };
     loadAllData();
-  }, [loadQueue, loadDocuments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount, not on dependency changes
 
-  // Initialize renderedIndex on mount
-  useEffect(() => {
-    setRenderedIndex(currentIndex);
-  }, []);
+  // Initialize renderedIndex on mount - removed, now handled in loadAllData
+
 
   // Save current position to tab data for restoration when user returns
   useEffect(() => {

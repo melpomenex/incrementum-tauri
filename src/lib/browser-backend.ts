@@ -610,6 +610,138 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(items);
     },
 
+    // Document/Extract rating commands (FSRS-like scheduling for browser)
+    rate_document: async (args) => {
+        const request = args.request as { document_id: string; rating: number; time_taken?: number };
+        const doc = await db.getDocument(request.document_id);
+        if (!doc) {
+            throw new Error(`Document ${request.document_id} not found`);
+        }
+
+        // Simplified FSRS-like scheduling for browser mode:
+        // Rating 1 (Again) = 1 day, Rating 2 (Hard) = 2 days, 
+        // Rating 3 (Good) = current interval * 2.5, Rating 4 (Easy) = current interval * 3.5
+        const currentInterval = doc.stability || 1;
+        let nextIntervalDays: number;
+        let newStability = currentInterval;
+        let newDifficulty = doc.difficulty || 5.0;
+
+        switch (request.rating) {
+            case 1: // Again
+                nextIntervalDays = 1;
+                newStability = 1;
+                newDifficulty = Math.min(10, newDifficulty + 0.5);
+                break;
+            case 2: // Hard
+                nextIntervalDays = Math.max(1, Math.round(currentInterval * 1.2));
+                newStability = nextIntervalDays;
+                newDifficulty = Math.min(10, newDifficulty + 0.15);
+                break;
+            case 3: // Good
+                nextIntervalDays = Math.max(1, Math.round(currentInterval * 2.5));
+                newStability = nextIntervalDays;
+                newDifficulty = Math.max(1, newDifficulty - 0.15);
+                break;
+            case 4: // Easy
+                nextIntervalDays = Math.max(1, Math.round(currentInterval * 3.5));
+                newStability = nextIntervalDays;
+                newDifficulty = Math.max(1, newDifficulty - 0.3);
+                break;
+            default:
+                nextIntervalDays = Math.max(1, Math.round(currentInterval * 2.5));
+                newStability = nextIntervalDays;
+        }
+
+        // Calculate next review date
+        const nextReviewDate = new Date();
+        nextReviewDate.setDate(nextReviewDate.getDate() + nextIntervalDays);
+        const nextReviewDateIso = nextReviewDate.toISOString();
+
+        // Update document with new scheduling data
+        const newReps = (doc.reps || 0) + 1;
+        const newTimeSpent = (doc.total_time_spent || 0) + (request.time_taken || 0);
+
+        await db.updateDocument(request.document_id, {
+            next_reading_date: nextReviewDateIso,
+            stability: newStability,
+            difficulty: newDifficulty,
+            reps: newReps,
+            total_time_spent: newTimeSpent,
+            date_last_reviewed: new Date().toISOString(),
+        });
+
+        return {
+            next_review_date: nextReviewDateIso,
+            stability: newStability,
+            difficulty: newDifficulty,
+            interval_days: nextIntervalDays,
+            scheduling_reason: `Browser FSRS: Rating ${request.rating} → ${nextIntervalDays} days`,
+        };
+    },
+
+    rate_extract: async (args) => {
+        const request = args.request as { extract_id: string; rating: number; time_taken?: number };
+        const extract = await db.getExtract(request.extract_id);
+        if (!extract) {
+            throw new Error(`Extract ${request.extract_id} not found`);
+        }
+
+        // Similar FSRS-like scheduling for extracts
+        const currentStability = extract.memory_state?.stability || 1;
+        const currentDifficulty = extract.memory_state?.difficulty || 5.0;
+        let nextIntervalDays: number;
+        let newStability = currentStability;
+        let newDifficulty = currentDifficulty;
+
+        switch (request.rating) {
+            case 1: // Again
+                nextIntervalDays = 1;
+                newStability = 1;
+                newDifficulty = Math.min(10, newDifficulty + 0.5);
+                break;
+            case 2: // Hard
+                nextIntervalDays = Math.max(1, Math.round(currentStability * 1.2));
+                newStability = nextIntervalDays;
+                newDifficulty = Math.min(10, newDifficulty + 0.15);
+                break;
+            case 3: // Good
+                nextIntervalDays = Math.max(1, Math.round(currentStability * 2.5));
+                newStability = nextIntervalDays;
+                newDifficulty = Math.max(1, newDifficulty - 0.15);
+                break;
+            case 4: // Easy
+                nextIntervalDays = Math.max(1, Math.round(currentStability * 3.5));
+                newStability = nextIntervalDays;
+                newDifficulty = Math.max(1, newDifficulty - 0.3);
+                break;
+            default:
+                nextIntervalDays = Math.max(1, Math.round(currentStability * 2.5));
+                newStability = nextIntervalDays;
+        }
+
+        // Calculate next review date
+        const nextReviewDate = new Date();
+        nextReviewDate.setDate(nextReviewDate.getDate() + nextIntervalDays);
+        const nextReviewDateIso = nextReviewDate.toISOString();
+
+        // Update extract with new scheduling data
+        await db.updateExtract(request.extract_id, {
+            next_review_date: nextReviewDateIso,
+            memory_state: { stability: newStability, difficulty: newDifficulty },
+            review_count: extract.review_count + 1,
+            reps: extract.reps + 1,
+            last_review_date: new Date().toISOString(),
+        });
+
+        return {
+            next_review_date: nextReviewDateIso,
+            stability: newStability,
+            difficulty: newDifficulty,
+            interval_days: nextIntervalDays,
+            scheduling_reason: `Browser FSRS: Rating ${request.rating} → ${nextIntervalDays} days`,
+        };
+    },
+
     // Analytics commands
     get_activity_data: async () => {
         // Return empty for now - analytics can be computed client-side
