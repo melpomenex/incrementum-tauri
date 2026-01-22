@@ -104,6 +104,8 @@ export function DocumentViewer({
   } | null>(null);
   const lastScrollMetaRef = useRef<{ storageKey?: string; documentId?: string | null } | null>(null);
   const skipStoredScrollRef = useRef(false);
+  // Track current page number for cleanup to use
+  const currentPageRef = useRef(pageNumber);
 
   const scrollStorageKey = currentDocument?.id
     ? `document-scroll-position:${currentDocument.id}`
@@ -139,6 +141,11 @@ export function DocumentViewer({
   useEffect(() => {
     lastScrollMetaRef.current = { storageKey: scrollStorageKey, documentId: currentDocument?.id ?? null };
   }, [scrollStorageKey, currentDocument?.id]);
+
+  // Keep currentPageRef in sync with pageNumber state
+  useEffect(() => {
+    currentPageRef.current = pageNumber;
+  }, [pageNumber]);
 
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
@@ -358,6 +365,15 @@ export function DocumentViewer({
     setViewMode("document");
   }, [documentId, initialViewMode]);
 
+  // Save PDF progress when switching away from document view (e.g., to extracts or cards)
+  const prevViewModeRef = useRef<ViewMode | null>(null);
+  useEffect(() => {
+    if (prevViewModeRef.current === "document" && viewMode !== "document") {
+      savePdfProgress("viewMode change");
+    }
+    prevViewModeRef.current = viewMode;
+  }, [viewMode, savePdfProgress]);
+
   // Parse URL fragment and restore state after document is loaded
   useEffect(() => {
     if (!currentDocument || !documentId) return;
@@ -506,6 +522,34 @@ export function DocumentViewer({
     loadQueue();
   }, [loadQueue]);
 
+  // Capture initial scroll position once the PDF is loaded and rendered
+  useEffect(() => {
+    if (viewMode !== "document" || isLoading || !pagesRendered || !scrollStorageKey) return;
+    if (lastScrollStateRef.current !== null) return; // Already captured
+
+    const captureInitialState = () => {
+      const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
+      if (!container) return;
+
+      const scrollTop = container.scrollTop;
+      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+      const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
+
+      lastScrollStateRef.current = {
+        pageNumber,
+        scrollTop,
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight,
+        scrollPercent,
+      };
+      console.log("[DocumentViewer] Initial scroll state captured:", lastScrollStateRef.current);
+    };
+
+    // Small delay to ensure the scroll container is fully rendered
+    const timer = setTimeout(captureInitialState, 100);
+    return () => clearTimeout(timer);
+  }, [viewMode, isLoading, pagesRendered, scrollStorageKey, pageNumber]);
+
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -534,33 +578,47 @@ export function DocumentViewer({
       if (scrollSaveTimeoutRef.current !== null) {
         clearTimeout(scrollSaveTimeoutRef.current);
       }
-      const lastState = lastScrollStateRef.current;
-      const lastMeta = lastScrollMetaRef.current;
-      console.log("[DocumentViewer] Cleanup - saving position:", {
-        hasLastState: !!lastState,
-        lastState,
-        hasLastMeta: !!lastMeta,
-        storageKey: lastMeta?.storageKey,
-        documentId: lastMeta?.documentId,
-      });
-      if (lastState && lastMeta?.storageKey) {
-        // Save directly using refs to avoid stale closure issues on unmount
-        // The persistScrollState callback may reference old document IDs
-        const payload = {
-          pageNumber: lastState.pageNumber,
-          scrollPercent: lastState.scrollPercent,
-          scrollTop: lastState.scrollTop,
-          scrollHeight: lastState.scrollHeight,
-          clientHeight: lastState.clientHeight,
-          updatedAt: Date.now(),
-        };
-        console.log("[DocumentViewer] Saving to localStorage:", lastMeta.storageKey, payload);
-        localStorage.setItem(lastMeta.storageKey, JSON.stringify(payload));
-        if (lastMeta.documentId) {
-          updateDocumentProgressAuto(lastMeta.documentId, lastState.pageNumber, lastState.scrollPercent, null)
-            .catch((error) => console.warn("Failed to save document progress on cleanup:", error));
-        }
+
+      // Capture scroll state directly from DOM to handle all unmount scenarios
+      // Don't rely solely on lastScrollStateRef which might be null if user never scrolled
+      const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
+      const storageKey = currentDocument?.id ? `document-scroll-position:${currentDocument.id}` : null;
+      const documentId = currentDocument?.id ?? null;
+
+      if (!container || !storageKey || !documentId) {
+        console.log("[DocumentViewer] Cleanup - missing data:", { hasContainer: !!container, storageKey, documentId });
+        return;
       }
+
+      // Use lastScrollStateRef if available, otherwise capture current state
+      const stateToSave = lastScrollStateRef.current ?? (() => {
+        const scrollTop = container.scrollTop;
+        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+        const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
+        return {
+          pageNumber: currentPageRef.current,
+          scrollTop,
+          scrollHeight: container.scrollHeight,
+          clientHeight: container.clientHeight,
+          scrollPercent,
+        };
+      })();
+
+      console.log("[DocumentViewer] Cleanup - saving position:", stateToSave);
+
+      const payload = {
+        pageNumber: stateToSave.pageNumber,
+        scrollPercent: stateToSave.scrollPercent,
+        scrollTop: stateToSave.scrollTop,
+        scrollHeight: stateToSave.scrollHeight,
+        clientHeight: stateToSave.clientHeight,
+        updatedAt: Date.now(),
+      };
+
+      console.log("[DocumentViewer] Saving to localStorage:", storageKey, payload);
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+      updateDocumentProgressAuto(documentId, stateToSave.pageNumber, stateToSave.scrollPercent, null)
+        .catch((error) => console.warn("Failed to save document progress on cleanup:", error));
     };
   }, []);
 
