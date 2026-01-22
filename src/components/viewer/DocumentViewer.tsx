@@ -554,34 +554,6 @@ export function DocumentViewer({
     loadQueue();
   }, [loadQueue]);
 
-  // Capture initial scroll position once the PDF is loaded and rendered
-  useEffect(() => {
-    if (viewMode !== "document" || isLoading || !pagesRendered || !scrollStorageKey) return;
-    if (lastScrollStateRef.current !== null) return; // Already captured
-
-    const captureInitialState = () => {
-      const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
-      if (!container) return;
-
-      const scrollTop = container.scrollTop;
-      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-      const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
-
-      lastScrollStateRef.current = {
-        pageNumber,
-        scrollTop,
-        scrollHeight: container.scrollHeight,
-        clientHeight: container.clientHeight,
-        scrollPercent,
-      };
-      console.log("[DocumentViewer] Initial scroll state captured:", lastScrollStateRef.current);
-    };
-
-    // Small delay to ensure the scroll container is fully rendered
-    const timer = setTimeout(captureInitialState, 100);
-    return () => clearTimeout(timer);
-  }, [viewMode, isLoading, pagesRendered, scrollStorageKey, pageNumber]);
-
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -611,33 +583,39 @@ export function DocumentViewer({
         clearTimeout(scrollSaveTimeoutRef.current);
       }
 
-      // Use refs to get the latest values - these should be populated by:
-      // 1. Initial scroll state capture effect
-      // 2. Scroll position change handler (debounced)
-      // 3. Document switch save (above)
-      const lastState = lastScrollStateRef.current;
       const storageKey = lastScrollMetaRef.current?.storageKey;
       const documentId = lastScrollMetaRef.current?.documentId;
 
-      if (!lastState || !storageKey || !documentId) {
-        console.log("[DocumentViewer] Cleanup - no state to save:", { hasLastState: !!lastState, storageKey, documentId });
+      if (!storageKey || !documentId) {
+        console.log("[DocumentViewer] Cleanup - missing metadata:", { storageKey, documentId });
         return;
       }
 
-      console.log("[DocumentViewer] Cleanup - saving position:", lastState);
+      // Use lastScrollStateRef if available (populated by scroll handler)
+      // Otherwise fall back to current page number (for users who opened and closed without scrolling)
+      const lastState = lastScrollStateRef.current;
+      const stateToSave = lastState ?? {
+        pageNumber: currentPageRef.current,
+        scrollTop: 0,
+        scrollHeight: 0,
+        clientHeight: 0,
+        scrollPercent: 0,
+      };
+
+      console.log("[DocumentViewer] Cleanup - saving position:", stateToSave);
 
       const payload = {
-        pageNumber: lastState.pageNumber,
-        scrollPercent: lastState.scrollPercent,
-        scrollTop: lastState.scrollTop,
-        scrollHeight: lastState.scrollHeight,
-        clientHeight: lastState.clientHeight,
+        pageNumber: stateToSave.pageNumber,
+        scrollPercent: stateToSave.scrollPercent,
+        scrollTop: stateToSave.scrollTop,
+        scrollHeight: stateToSave.scrollHeight,
+        clientHeight: stateToSave.clientHeight,
         updatedAt: Date.now(),
       };
 
       console.log("[DocumentViewer] Saving to localStorage:", storageKey, payload);
       localStorage.setItem(storageKey, JSON.stringify(payload));
-      updateDocumentProgressAuto(documentId, lastState.pageNumber, lastState.scrollPercent, null)
+      updateDocumentProgressAuto(documentId, stateToSave.pageNumber, stateToSave.scrollPercent, null)
         .catch((error) => console.warn("Failed to save document progress on cleanup:", error));
     };
   }, []);
