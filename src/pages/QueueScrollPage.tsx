@@ -81,6 +81,7 @@ export function QueueScrollPage() {
   const deviceInfo = getDeviceInfo();
   const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
   const [rssSelectedText, setRssSelectedText] = useState("");
+  const MAX_SELECTION_CHARS = 10000;
 
   // Popup state
   const [activeExtractForCloze, setActiveExtractForCloze] = useState<{ id: string, text: string, range: [number, number] } | null>(null);
@@ -118,13 +119,13 @@ export function QueueScrollPage() {
       return;
     }
 
-    if (text.length >= 1000) {
+    if (text.length > MAX_SELECTION_CHARS) {
       setRssSelectedText("");
       return;
     }
 
     setRssSelectedText(text);
-  }, []);
+  }, [MAX_SELECTION_CHARS]);
 
   // Filter documents
   // Memoize to prevent infinite loop since this is a dependency of the useEffect below
@@ -314,6 +315,15 @@ export function QueueScrollPage() {
 
   // Current item (for display during transition)
   const currentItem = scrollItems[currentIndex];
+  const currentDocument = useMemo(() => {
+    if (!currentItem || currentItem.type !== "document" || !currentItem.documentId) return null;
+    return documents.find((doc) => doc.id === currentItem.documentId) ?? null;
+  }, [currentItem, documents]);
+  const isNewDocument =
+    currentDocument
+      ? (currentDocument.reps ?? currentDocument.readingCount ?? 0) <= 0
+        && !currentDocument.dateLastReviewed
+      : false;
 
   // Rendered item (actual document being rendered)
   const renderedItem = scrollItems[renderedIndex];
@@ -951,7 +961,7 @@ export function QueueScrollPage() {
 
       {/* RSS Extract Action */}
       {renderedItem?.type === "rss" && rssSelectedText && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 pointer-events-auto">
+        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-[70] pointer-events-auto">
           <button
             onClick={handleCreateRssExtract}
             className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 bg-primary text-primary-foreground rounded-lg shadow-lg hover:opacity-90 transition-opacity min-h-[44px] text-sm md:text-base"
@@ -1134,7 +1144,7 @@ export function QueueScrollPage() {
         {/* Side Rating Controls - Only for documents and RSS (flashcards have inline rating) */}
         {currentItem.type !== "flashcard" && (
           <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
-            {currentItem.type === "document" ? (
+            {currentItem.type === "document" && !isNewDocument ? (
               <>
                 <button
                   onClick={() => handleRating(1)}
@@ -1184,7 +1194,7 @@ export function QueueScrollPage() {
               <button
                 onClick={() => handleRating(3)}
                 className="group p-4 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg"
-                title="Mark as Read"
+                title={currentItem.type === "document" ? "Mark as Read" : "Mark as Read"}
               >
                 <CheckCircle className="w-7 h-7 text-white" />
                 <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">

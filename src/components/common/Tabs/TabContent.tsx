@@ -91,7 +91,9 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
     <div className="h-full w-full overflow-hidden bg-background min-h-0">
       <Suspense fallback={<TabLoader />}>
         {/* Pass any tab-specific data as props */}
-        <ContentComponent {...(activeTab.data || {})} />
+        <div key={activeTab.id} className="h-full w-full animate-tab-enter">
+          <ContentComponent {...(activeTab.data || {})} />
+        </div>
       </Suspense>
     </div>
   );

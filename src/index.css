@@ -37,4 +37,35 @@
   .text-foreground-secondary {
     color: var(--color-muted-foreground);
   }
+
+  button:enabled {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer utilities {
+  @keyframes tab-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-tab-enter {
+    animation: tab-enter 220ms ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-tab-enter {
+      animation: none;
+    }
+  }
 }

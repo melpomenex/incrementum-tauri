@@ -76,6 +76,20 @@ export function DynamicVirtualList<T>({
   estimateSize = 80,
 }: Omit<VirtualListProps<T>, "itemHeight">) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const supportsResizeObserver = typeof ResizeObserver !== "undefined";
+  if (!supportsResizeObserver) {
+    return (
+      <div ref={parentRef} className={`overflow-auto ${className}`} style={{ height: "100%" }}>
+        <div className="space-y-4 p-1">
+          {items.map((item, index) => (
+            <div key={index}>
+              {renderItem(item, index)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   const rowVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,

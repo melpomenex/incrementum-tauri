@@ -235,7 +235,7 @@ export function ItemDetailsPopover({
       {isOpen && (
         <div
           className={cn(
-            "absolute z-50 mt-2 w-96 rounded-xl border border-border bg-popover text-popover-foreground shadow-xl",
+            "absolute z-50 mt-2 w-96 rounded-xl border border-border bg-background text-popover-foreground shadow-xl",
             align === "right" ? "right-0" : "left-0"
           )}
         >

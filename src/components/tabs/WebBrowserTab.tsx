@@ -235,6 +235,9 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const [showSidebar, setShowSidebar] = useState(false);
   const [savedExtracts, setSavedExtracts] = useState<WebExtract[]>([]);
   const [showAssistant, setShowAssistant] = useState(true);
+  const [iframeStatus, setIframeStatus] = useState<"idle" | "loading" | "loaded" | "blocked">("idle");
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const iframeTimeoutRef = useRef<number | null>(null);
 
   const assistantContext = useMemo<AssistantContext>(() => {
     return currentUrl ? { type: "web", url: currentUrl } : { type: "web" };
@@ -263,6 +266,9 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     setWebviewError(null);
     setCurrentUrl(formattedUrl);
     setUrl(formattedUrl);
+    if (!isTauri()) {
+      setIframeStatus("loading");
+    }
 
     // Update history
     const newHistory = history.slice(0, historyIndex + 1);
@@ -282,6 +288,10 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       const url = history[newIndex];
       setCurrentUrl(url);
       setUrl(url);
+      if (!isTauri()) {
+        setIsLoading(true);
+        setIframeStatus("loading");
+      }
     }
   };
 
@@ -292,12 +302,20 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       const url = history[newIndex];
       setCurrentUrl(url);
       setUrl(url);
+      if (!isTauri()) {
+        setIsLoading(true);
+        setIframeStatus("loading");
+      }
     }
   };
 
   const handleRefresh = () => {
     if (currentUrl) {
       setRefreshToken((token) => token + 1);
+      if (!isTauri()) {
+        setIsLoading(true);
+        setIframeStatus("loading");
+      }
     }
   };
 
@@ -314,6 +332,26 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         console.error("Error opening URL:", error);
       }
     }
+  };
+
+  const handleIframeLoad = () => {
+    setIsLoading(false);
+    setIframeStatus((prev) => (prev === "loading" ? "loaded" : prev));
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    try {
+      const href = iframe.contentWindow?.location?.href;
+      if (href === "about:blank") {
+        setIframeStatus("blocked");
+      }
+    } catch {
+      // Cross-origin access errors are expected and not actionable here.
+    }
+  };
+
+  const handleIframeError = () => {
+    setIsLoading(false);
+    setIframeStatus("blocked");
   };
 
   const handleAddBookmark = () => {
@@ -598,6 +636,28 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (isTauri()) return;
+    if (!currentUrl) {
+      setIframeStatus("idle");
+      return;
+    }
+
+    setIframeStatus("loading");
+    if (iframeTimeoutRef.current) {
+      window.clearTimeout(iframeTimeoutRef.current);
+    }
+    iframeTimeoutRef.current = window.setTimeout(() => {
+      setIframeStatus((prev) => (prev === "loading" ? "blocked" : prev));
+    }, 6000);
+
+    return () => {
+      if (iframeTimeoutRef.current) {
+        window.clearTimeout(iframeTimeoutRef.current);
+      }
+    };
+  }, [currentUrl, refreshToken]);
+
   // Load bookmarks from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem("web-browser-bookmarks");
@@ -820,13 +880,36 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                   </div>
                 </div>
               )}
+              {!isTauri() && iframeStatus === "blocked" && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/90 z-50">
+                  <div className="text-center max-w-md px-4 space-y-3">
+                    <p className="text-sm text-foreground font-semibold">
+                      This site prevents embedding in an iframe.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Open it in your system browser to view the page.
+                    </p>
+                    <button
+                      onClick={handleOpenInBrowser}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity text-sm"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open in Browser
+                    </button>
+                  </div>
+                </div>
+              )}
               <div ref={webviewContainerRef} className="absolute inset-0">
                 {!isTauri() && currentUrl && (
                   <iframe
+                    key={`${currentUrl}-${refreshToken}`}
+                    ref={iframeRef}
                     src={currentUrl}
                     className="w-full h-full border-0"
                     sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                     title="Web Browser"
+                    onLoad={handleIframeLoad}
+                    onError={handleIframeError}
                   />
                 )}
               </div>

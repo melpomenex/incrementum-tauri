@@ -140,6 +140,9 @@ export function DocumentViewer({
   };
 
   const docType = inferFileType(currentDocument);
+  const hasDocumentHistory =
+    (currentDocument?.reps ?? currentDocument?.readingCount ?? 0) > 0
+    || !!currentDocument?.dateLastReviewed;
 
   useEffect(() => {
     lastScrollMetaRef.current = { storageKey: scrollStorageKey, documentId: currentDocument?.id ?? null };
@@ -164,15 +167,16 @@ export function DocumentViewer({
   const lastDocumentIdRef = useRef<string | null>(null);
   const lastLoadedDocumentIdRef = useRef<string | null>(null); // Track successfully loaded documents
 
+  const MAX_SELECTION_CHARS = 10000;
   const updateSelection = useCallback((rawText: string | null | undefined) => {
     const text = rawText?.trim() ?? "";
-    if (text && text.length > 0 && text.length < 1000) {
+    if (text && text.length > 0 && text.length <= MAX_SELECTION_CHARS) {
       setSelectedText(text);
       lastSelectionRef.current = text;
     } else {
       setSelectedText("");
     }
-  }, []);
+  }, [MAX_SELECTION_CHARS]);
 
   const persistScrollState = useCallback(
     (
@@ -1237,7 +1241,7 @@ export function DocumentViewer({
 
       {/* Floating Action Button for Extract Creation */}
       {selectedText && viewMode === "document" && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-10">
+        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-[70] pointer-events-auto">
           <button
             onClick={openExtractDialog}
             className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 bg-primary text-primary-foreground rounded-lg shadow-lg hover:opacity-90 transition-opacity min-h-[44px] text-sm md:text-base"
@@ -1264,7 +1268,7 @@ export function DocumentViewer({
       />
 
       {/* Hover Rating Controls - for quick document rating */}
-      {viewMode === "document" && !disableHoverRating && docType !== "youtube" && (
+      {viewMode === "document" && !disableHoverRating && docType !== "youtube" && hasDocumentHistory && (
         <HoverRatingControls
           context="document"
           documentId={documentId}
