@@ -57,7 +57,6 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     setSearchQuery,
     loadQueue,
     loadStats,
-    selectedIds,
     setSelected,
     selectAll,
     clearSelection,
@@ -80,7 +79,6 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
       setSearchQuery: state.setSearchQuery,
       loadQueue: state.loadQueue,
       loadStats: state.loadStats,
-      selectedIds: state.selectedIds,
       setSelected: state.setSelected,
       selectAll: state.selectAll,
       clearSelection: state.clearSelection,
@@ -97,6 +95,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     }),
     shallow
   );
+  // Subscribe to selectedIds separately to avoid creating new Set reference in selector
+  const selectedIds = useQueueStore((state) => state.selectedIds);
   const decks = useStudyDeckStore((state) => state.decks);
   const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
   const [queueMode, setQueueMode] = useState<QueueMode>("reading");
@@ -150,12 +150,12 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     });
     const searchedItems = normalizedQuery
       ? queueItems.filter((item) => {
-          const haystack = [item.documentTitle, item.category, ...(item.tags ?? [])]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return haystack.includes(normalizedQuery);
-        })
+        const haystack = [item.documentTitle, item.category, ...(item.tags ?? [])]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
       : queueItems;
     return [...searchedItems].sort((a, b) => getPriorityScore(b, preset) - getPriorityScore(a, preset));
   }, [items, queueMode, preset, searchQuery, activeDeck]);
@@ -349,17 +349,15 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
           <div className="flex items-center gap-1 bg-muted/60 rounded-md p-1">
             <button
               onClick={() => setQueueMode("reading")}
-              className={`px-3 py-1 text-sm rounded ${
-                queueMode === "reading" ? "bg-background shadow text-foreground" : "text-muted-foreground"
-              }`}
+              className={`px-3 py-1 text-sm rounded ${queueMode === "reading" ? "bg-background shadow text-foreground" : "text-muted-foreground"
+                }`}
             >
               Reading Queue
             </button>
             <button
               onClick={() => setQueueMode("review")}
-              className={`px-3 py-1 text-sm rounded ${
-                queueMode === "review" ? "bg-background shadow text-foreground" : "text-muted-foreground"
-              }`}
+              className={`px-3 py-1 text-sm rounded ${queueMode === "review" ? "bg-background shadow text-foreground" : "text-muted-foreground"
+                }`}
             >
               Review Queue
             </button>
@@ -379,9 +377,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
             <div className="flex items-center gap-1 bg-muted/60 rounded-md p-1">
               <button
                 onClick={() => setQueueFilterMode("due-today")}
-                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
-                  queueFilterMode === "due-today" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${queueFilterMode === "due-today" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
                 title="Documents scheduled for today (FSRS)"
               >
                 <Clock className="w-3 h-3" />
@@ -389,9 +386,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
               </button>
               <button
                 onClick={() => setQueueFilterMode("all-items")}
-                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
-                  queueFilterMode === "all-items" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${queueFilterMode === "all-items" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
                 title="All documents in your library"
               >
                 <LayoutList className="w-3 h-3" />
@@ -399,9 +395,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
               </button>
               <button
                 onClick={() => setQueueFilterMode("new-only")}
-                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
-                  queueFilterMode === "new-only" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${queueFilterMode === "new-only" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
                 title="Documents that have never been read"
               >
                 <Sparkles className="w-3 h-3" />
@@ -409,9 +404,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
               </button>
               <button
                 onClick={() => setQueueFilterMode("due-all")}
-                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${
-                  queueFilterMode === "due-all" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-3 py-1 text-xs rounded flex items-center gap-1.5 ${queueFilterMode === "due-all" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
                 title="All due items (documents, extracts, flashcards)"
               >
                 <Target className="w-3 h-3" />
@@ -557,9 +551,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                   return (
                     <div
                       key={item.id}
-                      className={`border rounded-lg bg-card transition-colors ${
-                        item.id === selectedId ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
-                      }`}
+                      className={`border rounded-lg bg-card transition-colors ${item.id === selectedId ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
+                        }`}
                     >
                       <div
                         onClick={() => setSelectedId(item.id)}
@@ -593,12 +586,12 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                             <div className="text-sm font-semibold text-foreground line-clamp-1">
                               {item.documentTitle}
                             </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatMinutesRange(estimateRange)} • Priority {getPriorityScore(item, preset)}
+                            <div className="text-xs text-muted-foreground">
+                              {formatMinutesRange(estimateRange)} • Priority {getPriorityScore(item, preset)}
+                            </div>
+                            <TimeConfidenceBar min={estimateRange.min} max={estimateRange.max} />
                           </div>
-                          <TimeConfidenceBar min={estimateRange.min} max={estimateRange.max} />
                         </div>
-                      </div>
                         <div className="flex items-center gap-3">
                           <PriorityGlyph vector={priorityVector} />
                           <ItemDetailsPopover
@@ -609,9 +602,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                                   event.stopPropagation();
                                   onClick();
                                 }}
-                                className={`p-2 rounded-md border border-border bg-background hover:bg-muted/60 ${
-                                  isOpen ? "text-foreground" : "text-muted-foreground"
-                                }`}
+                                className={`p-2 rounded-md border border-border bg-background hover:bg-muted/60 ${isOpen ? "text-foreground" : "text-muted-foreground"
+                                  }`}
                                 title="Item details"
                               >
                                 <Info className="w-4 h-4" />
@@ -751,7 +743,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                       </button>
                       {showRawJson && (
                         <pre className="text-[10px] whitespace-pre-wrap bg-background border border-border rounded p-2">
-{JSON.stringify(selectedItem, null, 2)}
+                          {JSON.stringify(selectedItem, null, 2)}
                         </pre>
                       )}
                     </div>
@@ -797,16 +789,16 @@ function StatusPill({ status }: { status: ReturnType<typeof getQueueStatus> }) {
     status === "drifted"
       ? "bg-slate-500/15 text-slate-200 dark:text-slate-300"
       : status === "due-overdue"
-      ? "bg-red-500/15 text-red-600 dark:text-red-300"
-      : status === "due"
-      ? "bg-orange-500/15 text-orange-600 dark:text-orange-300"
-      : status === "scheduled"
-      ? "bg-blue-500/15 text-blue-600 dark:text-blue-300"
-      : status === "review"
-      ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
-      : status === "learning"
-      ? "bg-amber-500/15 text-amber-600 dark:text-amber-300"
-      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300";
+        ? "bg-red-500/15 text-red-600 dark:text-red-300"
+        : status === "due"
+          ? "bg-orange-500/15 text-orange-600 dark:text-orange-300"
+          : status === "scheduled"
+            ? "bg-blue-500/15 text-blue-600 dark:text-blue-300"
+            : status === "review"
+              ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
+              : status === "learning"
+                ? "bg-amber-500/15 text-amber-600 dark:text-amber-300"
+                : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300";
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${styles}`}>{label}</span>
   );
