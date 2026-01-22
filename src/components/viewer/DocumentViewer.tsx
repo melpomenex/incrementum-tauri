@@ -656,6 +656,8 @@ export function DocumentViewer({
     }
 
     pendingViewStateRef.current = selectedViewState;
+    lastViewStateRef.current = selectedViewState;
+    currentPageRef.current = selectedViewState.pageNumber;
     setRestoreState(selectedViewState);
     setSuppressPdfAutoScroll(true);
 
@@ -720,6 +722,9 @@ export function DocumentViewer({
     const attemptVerify = () => {
       const ok = verifyRestore();
       if (ok) {
+        if (state.pageNumber !== pageNumber) {
+          setPageNumber(state.pageNumber);
+        }
         restoreScrollDoneRef.current = true;
         setTimeout(() => setSuppressPdfAutoScroll(false), 500);
         return;
@@ -802,8 +807,9 @@ export function DocumentViewer({
         } else {
           // DOM is gone, use current page number with estimated scroll percent
           // If the user navigated to page N, they're approximately at that position
+          const fallbackPage = lastViewStateRef.current?.pageNumber ?? currentPageRef.current;
           stateToSave = {
-            pageNumber: currentPageRef.current,
+            pageNumber: fallbackPage,
             scrollTop: 0,
             scrollHeight: 0,
             clientHeight: 0,
