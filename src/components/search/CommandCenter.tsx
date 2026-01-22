@@ -1,35 +1,35 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { shallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { GlobalSearch, SearchResult, SearchQuery, SearchResultType } from "./GlobalSearch";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useTabsStore } from "../../stores/tabsStore";
 import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { useUIStore } from "../../stores/uiStore";
 import { matchesDeckTags } from "../../utils/studyDecks";
-import { 
-  DocumentViewer, 
-  DashboardTab, 
-  QueueTab, 
-  ReviewTab, 
-  DocumentsTab, 
-  AnalyticsTab, 
-  SettingsTab 
+import {
+  DocumentViewer,
+  DashboardTab,
+  QueueTab,
+  ReviewTab,
+  DocumentsTab,
+  AnalyticsTab,
+  SettingsTab
 } from "../../components/tabs/TabRegistry";
 import { Command, CommandCategory, getDefaultCommands } from "../common/CommandPalette";
-import { 
-  Plus, 
-  BookOpen, 
-  Layers, 
-  BarChart3, 
-  Settings, 
+import {
+  Plus,
+  BookOpen,
+  Layers,
+  BarChart3,
+  Settings,
   Home,
   Zap
 } from "lucide-react";
 
 export function CommandCenter() {
-  const documents = useDocumentStore((state) => state.documents, shallow);
+  const documents = useDocumentStore(useShallow((state) => state.documents));
   const addTab = useTabsStore((state) => state.addTab);
-  const decks = useStudyDeckStore((state) => state.decks, shallow);
+  const decks = useStudyDeckStore(useShallow((state) => state.decks));
   const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
   const commandPaletteOpen = useUIStore((state) => state.commandPaletteOpen);
   const setCommandPaletteOpen = useUIStore((state) => state.setCommandPaletteOpen);
@@ -140,8 +140,8 @@ export function CommandCenter() {
 
     const allCommands = [...getDefaultCommands(), ...navigationCommands];
 
-    const matchedCommands = allCommands.filter(cmd => 
-      cmd.label.toLowerCase().includes(term) || 
+    const matchedCommands = allCommands.filter(cmd =>
+      cmd.label.toLowerCase().includes(term) ||
       cmd.description?.toLowerCase().includes(term) ||
       cmd.keywords?.some(k => k.toLowerCase().includes(term))
     );
@@ -165,10 +165,10 @@ export function CommandCenter() {
     if (!query.types || query.types.includes(SearchResultType.Document)) {
       const scopedDocs = hasActiveDeck
         ? documents.filter((doc) =>
-            matchesDeckTags(doc.tags ?? [], { id: "", name: "", tagFilters: activeDeckTags })
-          )
+          matchesDeckTags(doc.tags ?? [], { id: "", name: "", tagFilters: activeDeckTags })
+        )
         : documents;
-      const matchedDocs = scopedDocs.filter(doc => 
+      const matchedDocs = scopedDocs.filter(doc =>
         doc.title.toLowerCase().includes(term)
       );
 
@@ -203,12 +203,12 @@ export function CommandCenter() {
       const doc = documents.find(d => d.id === result.id);
       if (doc) {
         addTab({
-            title: doc.title,
-            icon: doc.fileType === "pdf" ? "📕" : doc.fileType === "epub" ? "📖" : doc.fileType === "youtube" ? "📺" : "📄",
-            type: "document-viewer",
-            content: DocumentViewer,
-            closable: true,
-            data: { documentId: doc.id },
+          title: doc.title,
+          icon: doc.fileType === "pdf" ? "📕" : doc.fileType === "epub" ? "📖" : doc.fileType === "youtube" ? "📺" : "📄",
+          type: "document-viewer",
+          content: DocumentViewer,
+          closable: true,
+          data: { documentId: doc.id },
         });
       }
     }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { shallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import {
   AlertTriangle,
   ChevronDown,
@@ -71,7 +71,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     loadDueDocumentsOnly,
     loadDueQueueItems,
   } = useQueueStore(
-    (state) => ({
+    useShallow((state) => ({
       items: state.items,
       isLoading: state.isLoading,
       error: state.error,
@@ -92,8 +92,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
       setQueueFilterMode: state.setQueueFilterMode,
       loadDueDocumentsOnly: state.loadDueDocumentsOnly,
       loadDueQueueItems: state.loadDueQueueItems,
-    }),
-    shallow
+    }))
   );
   // Subscribe to selectedIds separately to avoid creating new Set reference in selector
   const selectedIds = useQueueStore((state) => state.selectedIds);
