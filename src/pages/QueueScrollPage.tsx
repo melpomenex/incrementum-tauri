@@ -71,6 +71,7 @@ export function QueueScrollPage() {
   const [dueFlashcards, setDueFlashcards] = useState<LearningItem[]>([]);
   const [dueExtracts, setDueExtracts] = useState<Extract[]>([]);
   const [isRating, setIsRating] = useState(false);
+  const [ratedDocumentIds, setRatedDocumentIds] = useState<Set<string>>(new Set());
   const [, setAssistantInputActive] = useState(false);
   const [assistantPosition, setAssistantPosition] = useState<AssistantPosition>(() => {
     const saved = localStorage.getItem("assistant-panel-position");
@@ -130,13 +131,16 @@ export function QueueScrollPage() {
   const documentQueueItems = useMemo(() => allQueueItems.filter((item) => {
     if (item.itemType !== "document") return false;
 
+    // Skip recently rated documents to prevent them from reappearing immediately
+    if (ratedDocumentIds.has(item.documentId)) return false;
+
     const doc = documents.find(d => d.id === item.documentId);
 
     // Skip if document not loaded yet (shouldn't happen after loadDocuments() awaits)
     if (!doc) return false;
 
     return true;
-  }), [allQueueItems, documents]);
+  }), [allQueueItems, documents, ratedDocumentIds]);
 
   // Load queue, documents, and due flashcards/extracts on mount
   // IMPORTANT: Await loadDocuments() to prevent race condition in YouTube filter
@@ -670,7 +674,12 @@ export function QueueScrollPage() {
       if (currentItem.type === "document") {
         console.log(`Rating document ${currentItem.documentId} as ${rating} (time: ${timeTaken}s)`);
         await rateDocument(currentItem.documentId!, rating, timeTaken);
-        advanceAfterRemoval(ratedItemId);
+
+        // Track rated document to prevent immediate re-appearance
+        setRatedDocumentIds(prev => new Set(prev).add(currentItem.documentId!));
+
+        // Remove the rated document from scrollItems and reload queue
+        setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
         void loadQueue();
       } else if (currentItem.type === "flashcard" && currentItem.learningItem) {
         // Rate flashcard using FSRS
@@ -708,15 +717,11 @@ export function QueueScrollPage() {
       }
 
       // Auto-advance to next item after rating
-      if (currentItem.type !== "document") {
-        setTimeout(() => {
-          goToNext();
-          // Small delay to allow transition to complete before allowing new ratings
-          setTimeout(() => setIsRating(false), 200);
-        }, 300);
-      } else {
-        setTimeout(() => setIsRating(false), 300);
-      }
+      setTimeout(() => {
+        goToNext();
+        // Small delay to allow transition to complete before allowing new ratings
+        setTimeout(() => setIsRating(false), 200);
+      }, 300);
     } catch (error) {
       console.error("Failed to handle rating:", error);
       setIsRating(false);
