@@ -11,6 +11,7 @@ import { ExtractsList } from "../extracts/ExtractsList";
 import { LearningCardsList } from "../learning/LearningCardsList";
 import { useToast } from "../common/Toast";
 import { CreateExtractDialog } from "../extracts/CreateExtractDialog";
+import type { Extract } from "../../api/extracts";
 import { QueueNavigationControls } from "../queue/QueueNavigationControls";
 import { HoverRatingControls } from "../review/HoverRatingControls";
 import { useQueueNavigation } from "../../hooks/useQueueNavigation";
@@ -61,6 +62,7 @@ interface DocumentViewerProps {
   initialViewMode?: ViewMode;
   onPdfContextTextChange?: (text: string) => void;
   contextPageWindow?: number;
+  onExtractCreated?: (extract: Extract) => void;
 }
 
 export function DocumentViewer({
@@ -71,6 +73,7 @@ export function DocumentViewer({
   initialViewMode,
   onPdfContextTextChange,
   contextPageWindow,
+  onExtractCreated,
 }: DocumentViewerProps) {
   const toast = useToast();
   const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
@@ -770,9 +773,10 @@ export function DocumentViewer({
   );
 
   // Handle extract creation
-  const handleExtractCreated = () => {
+  const handleExtractCreated = (extract: Extract) => {
     // Navigate to extracts tab to show the new extract
     setViewMode("extracts");
+    onExtractCreated?.(extract);
   };
 
   const openExtractDialog = () => {

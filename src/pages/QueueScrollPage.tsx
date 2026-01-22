@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2 } from "lucide-react";
+import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2, Lightbulb } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
@@ -11,7 +11,7 @@ import { ScrollModeArticleEditor } from "../components/review/ScrollModeArticleE
 import { rateDocument } from "../api/algorithm";
 import { getDueItems, type LearningItem } from "../api/learning-items";
 import { getDueExtracts, submitExtractReview } from "../api/extract-review";
-import type { Extract } from "../api/extracts";
+import { createExtract, type Extract } from "../api/extracts";
 import { ExtractScrollItem } from "../components/review/ExtractScrollItem";
 import { ClozeCreatorPopup } from "../components/extracts/ClozeCreatorPopup";
 import { QACreatorPopup } from "../components/extracts/QACreatorPopup";
@@ -21,7 +21,9 @@ import { cn } from "../utils";
 import type { QueueItem } from "../types";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../components/common/ItemDetailsPopover";
 import { AssistantPanel, type AssistantContext, type AssistantPosition } from "../components/assistant/AssistantPanel";
+import { useToast } from "../components/common/Toast";
 import { getDeviceInfo } from "../lib/pwa";
+import { createDocument, updateDocumentContent } from "../api/documents";
 
 /**
  * Unified scroll item type for documents, RSS articles, and flashcards
@@ -52,9 +54,10 @@ interface ScrollItem {
  */
 export function QueueScrollPage() {
   const { filteredItems: allQueueItems, loadQueue } = useQueueStore();
-  const { documents, loadDocuments } = useDocumentStore();
+  const { documents, loadDocuments, addDocument, updateDocument } = useDocumentStore();
   const { tabs, activeTabId, closeTab, updateTab } = useTabsStore();
   const { settings, updateSettingsCategory } = useSettingsStore();
+  const toast = useToast();
 
   // Always start at index 0 for fresh queue on each scroll mode session
   // Previous logic to restore indices from tab data was causing reviewed items to replay
@@ -76,6 +79,7 @@ export function QueueScrollPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const deviceInfo = getDeviceInfo();
   const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
+  const [rssSelectedText, setRssSelectedText] = useState("");
 
   // Popup state
   const [activeExtractForCloze, setActiveExtractForCloze] = useState<{ id: string, text: string, range: [number, number] } | null>(null);
@@ -85,6 +89,7 @@ export function QueueScrollPage() {
   const scrollCooldown = 500; // ms between scroll actions
   const startTimeRef = useRef(Date.now());
   const containerRef = useRef<HTMLDivElement>(null);
+  const rssContentRef = useRef<HTMLDivElement>(null);
 
   const handleExtractUpdate = useCallback((extractId: string, updates: { content: string; notes?: string }) => {
     setScrollItems(prev => prev.map((item) => (
@@ -92,6 +97,32 @@ export function QueueScrollPage() {
         ? { ...item, extract: { ...item.extract, content: updates.content, notes: updates.notes } }
         : item
     )));
+  }, []);
+
+  const updateRssSelection = useCallback(() => {
+    const selection = window.getSelection();
+    const text = selection?.toString().trim() ?? "";
+    if (!text) {
+      setRssSelectedText("");
+      return;
+    }
+
+    const container = rssContentRef.current;
+    const anchorNode = selection?.anchorNode ?? null;
+    const focusNode = selection?.focusNode ?? null;
+    const selectionInContainer = !!container
+      && ((anchorNode && container.contains(anchorNode)) || (focusNode && container.contains(focusNode)));
+    if (!selectionInContainer) {
+      setRssSelectedText("");
+      return;
+    }
+
+    if (text.length >= 1000) {
+      setRssSelectedText("");
+      return;
+    }
+
+    setRssSelectedText(text);
   }, []);
 
   // Filter documents
@@ -282,6 +313,26 @@ export function QueueScrollPage() {
 
   // Rendered item (actual document being rendered)
   const renderedItem = scrollItems[renderedIndex];
+
+  useEffect(() => {
+    if (!renderedItem || renderedItem.type !== "rss") {
+      setRssSelectedText("");
+      return;
+    }
+
+    const handleSelection = () => updateRssSelection();
+    document.addEventListener("mouseup", handleSelection);
+    document.addEventListener("keyup", handleSelection);
+
+    return () => {
+      document.removeEventListener("mouseup", handleSelection);
+      document.removeEventListener("keyup", handleSelection);
+    };
+  }, [renderedItem, updateRssSelection]);
+
+  useEffect(() => {
+    setRssSelectedText("");
+  }, [renderedItem?.id]);
 
   const detailsTarget = useMemo<ItemDetailsTarget | null>(() => {
     if (!currentItem) return null;
@@ -672,6 +723,55 @@ export function QueueScrollPage() {
     }
   };
 
+  const handleCreateRssExtract = useCallback(async () => {
+    if (!renderedItem || renderedItem.type !== "rss" || !renderedItem.rssItem) return;
+
+    const selectionText = rssSelectedText.trim();
+    if (!selectionText) return;
+
+    const rssItem = renderedItem.rssItem;
+    const rssContent = rssItem.content || rssItem.description || "";
+    const rssLink = rssItem.link || `rss:${rssItem.id}`;
+    const existingDoc = documents.find((doc) => doc.filePath === rssLink);
+    let documentId = existingDoc?.id;
+
+    try {
+      if (!documentId) {
+        const created = await createDocument(
+          rssItem.title || renderedItem.documentTitle,
+          rssLink,
+          "html"
+        );
+        addDocument(created);
+        documentId = created.id;
+      }
+
+      if (rssContent && documentId) {
+        await updateDocumentContent(documentId, rssContent);
+        updateDocument(documentId, {
+          content: rssContent,
+          title: rssItem.title || renderedItem.documentTitle,
+          filePath: rssLink,
+          fileType: "html",
+        });
+      }
+
+      if (documentId) {
+        await createExtract({ document_id: documentId, content: selectionText });
+      }
+
+      toast.success("Extract created", "Saved from RSS item.");
+      setRssSelectedText("");
+      window.getSelection()?.removeAllRanges();
+    } catch (error) {
+      console.error("Failed to create extract from RSS item:", error);
+      toast.error(
+        "Failed to create extract",
+        error instanceof Error ? error.message : "An error occurred"
+      );
+    }
+  }, [renderedItem, rssSelectedText, documents, addDocument, updateDocument, toast]);
+
   // Handle exit
   const handleExit = () => {
     if (activeTabId) {
@@ -739,6 +839,9 @@ export function QueueScrollPage() {
                 key={renderedItem.documentId}
                 documentId={renderedItem.documentId!}
                 disableHoverRating={true}
+                onExtractCreated={() => {
+                  toast.success("Extract created", "Saved in scroll mode.");
+                }}
               />
             );
           })() : renderedItem?.type === "flashcard" && renderedItem.learningItem ? (
@@ -749,7 +852,7 @@ export function QueueScrollPage() {
             />
           ) : renderedItem?.type === "rss" ? (
             <div className="h-full w-full overflow-y-auto">
-              <div className="max-w-3xl mx-auto px-8 py-12 mobile-reading-surface">
+              <div ref={rssContentRef} className="max-w-3xl mx-auto px-8 py-12 mobile-reading-surface">
                 {/* RSS Article Header */}
                 <div className="mb-6">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3 mobile-reading-meta">
@@ -839,6 +942,21 @@ export function QueueScrollPage() {
           }}
           onCancel={() => setActiveExtractForQA(null)}
         />
+      )}
+
+      {/* RSS Extract Action */}
+      {renderedItem?.type === "rss" && rssSelectedText && (
+        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 pointer-events-auto">
+          <button
+            onClick={handleCreateRssExtract}
+            className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 bg-primary text-primary-foreground rounded-lg shadow-lg hover:opacity-90 transition-opacity min-h-[44px] text-sm md:text-base"
+            title="Create extract from selection"
+          >
+            <Lightbulb className="w-5 h-5" />
+            <span className="font-medium hidden sm:inline">Create Extract</span>
+            <span className="font-medium sm:hidden">Extract</span>
+          </button>
+        </div>
       )}
 
       {/* Scroll Queue Settings Panel */}
