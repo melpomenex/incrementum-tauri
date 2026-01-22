@@ -323,6 +323,8 @@ pub async fn import_from_obsidian_internal(
             page_count: None,
             word_count: None,
         }),
+        cover_image_url: None,
+        cover_image_source: None,
         // Scheduling fields
         next_reading_date: None,
         reading_count: 0,

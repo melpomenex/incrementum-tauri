@@ -780,6 +780,10 @@ pub async fn import_youtube_video(
     doc.tags = vec!["youtube".to_string(), "video".to_string()];
     doc.total_pages = Some(info.duration as i32);
     doc.priority_score = 7.0; // YouTube videos get higher priority
+    if !info.thumbnail.is_empty() {
+        doc.cover_image_url = Some(info.thumbnail.clone());
+        doc.cover_image_source = Some("youtube".to_string());
+    }
 
     // Set metadata with YouTube info
     // Use current time if publish_date is not available or invalid

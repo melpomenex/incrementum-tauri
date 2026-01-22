@@ -30,6 +30,8 @@ pub struct Document {
     pub is_archived: bool,
     pub is_favorite: bool,
     pub metadata: Option<DocumentMetadata>,
+    pub cover_image_url: Option<String>,
+    pub cover_image_source: Option<String>,
 
     // Scheduling fields for incremental reading
     /// Next scheduled reading date for this document
@@ -102,6 +104,8 @@ impl Document {
             is_archived: false,
             is_favorite: false,
             metadata: None,
+            cover_image_url: None,
+            cover_image_source: None,
             // Scheduling fields
             next_reading_date: None,
             reading_count: 0,

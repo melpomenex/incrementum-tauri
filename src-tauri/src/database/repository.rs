@@ -73,8 +73,8 @@ impl Repository {
                 total_pages, current_page, current_scroll_percent, current_cfi, category, tags,
                 date_added, date_modified, date_last_reviewed,
                 extract_count, learning_item_count, priority_rating, priority_slider, priority_score,
-                is_archived, is_favorite, metadata
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
+                is_archived, is_favorite, metadata, cover_image_url, cover_image_source
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
             "#,
         )
         .bind(&document.id)
@@ -100,6 +100,8 @@ impl Repository {
         .bind(document.is_archived)
         .bind(document.is_favorite)
         .bind(metadata_json)
+        .bind(&document.cover_image_url)
+        .bind(&document.cover_image_source)
         .execute(&self.pool)
         .await?;
 
@@ -147,6 +149,8 @@ impl Repository {
                     is_archived: row.get("is_archived"),
                     is_favorite: row.get("is_favorite"),
                     metadata,
+                    cover_image_url: row.try_get("cover_image_url").ok(),
+                    cover_image_source: row.try_get("cover_image_source").ok(),
                     // Scheduling fields - use try_get for compatibility with existing databases
                     next_reading_date: row.try_get("next_reading_date").ok(),
                     reading_count: row.try_get("reading_count").unwrap_or(0),
@@ -202,6 +206,8 @@ impl Repository {
                     is_archived: row.get("is_archived"),
                     is_favorite: row.get("is_favorite"),
                     metadata,
+                    cover_image_url: row.try_get("cover_image_url").ok(),
+                    cover_image_source: row.try_get("cover_image_source").ok(),
                     // Scheduling fields - use try_get for compatibility with existing databases
                     next_reading_date: row.try_get("next_reading_date").ok(),
                     reading_count: row.try_get("reading_count").unwrap_or(0),
@@ -256,6 +262,8 @@ impl Repository {
                 is_archived: row.get("is_archived"),
                 is_favorite: row.get("is_favorite"),
                 metadata,
+                cover_image_url: row.try_get("cover_image_url").ok(),
+                cover_image_source: row.try_get("cover_image_source").ok(),
                 // Scheduling fields - use try_get for compatibility with existing databases
                 next_reading_date: row.try_get("next_reading_date").ok(),
                 reading_count: row.try_get("reading_count").unwrap_or(0),
@@ -301,6 +309,31 @@ impl Repository {
         self.get_document(id).await?.ok_or_else(|| {
             crate::error::IncrementumError::NotFound(format!("Document {}", id))
         })
+    }
+
+    pub async fn update_document_cover(
+        &self,
+        id: &str,
+        cover_image_url: Option<String>,
+        cover_image_source: Option<String>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE documents SET
+                cover_image_url = ?1,
+                cover_image_source = ?2,
+                date_modified = ?3
+            WHERE id = ?4
+            "#,
+        )
+        .bind(cover_image_url)
+        .bind(cover_image_source)
+        .bind(Utc::now())
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn update_document_content(

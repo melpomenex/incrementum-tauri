@@ -516,6 +516,8 @@ fn parse_document_row(row: &sqlx::sqlite::SqliteRow) -> Result<Document> {
         is_archived: row.try_get::<i64, _>("is_archived").unwrap_or(0) != 0,
         is_favorite: row.try_get::<i64, _>("is_favorite").unwrap_or(0) != 0,
         metadata,
+        cover_image_url: row.try_get("cover_image_url").ok(),
+        cover_image_source: row.try_get("cover_image_source").ok(),
         // Scheduling fields - use try_get for compatibility
         next_reading_date: row.try_get("next_reading_date").ok(),
         reading_count: row.try_get("reading_count").unwrap_or(0),

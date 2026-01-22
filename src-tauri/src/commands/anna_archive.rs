@@ -5,6 +5,8 @@
 
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
+use regex::Regex;
+use std::collections::HashSet;
 use std::time::Duration;
 
 /// Anna's Archive mirror domains (in order of preference)
@@ -235,19 +237,68 @@ impl AnnaArchiveClient {
     /// Parse search results from HTML response
     fn parse_search_results(&self, html: &str) -> Result<Vec<BookSearchResult>> {
         let mut results = Vec::new();
+        let mut seen_ids = HashSet::new();
 
-        // TODO: Implement actual HTML parsing
-        // This would use a library like scraper or select to extract:
-        // - Book titles
-        // - Authors
-        // - Publication years
-        // - Available formats
-        // - Cover images
-        // - Descriptions
-        // - MD5 hashes
+        let id_re = Regex::new(r#"href="/md5/([a-fA-F0-9]{32})""#).unwrap();
+        let img_re = Regex::new(r#"(?is)<img[^>]+(?:data-src|src)="([^"]+)""#).unwrap();
+        let title_re = Regex::new(r#"(?is)title="([^"]+)""#).unwrap();
+        let author_re = Regex::new(r#"(?is)by\s+([^<]+)<"#).unwrap();
 
-        // Placeholder implementation
+        for caps in id_re.captures_iter(html) {
+            let id = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+            if id.is_empty() || !seen_ids.insert(id.clone()) {
+                continue;
+            }
+
+            let start = caps.get(0).map(|m| m.start()).unwrap_or(0);
+            let end = (start + 2000).min(html.len());
+            let snippet = &html[start..end];
+
+            let cover_url = img_re
+                .captures(snippet)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().trim().to_string())
+                .map(|url| normalize_cover_url(&url, self.get_current_mirror()));
+
+            let title = title_re
+                .captures(snippet)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().trim().to_string())
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "Unknown Title".to_string());
+
+            let author = author_re
+                .captures(snippet)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().trim().to_string())
+                .filter(|a| !a.is_empty());
+
+            results.push(BookSearchResult {
+                id,
+                title,
+                author,
+                year: None,
+                publisher: None,
+                language: None,
+                formats: Vec::new(),
+                cover_url,
+                description: None,
+                isbn: None,
+                md5: None,
+            });
+        }
+
         Ok(results)
+    }
+}
+
+fn normalize_cover_url(url: &str, base: &str) -> String {
+    if url.starts_with("//") {
+        format!("https:{}", url)
+    } else if url.starts_with('/') {
+        format!("{}{}", base, url)
+    } else {
+        url.to_string()
     }
 }
 

@@ -13,6 +13,10 @@ export async function getDocument(id: string): Promise<Document | null> {
   return await invokeCommand<Document | null>("get_document", { id });
 }
 
+export async function resolveDocumentCover(id: string): Promise<Document | null> {
+  return await invokeCommand<Document | null>("resolve_document_cover", { id });
+}
+
 export async function createDocument(
   title: string,
   filePath: string,

@@ -505,6 +505,14 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_documents_archived_next_reading ON documents(is_archived, next_reading_date);
         "#,
     ),
+    // Migration 015: Add document cover metadata
+    Migration::new(
+        "015_add_document_cover_metadata",
+        r#"
+        ALTER TABLE documents ADD COLUMN cover_image_url TEXT;
+        ALTER TABLE documents ADD COLUMN cover_image_source TEXT;
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

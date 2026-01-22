@@ -3,6 +3,7 @@
 use crate::error::Result;
 use crate::processor::ExtractedContent;
 use epub::doc::EpubDoc;
+use base64::{engine::general_purpose, Engine as _};
 use std::path::Path;
 use std::collections::HashMap;
 
@@ -128,6 +129,23 @@ pub async fn extract_epub_content(file_path: &str) -> Result<ExtractedContent> {
         page_count: if doc.spine.is_empty() { None } else { Some(doc.spine.len()) },
         metadata,
     })
+}
+
+/// Extract embedded cover image from an EPUB file as a data URL.
+pub async fn extract_epub_cover_data_url(file_path: &str) -> Result<Option<String>> {
+    let mut doc = EpubDoc::new(file_path).map_err(|e| {
+        crate::error::IncrementumError::NotFound(format!("Failed to open EPUB: {}", e))
+    })?;
+
+    if let Some((cover_bytes, mime)) = doc.get_cover() {
+        if cover_bytes.is_empty() {
+            return Ok(None);
+        }
+        let encoded = general_purpose::STANDARD.encode(cover_bytes);
+        return Ok(Some(format!("data:{};base64,{}", mime, encoded)));
+    }
+
+    Ok(None)
 }
 
 /// Extract a specific chapter from an EPUB file

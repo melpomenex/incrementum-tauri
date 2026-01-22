@@ -182,6 +182,8 @@ export interface Document {
     is_archived: boolean;
     is_favorite: boolean;
     metadata?: Record<string, unknown>;
+    cover_image_url?: string;
+    cover_image_source?: string;
     next_reading_date?: string;
     reading_count?: number;
     stability?: number;
@@ -218,6 +220,8 @@ export async function createDocument(doc: Partial<Document>): Promise<Document> 
         is_archived: doc.is_archived || false,
         is_favorite: doc.is_favorite || false,
         metadata: doc.metadata,
+        cover_image_url: doc.cover_image_url,
+        cover_image_source: doc.cover_image_source,
         sync_version: 0, // Will be set during sync
     };
     return put(STORES.documents, document);

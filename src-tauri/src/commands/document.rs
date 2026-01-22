@@ -5,8 +5,66 @@ use crate::database::Repository;
 use crate::algorithms::calculate_document_priority_score;
 use crate::error::Result;
 use crate::models::{Document, FileType, DocumentMetadata};
+use crate::commands::anna_archive::AnnaArchiveClient;
 use crate::processor;
+use crate::youtube;
 use std::path::PathBuf;
+
+fn build_youtube_thumbnail_url(video_id: &str) -> String {
+    format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", video_id)
+}
+
+async fn resolve_cover_for_document(
+    doc: &Document,
+    allow_anna: bool,
+) -> Result<(Option<String>, Option<String>)> {
+    if let Some(url) = &doc.cover_image_url {
+        return Ok((Some(url.clone()), doc.cover_image_source.clone()));
+    }
+
+    match doc.file_type {
+        FileType::Pdf => {
+            if let Ok(Some(url)) = processor::pdf::extract_pdf_cover_data_url(&doc.file_path).await {
+                return Ok((Some(url), Some("embedded".to_string())));
+            }
+        }
+        FileType::Epub => {
+            if let Ok(Some(url)) = processor::epub::extract_epub_cover_data_url(&doc.file_path).await {
+                return Ok((Some(url), Some("embedded".to_string())));
+            }
+        }
+        FileType::Youtube => {
+            if let Some(video_id) = youtube::extract_video_id(&doc.file_path) {
+                return Ok((Some(build_youtube_thumbnail_url(&video_id)), Some("youtube".to_string())));
+            }
+        }
+        _ => {}
+    }
+
+    if allow_anna && matches!(doc.file_type, FileType::Pdf | FileType::Epub | FileType::Markdown | FileType::Html | FileType::Other) {
+        let author = doc.metadata.as_ref().and_then(|meta| meta.author.clone());
+        let query = if let Some(author) = author {
+            format!("{} {}", doc.title, author)
+        } else {
+            doc.title.clone()
+        };
+
+        if !query.trim().is_empty() {
+            let client = AnnaArchiveClient::new();
+            if let Ok(results) = client.search_books(&query, 5).await {
+                if let Some(result) = results.into_iter().find(|item| item.cover_url.as_ref().map(|u| !u.is_empty()).unwrap_or(false)) {
+                    return Ok((result.cover_url, Some("anna".to_string())));
+                }
+            }
+        }
+    }
+
+    if allow_anna {
+        return Ok((None, Some("fallback".to_string())));
+    }
+
+    Ok((None, None))
+}
 
 #[tauri::command]
 pub async fn open_file_picker(
@@ -88,6 +146,9 @@ pub async fn import_document(
     doc.content_hash = content_hash;
     doc.total_pages = extracted.page_count.map(|p| p as i32);
     doc.metadata = metadata;
+    let (cover_url, cover_source) = resolve_cover_for_document(&doc, false).await?;
+    doc.cover_image_url = cover_url;
+    doc.cover_image_source = cover_source;
 
     let created = repo.create_document(&doc).await?;
 
@@ -185,6 +246,30 @@ pub async fn get_document(
                 doc.metadata = metadata;
             }
         }
+    }
+
+    Ok(Some(doc))
+}
+
+#[tauri::command]
+pub async fn resolve_document_cover(
+    id: String,
+    repo: State<'_, Repository>,
+) -> Result<Option<Document>> {
+    let mut doc = match repo.get_document(&id).await? {
+        Some(doc) => doc,
+        None => return Ok(None),
+    };
+
+    if doc.cover_image_url.is_some() {
+        return Ok(Some(doc));
+    }
+
+    let (cover_url, cover_source) = resolve_cover_for_document(&doc, true).await?;
+    if cover_url.is_some() || cover_source.is_some() {
+        repo.update_document_cover(&doc.id, cover_url.clone(), cover_source.clone()).await?;
+        doc.cover_image_url = cover_url;
+        doc.cover_image_source = cover_source;
     }
 
     Ok(Some(doc))

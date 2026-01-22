@@ -74,29 +74,8 @@ async fn import_single_file(
         .unwrap_or("Untitled Document");
 
     // Create document
-    let doc = Document {
-        id: uuid::Uuid::new_v4().to_string(),
-        title: file_name.to_string(),
-        file_path: file_path.to_string(),
-        file_type,
-        content: None,
-        content_hash: None,
-        total_pages: None,
-        current_page: None,
-        category: None,
-        tags: vec![],
-        date_added: chrono::Utc::now(),
-        date_modified: chrono::Utc::now(),
-        date_last_reviewed: None,
-        extract_count: 0,
-        learning_item_count: 0,
-        priority_rating: 0,
-        priority_slider: 0,
-        priority_score: 5.0,
-        is_archived: false,
-        is_favorite: false,
-        metadata: None,
-    };
+    let mut doc = Document::new(file_name.to_string(), file_path.to_string(), file_type);
+    doc.priority_score = 5.0;
 
     // Save to database
     repo.create_document(&doc).await?;

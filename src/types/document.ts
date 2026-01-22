@@ -23,6 +23,8 @@ export interface Document {
   isArchived: boolean;
   isFavorite: boolean;
   metadata?: DocumentMetadata;
+  coverImageUrl?: string;
+  coverImageSource?: string;
   nextReadingDate?: string;
   readingCount?: number;
   stability?: number;

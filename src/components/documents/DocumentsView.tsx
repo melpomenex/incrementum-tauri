@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2 } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { useCollectionStore } from "../../stores/collectionStore";
@@ -23,12 +23,51 @@ import {
   sortDocuments,
 } from "../../utils/documentsView";
 import { filterByDeck } from "../../utils/studyDecks";
-import { importYouTubeVideo } from "../../api/documents";
+import { importYouTubeVideo, resolveDocumentCover } from "../../api/documents";
+import { getYouTubeThumbnail } from "../../api/youtube";
 import { getDeviceInfo } from "../../lib/pwa";
+import { isTauri } from "../../lib/tauri";
 
 const MODE_STORAGE_KEY = "documentsViewMode";
 const SAVED_VIEWS_KEY = "documentsSavedViews";
 const MAX_VISIBLE_TAGS = 3;
+
+function extractYouTubeId(urlOrId: string): string {
+  if (!urlOrId) return "";
+
+  if (/^[a-zA-Z0-9_-]{11}$/.test(urlOrId)) {
+    return urlOrId;
+  }
+
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = urlOrId.match(pattern);
+    if (match) return match[1];
+  }
+
+  return "";
+}
+
+function getDocumentCoverUrl(doc: Document): string | null {
+  if (doc.coverImageUrl) return doc.coverImageUrl;
+  if (doc.fileType === "youtube") {
+    const videoId = extractYouTubeId(doc.filePath ?? "");
+    return videoId ? getYouTubeThumbnail(videoId) : null;
+  }
+  return null;
+}
+
+function getCoverFallbackIcon(fileType: Document["fileType"]) {
+  if (fileType === "youtube") return Youtube;
+  if (fileType === "pdf") return FileText;
+  return BookOpen;
+}
 
 type SavedView = {
   id: string;
@@ -114,6 +153,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const coverResolutionQueue = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     loadDocuments();
@@ -157,6 +197,35 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   const sortedDocuments = useMemo(() => {
     return sortDocuments(filteredDocuments, sortKey, sortDirection);
   }, [filteredDocuments, sortKey, sortDirection]);
+
+  useEffect(() => {
+    if (!isTauri() || mode !== "grid") return;
+
+    const pendingDocs = sortedDocuments.filter((doc) => {
+      if (doc.coverImageUrl || doc.coverImageSource === "fallback") return false;
+      return !coverResolutionQueue.current.has(doc.id);
+    });
+
+    if (pendingDocs.length === 0) return;
+
+    pendingDocs.forEach((doc) => {
+      coverResolutionQueue.current.add(doc.id);
+      resolveDocumentCover(doc.id)
+        .then((updated) => {
+          if (updated) {
+            updateDocument(doc.id, {
+              coverImageUrl: updated.coverImageUrl,
+              coverImageSource: updated.coverImageSource,
+            });
+          }
+          coverResolutionQueue.current.delete(doc.id);
+        })
+        .catch((error) => {
+          console.warn(`Failed to resolve cover for document ${doc.id}:`, error);
+          coverResolutionQueue.current.delete(doc.id);
+        });
+    });
+  }, [mode, sortedDocuments, updateDocument]);
 
   const sectionedDocuments = useMemo(() => {
     const sections: Record<string, Document[]> = {};
@@ -735,60 +804,80 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                     </button>
                     {!isCollapsed && (
                       <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {docs.map((doc) => (
-                          <div
-                            key={doc.id}
-                            onClick={(event) => {
-                              if (isMobile) {
-                                onOpenDocument?.(doc);
-                                return;
-                              }
-                              handleSelectRow(doc, event.metaKey || event.ctrlKey);
-                            }}
-                            className={`p-4 rounded-lg border transition-shadow cursor-pointer ${
-                              selectedIds.has(doc.id)
-                                ? "border-primary bg-primary/5"
-                                : "border-border bg-background hover:shadow-md"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(doc.id)}
-                                onChange={(event) => {
-                                  event.stopPropagation();
-                                  handleSelectRow(doc, true);
-                                }}
-                              />
-                              <span className="text-xs text-muted-foreground">{formatRelativeTime(getLastTouched(doc))}</span>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2">
-                              <PriorityBadge doc={doc} />
-                              <span className="text-xs text-muted-foreground">{getPriorityReason(doc)}</span>
-                            </div>
-                            <h3 className="mt-2 font-semibold text-foreground line-clamp-2">{doc.title}</h3>
-                            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                              <span className="px-2 py-0.5 rounded bg-muted/60 text-muted-foreground">{doc.fileType}</span>
-                              <ProgressBar doc={doc} />
-                            </div>
-                            <div className="mt-3">
-                              <TagsInline tags={doc.tags} />
-                            </div>
-                            {isMobile && (
-                              <div className="mt-3">
-                                <button
-                                  onClick={(event) => {
+                        {docs.map((doc) => {
+                          const coverUrl = getDocumentCoverUrl(doc);
+                          const CoverIcon = getCoverFallbackIcon(doc.fileType);
+                          return (
+                            <div
+                              key={doc.id}
+                              onClick={(event) => {
+                                if (isMobile) {
+                                  onOpenDocument?.(doc);
+                                  return;
+                                }
+                                handleSelectRow(doc, event.metaKey || event.ctrlKey);
+                              }}
+                              className={`p-4 rounded-lg border transition-shadow cursor-pointer ${
+                                selectedIds.has(doc.id)
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border bg-background hover:shadow-md"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedIds.has(doc.id)}
+                                  onChange={(event) => {
                                     event.stopPropagation();
-                                    onOpenDocument?.(doc);
+                                    handleSelectRow(doc, true);
                                   }}
-                                  className="px-3 py-2 bg-primary text-primary-foreground rounded text-xs mobile-density-tap"
-                                >
-                                  Open / Read
-                                </button>
+                                />
+                                <span className="text-xs text-muted-foreground">{formatRelativeTime(getLastTouched(doc))}</span>
                               </div>
-                            )}
-                          </div>
-                        ))}
+                              <div className="mt-3 overflow-hidden rounded-md border border-border/60 bg-muted/40">
+                                <div className="aspect-[2/3] w-full">
+                                  {coverUrl ? (
+                                    <img
+                                      src={coverUrl}
+                                      alt={doc.title}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="h-full w-full bg-gradient-to-br from-muted to-muted/40 flex items-center justify-center">
+                                      <CoverIcon className="w-10 h-10 text-muted-foreground/70" />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="mt-3 flex items-center gap-2">
+                                <PriorityBadge doc={doc} />
+                                <span className="text-xs text-muted-foreground">{getPriorityReason(doc)}</span>
+                              </div>
+                              <h3 className="mt-2 font-semibold text-foreground line-clamp-2">{doc.title}</h3>
+                              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="px-2 py-0.5 rounded bg-muted/60 text-muted-foreground">{doc.fileType}</span>
+                                <ProgressBar doc={doc} />
+                              </div>
+                              <div className="mt-3">
+                                <TagsInline tags={doc.tags} />
+                              </div>
+                              {isMobile && (
+                                <div className="mt-3">
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      onOpenDocument?.(doc);
+                                    }}
+                                    className="px-3 py-2 bg-primary text-primary-foreground rounded text-xs mobile-density-tap"
+                                  >
+                                    Open / Read
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
