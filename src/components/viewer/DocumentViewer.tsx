@@ -147,6 +147,13 @@ export function DocumentViewer({
     currentPageRef.current = pageNumber;
   }, [pageNumber]);
 
+  // Track the last page user viewed, independent of scroll suppression
+  // This ensures we save the correct page even if scroll handler was suppressed
+  const lastViewedPageRef = useRef(pageNumber);
+  useEffect(() => {
+    lastViewedPageRef.current = pageNumber;
+  }, [pageNumber]);
+
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
@@ -591,16 +598,37 @@ export function DocumentViewer({
         return;
       }
 
-      // Use lastScrollStateRef if available (populated by scroll handler)
-      // Otherwise fall back to current page number (for users who opened and closed without scrolling)
-      const lastState = lastScrollStateRef.current;
-      const stateToSave = lastState ?? {
-        pageNumber: currentPageRef.current,
-        scrollTop: 0,
-        scrollHeight: 0,
-        clientHeight: 0,
-        scrollPercent: 0,
-      };
+      // Try to capture current scroll state from DOM (PDF might still be mounted)
+      let stateToSave = lastScrollStateRef.current;
+
+      if (!stateToSave) {
+        // Fallback: try reading from DOM, then use current page number
+        const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
+        if (container) {
+          const scrollTop = container.scrollTop;
+          const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+          const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
+          stateToSave = {
+            pageNumber: currentPageRef.current,
+            scrollTop,
+            scrollHeight: container.scrollHeight,
+            clientHeight: container.clientHeight,
+            scrollPercent,
+          };
+          console.log("[DocumentViewer] Cleanup - captured from DOM:", stateToSave);
+        } else {
+          // DOM is gone, use current page number with estimated scroll percent
+          // If the user navigated to page N, they're approximately at that position
+          stateToSave = {
+            pageNumber: currentPageRef.current,
+            scrollTop: 0,
+            scrollHeight: 0,
+            clientHeight: 0,
+            scrollPercent: 0,
+          };
+          console.log("[DocumentViewer] Cleanup - using page number fallback:", stateToSave);
+        }
+      }
 
       console.log("[DocumentViewer] Cleanup - saving position:", stateToSave);
 
