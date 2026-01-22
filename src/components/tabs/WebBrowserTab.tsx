@@ -23,6 +23,7 @@ import {
 import { createExtract, type CreateExtractInput } from "../../api/extracts";
 import { createLearningItem, type CreateLearningItemInput } from "../../api/learning-items";
 import { AssistantPanel, type AssistantContext } from "../assistant/AssistantPanel";
+import { useToast } from "../common/Toast";
 
 // Type definitions for lazy loading
 type WebviewType = import("@tauri-apps/api/webview").Webview; // Instance type
@@ -222,6 +223,7 @@ function isLinux(): boolean {
 }
 
 export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
+  const toast = useToast();
   const [url, setUrl] = useState("");
   const [currentUrl, setCurrentUrl] = useState("");
   const [pageTitle, setPageTitle] = useState("");
@@ -401,10 +403,10 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         },
       ]);
 
-      // Show success notification
-      console.log("Extract saved successfully!");
+      toast.success("Extract created", "Saved from web page.");
     } catch (error) {
       console.error("Error saving extract:", error);
+      toast.error("Failed to create extract");
     }
   };
 

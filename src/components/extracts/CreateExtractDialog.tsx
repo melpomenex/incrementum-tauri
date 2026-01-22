@@ -4,6 +4,7 @@ import { createExtract, CreateExtractInput, Extract } from "../../api/extracts";
 import { generateLearningItemsFromExtract } from "../../api/learning-items";
 import { ClozeCreatorPopup } from "./ClozeCreatorPopup";
 import { QACreatorPopup } from "./QACreatorPopup";
+import { useToast } from "../common/Toast";
 
 interface CreateExtractDialogProps {
   documentId: string;
@@ -66,6 +67,7 @@ export function CreateExtractDialog({
   const [showPreview, setShowPreview] = useState(false);
   const [creationMode, setCreationMode] = useState<"edit" | "cloze" | "qa">("edit");
   const [savedExtractId, setSavedExtractId] = useState<string | null>(null);
+  const toast = useToast();
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -159,6 +161,7 @@ export function CreateExtractDialog({
       };
 
       const extract = await createExtract(input);
+      toast.success("Extract created");
 
       if (action === "generate") {
         setIsGenerating(true);
