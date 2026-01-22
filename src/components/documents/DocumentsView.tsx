@@ -803,7 +803,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                       </span>
                     </button>
                     {!isCollapsed && (
-                      <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="p-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
                         {docs.map((doc) => {
                           const coverUrl = getDocumentCoverUrl(doc);
                           const CoverIcon = getCoverFallbackIcon(doc.fileType);
@@ -817,7 +817,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                                 }
                                 handleSelectRow(doc, event.metaKey || event.ctrlKey);
                               }}
-                              className={`p-3 rounded-lg border transition-shadow cursor-pointer ${
+                              className={`p-2 rounded-md border transition-shadow cursor-pointer ${
                                 selectedIds.has(doc.id)
                                   ? "border-primary bg-primary/5"
                                   : "border-border bg-background hover:shadow-md"
@@ -832,9 +832,9 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                                     handleSelectRow(doc, true);
                                   }}
                                 />
-                                <span className="text-xs text-muted-foreground">{formatRelativeTime(getLastTouched(doc))}</span>
+                              <span className="text-[10px] text-muted-foreground">{formatRelativeTime(getLastTouched(doc))}</span>
                               </div>
-                              <div className="mt-2 overflow-hidden rounded-md border border-border/60 bg-muted/40">
+                              <div className="mt-2 overflow-hidden rounded border border-border/60 bg-muted/40">
                                 <div className="aspect-[2/3] w-full">
                                   {coverUrl ? (
                                     <img
@@ -845,21 +845,21 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                                     />
                                   ) : (
                                     <div className="h-full w-full bg-gradient-to-br from-muted to-muted/40 flex items-center justify-center">
-                                      <CoverIcon className="w-10 h-10 text-muted-foreground/70" />
+                                      <CoverIcon className="w-6 h-6 text-muted-foreground/70" />
                                     </div>
                                   )}
                                 </div>
                               </div>
                               <div className="mt-2 flex items-center gap-2">
                                 <PriorityBadge doc={doc} />
-                                <span className="text-xs text-muted-foreground">{getPriorityReason(doc)}</span>
+                                <span className="text-[10px] text-muted-foreground">{getPriorityReason(doc)}</span>
                               </div>
-                              <h3 className="mt-2 text-sm font-semibold text-foreground line-clamp-2">{doc.title}</h3>
-                              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                                <span className="px-2 py-0.5 rounded bg-muted/60 text-muted-foreground">{doc.fileType}</span>
+                              <h3 className="mt-1 text-xs font-semibold text-foreground line-clamp-2">{doc.title}</h3>
+                              <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <span className="px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground">{doc.fileType}</span>
                                 <ProgressBar doc={doc} />
                               </div>
-                              <div className="mt-2">
+                              <div className="mt-1">
                                 <TagsInline tags={doc.tags} />
                               </div>
                               {isMobile && (
