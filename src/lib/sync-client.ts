@@ -90,6 +90,11 @@ async function apiRequest<T>(
  * Register a new account
  */
 export async function register(email: string, password: string): Promise<AuthResponse> {
+    const response = await apiRequest<AuthResponse>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+    });
+
     localStorage.setItem(TOKEN_KEY, response.token);
     localStorage.setItem(USER_KEY, JSON.stringify(response.user));
     localStorage.setItem(LAST_SYNC_KEY, '-1'); // Reset sync state to force full push
@@ -336,6 +341,31 @@ export async function triggerSync(): Promise<void> {
             error: error instanceof Error ? error.message : 'Sync failed',
         });
     }
+}
+
+/**
+ * Migrate demo data (from browser IndexedDB) to user account
+ * This is called automatically after login/registration
+ *
+ * Strategy: "Local Wins" for MVP
+ * - All local data is pushed to the server first
+ * - Then server data is pulled (could overwrite local in case of conflicts)
+ * - For new users (most common), there's no server data to conflict
+ * - For existing users logging in with local data, their recent work is preserved
+ */
+export async function migrateDemoDataToAccount(): Promise<void> {
+    if (!isAuthenticated()) {
+        console.warn('[Sync] Cannot migrate demo data: not authenticated');
+        return;
+    }
+
+    // Reset sync version to -1 to force full sync (push all local data)
+    setLastSyncVersion(-1);
+
+    // Trigger sync which will push all local data first, then pull server data
+    await triggerSync();
+
+    console.log('[Sync] Demo data migration complete');
 }
 
 // Auto-sync on visibility change (when tab becomes visible)

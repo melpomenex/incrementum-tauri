@@ -5,6 +5,8 @@ import { useDocumentStore } from "./stores/documentStore";
 import { invokeCommand } from "./lib/tauri";
 import * as syncClient from "./lib/sync-client";
 import { LoginModal } from "./components/auth/LoginModal";
+import { WelcomeScreen } from "./components/onboarding/WelcomeScreen";
+import { SignupPrompt } from "./components/onboarding/SignupPrompt";
 
 // Page components
 import { DocumentsPage } from "./pages/DocumentsPage";
@@ -19,26 +21,42 @@ import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
 import { SearchPage } from "./pages/SearchPage";
 import { CommandCenter } from "./components/search/CommandCenter";
 
+// Storage keys
+const ONBOARDING_COMPLETE_KEY = 'incrementum_onboarding_complete';
+
+type OnboardingStep = 'welcome' | 'signup' | null;
+
 function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [activeTab, setActiveTab] = useState("review");
   const loadAll = useAnalyticsStore((state) => state.loadAll);
   const loadDocuments = useDocumentStore((state) => state.loadDocuments);
 
+  // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(syncClient.isAuthenticated());
   const [user, setUser] = useState(syncClient.getUser());
   const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // Onboarding state
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(() => {
+    const hasCompletedOnboarding = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+    return hasCompletedOnboarding ? null : 'welcome';
+  });
 
   const handleLogin = async (email: string, password: string) => {
     await syncClient.login(email, password);
     setIsAuthenticated(true);
     setUser(syncClient.getUser());
+    // Migrate any local demo data to the account
+    await syncClient.migrateDemoDataToAccount();
   };
 
   const handleRegister = async (email: string, password: string) => {
     await syncClient.register(email, password);
     setIsAuthenticated(true);
     setUser(syncClient.getUser());
+    // Migrate any local demo data to the account
+    await syncClient.migrateDemoDataToAccount();
   };
 
   const handleLogout = () => {
@@ -57,7 +75,32 @@ function App() {
     loadDocuments();
     setIsAuthenticated(syncClient.isAuthenticated());
     setUser(syncClient.getUser());
+
+    // Subscribe to sync state changes
+    const unsubscribe = syncClient.subscribeSyncState((syncState) => {
+      // Sync state updates could trigger UI changes here
+      console.log('Sync state updated:', syncState);
+    });
+
+    return unsubscribe;
   }, [loadAll, loadDocuments]);
+
+  const handleCompleteOnboarding = () => {
+    localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+    setOnboardingStep(null);
+  };
+
+  const handleWelcomeComplete = () => {
+    setOnboardingStep('signup');
+  };
+
+  const handleSkipOnboarding = () => {
+    setOnboardingStep(null);
+  };
+
+  const handleSignupFromOnboarding = () => {
+    setShowLoginModal(true);
+  };
 
   const renderPage = () => {
     switch (currentPage) {
@@ -83,6 +126,47 @@ function App() {
   // Full-screen pages without layout
   if (currentPage === "queue-scroll") {
     return <QueueScrollPage />;
+  }
+
+  // Show onboarding screens
+  if (onboardingStep === 'welcome') {
+    return (
+      <>
+        <WelcomeScreen onComplete={handleWelcomeComplete} />
+        {/* Show app behind the onboarding overlay */}
+        <NewMainLayout
+          activeItem={currentPage}
+          onPageChange={setCurrentPage}
+          isAuthenticated={isAuthenticated}
+          user={user}
+          onLoginClick={() => setShowLoginModal(true)}
+          onLogout={handleLogout}
+        >
+          {renderPage()}
+        </NewMainLayout>
+      </>
+    );
+  }
+
+  if (onboardingStep === 'signup') {
+    return (
+      <>
+        <SignupPrompt
+          onSignup={handleSignupFromOnboarding}
+          onContinueDemo={handleCompleteOnboarding}
+        />
+        <NewMainLayout
+          activeItem={currentPage}
+          onPageChange={setCurrentPage}
+          isAuthenticated={isAuthenticated}
+          user={user}
+          onLoginClick={() => setShowLoginModal(true)}
+          onLogout={handleLogout}
+        >
+          {renderPage()}
+        </NewMainLayout>
+      </>
+    );
   }
 
   return (

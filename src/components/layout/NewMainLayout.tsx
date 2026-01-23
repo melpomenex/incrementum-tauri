@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useAnalyticsStore } from "../../stores/analyticsStore";
 import { SyncStatusIndicator } from "../sync/SyncStatusIndicator";
+import { UserMenu } from "../auth/UserMenu";
 import {
   Home,
   BookOpen,
@@ -102,10 +103,15 @@ function TopHeaderBar({
   onLogout,
 }: {
   isAuthenticated?: boolean;
-  user?: { id: string; email: string } | null;
+  user?: { id: string; email: string; subscriptionTier?: string } | null;
   onLoginClick?: () => void;
   onLogout?: () => void;
 }) {
+  const handleOpenSettings = () => {
+    // This will be handled by parent navigation
+    window.dispatchEvent(new CustomEvent('navigate-to-settings'));
+  };
+
   return (
     <header className="h-10 bg-card border-b border-border flex items-center justify-between px-3 flex-shrink-0">
       {/* Left side - navigation icons */}
@@ -127,7 +133,10 @@ function TopHeaderBar({
 
       {/* Right side - actions */}
       <div className="flex items-center gap-2">
-        <SyncStatusIndicator />
+        <SyncStatusIndicator
+          isAuthenticated={isAuthenticated}
+          onLoginClick={onLoginClick}
+        />
         <button className="p-1 hover:bg-muted rounded transition-colors" title="Search">
           <Search className="w-4 h-4 text-foreground-secondary" />
         </button>
@@ -136,26 +145,11 @@ function TopHeaderBar({
         </button>
         <div className="h-4 w-px bg-border mx-1" />
         {isAuthenticated && user ? (
-          <div className="relative group">
-            <button className="p-1 hover:bg-muted rounded transition-colors" title="User profile">
-              <div className="w-5 h-5 rounded-full bg-primary-300 flex items-center justify-center text-white text-xs font-medium">
-                {user.email[0].toUpperCase()}
-              </div>
-            </button>
-            <div className="absolute right-0 top-full mt-1 w-48 py-1 rounded-lg bg-card border border-border shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
-              <div className="px-3 py-2 text-sm text-foreground-secondary border-b border-border truncate">
-                {user.email}
-              </div>
-              {onLogout && (
-                <button
-                  onClick={onLogout}
-                  className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-muted"
-                >
-                  Sign out
-                </button>
-              )}
-            </div>
-          </div>
+          <UserMenu
+            user={user}
+            onLogout={onLogout}
+            onOpenSettings={handleOpenSettings}
+          />
         ) : (
           onLoginClick && (
             <button

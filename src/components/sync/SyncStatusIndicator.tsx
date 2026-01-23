@@ -6,13 +6,17 @@ import React, { useState, useEffect } from 'react';
 import { Cloud, CloudOff, RefreshCw, AlertCircle, Check } from 'lucide-react';
 import * as syncClient from '../../lib/sync-client';
 
-export function SyncStatusIndicator() {
+interface SyncStatusIndicatorProps {
+    isAuthenticated?: boolean;
+    onLoginClick?: () => void;
+}
+
+export function SyncStatusIndicator({ isAuthenticated = false, onLoginClick }: SyncStatusIndicatorProps) {
     const [syncState, setSyncState] = useState<syncClient.SyncState>({
         isSyncing: false,
         lastSyncTime: null,
         error: null,
     });
-    const [isAuthenticated, setIsAuthenticated] = useState(syncClient.isAuthenticated());
 
     useEffect(() => {
         // Subscribe to sync state changes
@@ -20,8 +24,11 @@ export function SyncStatusIndicator() {
         return unsubscribe;
     }, []);
 
-    const handleSync = async () => {
+    const handleClick = async () => {
         if (!isAuthenticated) {
+            if (onLoginClick) {
+                onLoginClick();
+            }
             return;
         }
         await syncClient.triggerSync();
@@ -41,16 +48,16 @@ export function SyncStatusIndicator() {
 
     return (
         <button
-            onClick={handleSync}
-            disabled={syncState.isSyncing || !isAuthenticated}
+            onClick={handleClick}
+            disabled={syncState.isSyncing}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 syncState.error
                     ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
                     : isAuthenticated
                         ? 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20'
-                        : 'bg-zinc-800 text-zinc-400'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
             }`}
-            title={syncState.error || (isAuthenticated ? `Last sync: ${formatLastSync(syncState.lastSyncTime)}` : 'Sign in to sync')}
+            title={syncState.error || (isAuthenticated ? `Last sync: ${formatLastSync(syncState.lastSyncTime)}` : 'Sign in to sync your data across devices')}
         >
             {syncState.isSyncing ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
@@ -68,7 +75,7 @@ export function SyncStatusIndicator() {
             {isAuthenticated ? (
                 syncState.isSyncing ? 'Syncing...' : 'Synced'
             ) : (
-                'Local Mode'
+                'Demo Mode'
             )}
         </button>
     );
