@@ -25,6 +25,7 @@ interface PDFViewerProps {
   onScrollPositionChange?: (state: {
     pageNumber: number;
     scrollTop: number;
+    scrollLeft: number;
     scrollHeight: number;
     clientHeight: number;
     scrollPercent: number;
@@ -465,16 +466,21 @@ export function PDFViewer({
     const viewport = pageViewportRefs.current[pageIndex];
 
     let targetScrollTop: number | null = null;
+    let targetScrollLeft: number | null = null;
+
     if (restoreState.dest && pageEl && viewport) {
       const left = restoreState.dest.left ?? 0;
       const top = restoreState.dest.top ?? 0;
-      const [, viewportY] = viewport.convertToViewportPoint(left, top);
+      const [viewportX, viewportY] = viewport.convertToViewportPoint(left, top);
       targetScrollTop = pageEl.offsetTop + viewportY;
+      targetScrollLeft = viewportX;
     } else if (typeof restoreState.scrollTop === "number") {
       targetScrollTop = restoreState.scrollTop;
+      targetScrollLeft = typeof restoreState.scrollLeft === "number" ? restoreState.scrollLeft : null;
     } else if (typeof restoreState.scrollPercent === "number") {
       const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
       targetScrollTop = (restoreState.scrollPercent / 100) * maxScroll;
+      targetScrollLeft = typeof restoreState.scrollLeft === "number" ? restoreState.scrollLeft : null;
     }
 
     if (targetScrollTop === null) return;
@@ -485,6 +491,12 @@ export function PDFViewer({
     restorationWindowRef.current = Date.now() + 2000;
     isProgrammaticScrollRef.current = true;
     container.scrollTop = clamped;
+
+    // Restore horizontal scroll position if available
+    if (targetScrollLeft !== null) {
+      const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+      container.scrollLeft = Math.min(Math.max(0, targetScrollLeft), maxScrollLeft);
+    }
 
     const timeout = setTimeout(() => {
       isProgrammaticScrollRef.current = false;
@@ -646,10 +658,12 @@ export function PDFViewer({
 
       const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
       const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
-      console.log("[PDFViewer] Scroll position change:", { currentPage, scrollTop, scrollPercent });
+      const scrollLeft = container.scrollLeft;
+      console.log("[PDFViewer] Scroll position change:", { currentPage, scrollTop, scrollLeft, scrollPercent });
       onScrollPositionChange?.({
         pageNumber: currentPage,
         scrollTop,
+        scrollLeft,
         scrollHeight: container.scrollHeight,
         clientHeight: container.clientHeight,
         scrollPercent,
