@@ -37,6 +37,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastVideoIdRef = useRef<string | null>(null);
   const lastSavedTimeRef = useRef<number>(0);
+  const seekDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const documentIdRef = useRef(documentId);
   const onLoadRef = useRef(onLoad);
   const titleRef = useRef(title);
@@ -52,6 +53,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
   const [startTime, setStartTime] = useState(0);
+  const [positionLoaded, setPositionLoaded] = useState(false);
 
   // Update refs when values change
   useEffect(() => {
@@ -113,21 +115,25 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     // Check if URL has a timestamp parameter
     if (state.time !== undefined) {
       setStartTime(state.time);
+      setPositionLoaded(true); // URL timestamp takes precedence
       console.log(`[YouTubeViewer] Restoring timestamp from URL: ${state.time}s`);
     }
   }, [videoId]);
 
   // Load saved position from document
   const loadSavedPosition = useCallback(async () => {
-    if (!documentId) return;
+    if (!documentId) {
+      setPositionLoaded(true); // No document ID, so we're ready to play
+      return;
+    }
 
     try {
       const doc = await getDocumentAuto(documentId);
       if (doc && doc.current_page !== null && doc.current_page !== undefined) {
         const savedTime = doc.current_page;
         // For videos, current_page stores the timestamp in seconds
-        // Only restore if the video is more than 5% watched (to avoid resuming from beginning)
-        const hasProgress = savedTime > 0;
+        // Only restore if the video has meaningful progress (>= 3 seconds)
+        const hasProgress = savedTime >= 3;
         if (hasProgress) {
           setStartTime(savedTime);
           console.log(`Restoring video position: ${savedTime}s`);
@@ -135,6 +141,8 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       }
     } catch (error) {
       console.log("Failed to load saved position:", error);
+    } finally {
+      setPositionLoaded(true); // Mark as loaded regardless of success/failure
     }
   }, [documentId]);
 
@@ -165,6 +173,12 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   // Initialize player (use refs to avoid circular dependencies)
   const initializePlayer = useCallback(() => {
     if (!containerRef.current) return;
+
+    // Wait for position to be loaded before initializing
+    if (!positionLoaded) {
+      console.log('[YouTubeViewer] Waiting for position to load before initializing player...');
+      return;
+    }
 
     // If player already exists
     if (playerRef.current) {
@@ -272,6 +286,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         clearInterval(autoSaveIntervalRef.current);
         autoSaveIntervalRef.current = null;
       }
+      if (seekDebounceRef.current) {
+        clearTimeout(seekDebounceRef.current);
+        seekDebounceRef.current = null;
+      }
       // Save position before unmount (use ref to avoid dependency)
       if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && documentIdRef.current) {
         const time = playerRef.current.getCurrentTime();
@@ -285,15 +303,21 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         playerRef.current = null;
       }
     };
-  }, [initializePlayer, saveCurrentPosition]);
+  }, [initializePlayer, saveCurrentPosition, positionLoaded]);
 
   // Seek to time
   const handleSeek = useCallback((time: number) => {
     if (playerRef.current && playerRef.current.seekTo) {
       playerRef.current.seekTo(time, true);
       setCurrentTime(time);
-      // Save position when user manually seeks
-      saveCurrentPosition(time);
+
+      // Debounce save when user manually seeks (to avoid excessive saves during scrubbing)
+      if (seekDebounceRef.current) {
+        clearTimeout(seekDebounceRef.current);
+      }
+      seekDebounceRef.current = setTimeout(() => {
+        saveCurrentPosition(time);
+      }, 500); // Save 500ms after user stops seeking
     }
   }, [saveCurrentPosition]);
 
