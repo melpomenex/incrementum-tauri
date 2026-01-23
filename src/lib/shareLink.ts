@@ -18,6 +18,8 @@ export interface DocumentState {
   extracts?: string[];
   /** Scroll position percentage (0-100) */
   scroll?: number;
+  /** Zoom/scale value (e.g., 1.0 for 100%, 1.5 for 150%, or "page-width"/"fit-page") */
+  zoom?: string | number;
   /** Video timestamp in seconds (for YouTube videos) */
   time?: number;
 }
@@ -42,7 +44,12 @@ export function encodeDocumentState(state: DocumentState): string {
   }
 
   if (state.scroll !== undefined) {
-    params.push(`scroll=${state.scroll}`);
+    params.push(`scroll=${Math.round(state.scroll)}`);
+  }
+
+  if (state.zoom !== undefined) {
+    // Encode zoom as string (supports both numeric and named values like "page-width")
+    params.push(`zoom=${encodeURIComponent(String(state.zoom))}`);
   }
 
   if (state.highlights && state.highlights.length > 0) {
@@ -83,6 +90,13 @@ export function decodeDocumentState(fragment: string): DocumentState {
 
   if (params.has('scroll')) {
     state.scroll = parseInt(params.get('scroll') || '0', 10);
+  }
+
+  if (params.has('zoom')) {
+    const zoomStr = decodeURIComponent(params.get('zoom') || '');
+    // Try parsing as number, fallback to string for named values like "page-width"
+    const zoomNum = parseFloat(zoomStr);
+    state.zoom = !isNaN(zoomNum) ? zoomNum : zoomStr;
   }
 
   if (params.has('hl')) {
@@ -247,8 +261,32 @@ export function isEmptyState(state: DocumentState): boolean {
   return !state.pos &&
     !state.time &&
     !state.scroll &&
+    state.zoom === undefined &&
     (!state.highlights || state.highlights.length === 0) &&
     (!state.extracts || state.extracts.length === 0);
+}
+
+/**
+ * Update URL hash without triggering navigation
+ * Uses replaceState for smooth state updates without adding history entries
+ */
+export function updateUrlHash(state: DocumentState, replace = true): void {
+  const fragment = encodeDocumentState(state);
+  const newUrl = window.location.pathname + window.location.search + fragment;
+
+  if (replace) {
+    window.history.replaceState(null, '', newUrl);
+  } else {
+    window.history.pushState(null, '', newUrl);
+  }
+}
+
+/**
+ * Push a new history entry with updated hash
+ * Use this when you want back/forward navigation to work
+ */
+export function pushUrlHash(state: DocumentState): void {
+  updateUrlHash(state, false);
 }
 
 /**

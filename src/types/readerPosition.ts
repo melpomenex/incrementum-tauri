@@ -14,6 +14,7 @@ export type ViewState = {
   viewMode?: string;
   dest?: PdfDest | null;
   scrollTop?: number | null;
+  scrollLeft?: number | null;
   scrollPercent?: number | null;
   updatedAt: number;
   version?: number;

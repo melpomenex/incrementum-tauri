@@ -21,7 +21,8 @@ import { updateDocumentProgressAuto, convertDocumentPdfToHtml } from "../../api/
 import { rateDocument } from "../../api/algorithm";
 import type { ReviewRating } from "../../api/review";
 import { autoExtractWithCache, isAutoExtractEnabled } from "../../utils/documentAutoExtract";
-import { generateShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
+import { generateShareUrl, copyShareLink, DocumentState, parseStateFromUrl, updateUrlHash } from "../../lib/shareLink";
+import { usePdfUrlState } from "../../hooks/usePdfUrlState";
 import { getViewState, getViewStateKey, parseViewState, setViewState } from "../../lib/readerPosition";
 import type { ViewState } from "../../types/readerPosition";
 
@@ -110,6 +111,7 @@ export function DocumentViewer({
   const lastScrollStateRef = useRef<{
     pageNumber: number;
     scrollTop: number;
+    scrollLeft: number;
     scrollHeight: number;
     clientHeight: number;
     scrollPercent: number;
@@ -163,6 +165,48 @@ export function DocumentViewer({
   };
 
   const docType = inferFileType(currentDocument);
+
+  // Handle URL hash state changes (back/forward navigation)
+  const handleUrlHashChange = useCallback((state: {
+    pageNumber?: number;
+    scale?: number;
+    zoomMode?: "custom" | "fit-width" | "fit-page";
+    scrollPercent?: number;
+  }) => {
+    if (state.pageNumber !== undefined) {
+      setPageNumber(state.pageNumber);
+    }
+    if (state.scale !== undefined) {
+      setScale(state.scale);
+    }
+    if (state.zoomMode !== undefined) {
+      setZoomMode(state.zoomMode);
+    }
+    // Scroll percent will be handled by the restoration logic
+    if (state.scrollPercent !== undefined) {
+      // Trigger a restore with the scroll percent
+      const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
+      if (container) {
+        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+        container.scrollTop = (state.scrollPercent / 100) * maxScroll;
+      }
+    }
+  }, []);
+
+  // URL hash state synchronization for PDF back/forward navigation
+  const { pushState: pushUrlState, getInitialState: getUrlInitialState } = usePdfUrlState(
+    {
+      pageNumber,
+      scale,
+      zoomMode,
+      scrollPercent: lastScrollStateRef.current?.scrollPercent,
+    },
+    {
+      enabled: viewMode === "document" && docType === "pdf",
+      debounceMs: 800,
+      onHashChange: handleUrlHashChange,
+    }
+  );
   const hasDocumentHistory =
     (currentDocument?.reps ?? currentDocument?.readingCount ?? 0) > 0
     || !!currentDocument?.dateLastReviewed;
@@ -219,6 +263,7 @@ export function DocumentViewer({
       state: {
         pageNumber: number;
         scrollTop: number;
+        scrollLeft: number;
         scrollHeight: number;
         clientHeight: number;
         scrollPercent: number;
@@ -235,6 +280,7 @@ export function DocumentViewer({
         pageNumber: state.pageNumber,
         scrollPercent: state.scrollPercent,
         scrollTop: state.scrollTop,
+        scrollLeft: state.scrollLeft,
         scrollHeight: state.scrollHeight,
         clientHeight: state.clientHeight,
         updatedAt,
@@ -254,6 +300,7 @@ export function DocumentViewer({
             viewMode,
             dest: lastViewStateRef.current?.dest ?? null,
             scrollTop: state.scrollTop,
+            scrollLeft: state.scrollLeft,
             scrollPercent: state.scrollPercent,
             updatedAt,
             version: 1,
@@ -277,6 +324,7 @@ export function DocumentViewer({
     (state: {
       pageNumber: number;
       scrollTop: number;
+      scrollLeft: number;
       scrollHeight: number;
       clientHeight: number;
       scrollPercent: number;
@@ -302,6 +350,7 @@ export function DocumentViewer({
           viewMode,
           dest: state.dest ?? null,
           scrollTop: state.scrollTop,
+          scrollLeft: state.scrollLeft,
           scrollPercent: state.scrollPercent,
           updatedAt,
           version: 1,
@@ -327,11 +376,13 @@ export function DocumentViewer({
     ) as HTMLElement | null;
     if (!container) return null;
     const scrollTop = container.scrollTop;
+    const scrollLeft = container.scrollLeft;
     const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
     const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
     return {
       pageNumber,
       scrollTop,
+      scrollLeft,
       scrollHeight: container.scrollHeight,
       clientHeight: container.clientHeight,
       scrollPercent,
@@ -437,11 +488,13 @@ export function DocumentViewer({
       const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
       if (container) {
         const scrollTop = container.scrollTop;
+        const scrollLeft = container.scrollLeft;
         const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
         const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
         const state = {
           pageNumber: currentPageRef.current,
           scrollTop,
+          scrollLeft,
           scrollHeight: container.scrollHeight,
           clientHeight: container.clientHeight,
           scrollPercent,
@@ -451,6 +504,7 @@ export function DocumentViewer({
           pageNumber: state.pageNumber,
           scrollPercent: state.scrollPercent,
           scrollTop: state.scrollTop,
+          scrollLeft: state.scrollLeft,
           scrollHeight: state.scrollHeight,
           clientHeight: state.clientHeight,
           updatedAt: Date.now(),
@@ -525,11 +579,23 @@ export function DocumentViewer({
 
     skipStoredScrollRef.current = false;
     const state = parseStateFromUrl();
-    skipStoredScrollRef.current = state.scroll !== undefined;
+    skipStoredScrollRef.current = state.scroll !== undefined || state.pos !== undefined || state.zoom !== undefined;
 
     // Restore page number from fragment
     if (state.pos !== undefined) {
       setPageNumber(state.pos);
+    }
+
+    // Restore zoom/scale from fragment
+    if (state.zoom !== undefined) {
+      if (typeof state.zoom === 'number') {
+        setScale(state.zoom);
+        setZoomMode('custom');
+      } else if (state.zoom === 'page-width' || state.zoom === 'fit-width') {
+        setZoomMode('fit-width');
+      } else if (state.zoom === 'fit-page') {
+        setZoomMode('fit-page');
+      }
     }
 
     // Restore scroll position from fragment
@@ -795,11 +861,13 @@ export function DocumentViewer({
         const container = document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
         if (container) {
           const scrollTop = container.scrollTop;
+          const scrollLeft = container.scrollLeft;
           const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
           const scrollPercent = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0;
           stateToSave = {
             pageNumber: currentPageRef.current,
             scrollTop,
+            scrollLeft,
             scrollHeight: container.scrollHeight,
             clientHeight: container.clientHeight,
             scrollPercent,
@@ -812,6 +880,7 @@ export function DocumentViewer({
           stateToSave = {
             pageNumber: fallbackPage,
             scrollTop: 0,
+            scrollLeft: 0,
             scrollHeight: 0,
             clientHeight: 0,
             scrollPercent: 0,
@@ -826,6 +895,7 @@ export function DocumentViewer({
         pageNumber: stateToSave.pageNumber,
         scrollPercent: stateToSave.scrollPercent,
         scrollTop: stateToSave.scrollTop,
+        scrollLeft: stateToSave.scrollLeft,
         scrollHeight: stateToSave.scrollHeight,
         clientHeight: stateToSave.clientHeight,
         updatedAt: Date.now(),
@@ -845,6 +915,7 @@ export function DocumentViewer({
           viewMode: viewModeRef.current,
           dest: null,
           scrollTop: stateToSave.scrollTop,
+          scrollLeft: stateToSave.scrollLeft,
           scrollPercent: stateToSave.scrollPercent,
           updatedAt: Date.now(),
           version: 1,
@@ -928,18 +999,32 @@ export function DocumentViewer({
 
   const handlePrevPage = () => {
     if (currentDocument && currentDocument.totalPages) {
-      setPageNumber((prev) => Math.max(1, prev - 1));
+      const newPage = Math.max(1, pageNumber - 1);
+      setPageNumber(newPage);
+      // Push to history for back/forward navigation
+      if (docType === "pdf") {
+        pushUrlState({ pageNumber: newPage, scale, zoomMode, scrollPercent: lastScrollStateRef.current?.scrollPercent });
+      }
     }
   };
 
   const handleNextPage = () => {
     if (currentDocument && currentDocument.totalPages) {
-      setPageNumber((prev) => Math.min(currentDocument.totalPages!, prev + 1));
+      const newPage = Math.min(currentDocument.totalPages!, pageNumber + 1);
+      setPageNumber(newPage);
+      // Push to history for back/forward navigation
+      if (docType === "pdf") {
+        pushUrlState({ pageNumber: newPage, scale, zoomMode, scrollPercent: lastScrollStateRef.current?.scrollPercent });
+      }
     }
   };
 
   const handlePageChange = (newPageNumber: number) => {
     setPageNumber(newPageNumber);
+    // Push to history for significant page jumps (e.g., TOC navigation)
+    if (docType === "pdf" && Math.abs(newPageNumber - pageNumber) > 1) {
+      pushUrlState({ pageNumber: newPageNumber, scale, zoomMode, scrollPercent: undefined });
+    }
   };
 
   const handleZoomIn = () => {
@@ -1081,6 +1166,21 @@ export function DocumentViewer({
     // Add page position for documents
     if (pageNumber && docType !== 'youtube') {
       state.pos = pageNumber;
+    }
+
+    // Add zoom/scale for PDFs
+    if (docType === 'pdf') {
+      if (zoomMode === 'custom' && scale !== 1.0) {
+        state.zoom = scale;
+      } else if (zoomMode !== 'custom') {
+        state.zoom = zoomMode === 'fit-width' ? 'page-width' : zoomMode;
+      }
+
+      // Add scroll position if meaningful
+      const scrollPercent = lastScrollStateRef.current?.scrollPercent;
+      if (scrollPercent !== undefined && scrollPercent > 0) {
+        state.scroll = Math.round(scrollPercent);
+      }
     }
 
     // Add timestamp for YouTube videos

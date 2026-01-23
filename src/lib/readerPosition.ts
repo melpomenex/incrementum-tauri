@@ -31,6 +31,7 @@ const normalizeViewState = (state: ViewState): Omit<ViewState, "updatedAt"> => {
     viewMode: state.viewMode,
     dest: normalizeDest(state.dest ?? null),
     scrollTop: typeof state.scrollTop === "number" ? Math.round(state.scrollTop) : null,
+    scrollLeft: typeof state.scrollLeft === "number" ? Math.round(state.scrollLeft) : null,
     scrollPercent: typeof state.scrollPercent === "number" ? roundTo(state.scrollPercent, 2) : null,
     version: state.version,
   };
