@@ -917,6 +917,17 @@ const commandHandlers: Record<string, CommandHandler> = {
         throw new Error('Book download is not available in browser mode');
     },
 
+    // PDF to HTML conversion (not available in browser mode)
+    convert_pdf_to_html: async (args) => {
+        const filePath = args.file_path as string;
+        throw new Error('PDF to HTML conversion requires the desktop app (Tauri). This feature is not available in web browser mode.');
+    },
+
+    convert_document_pdf_to_html: async (args) => {
+        const id = args.id as string;
+        throw new Error('PDF to HTML conversion requires the desktop app (Tauri). This feature is not available in web browser mode.');
+    },
+
     // Demo content commands
     get_demo_content_status: async () => {
         return await getDemoContentStatus();

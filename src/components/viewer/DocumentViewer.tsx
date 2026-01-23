@@ -1110,12 +1110,16 @@ export function DocumentViewer({
     try {
       const result = await convertDocumentPdfToHtml(currentDocument.id, true);
 
+      if (!result) {
+        throw new Error('Conversion returned no result. This feature may not be available in browser mode.');
+      }
+
       if (result.saved_path) {
         toast.success(
           "PDF converted to HTML",
           `Saved to: ${result.saved_path}. The HTML file allows better text selection and extraction.`
         );
-      } else {
+      } else if (result.html_content) {
         // Open in new window/tab as fallback
         const blob = new Blob([result.html_content], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
@@ -1124,6 +1128,8 @@ export function DocumentViewer({
           "PDF converted to HTML",
           "Opened in a new tab. You can now select and copy text more easily."
         );
+      } else {
+        throw new Error('Conversion returned no HTML content');
       }
     } catch (error) {
       console.error("Failed to convert PDF to HTML:", error);
