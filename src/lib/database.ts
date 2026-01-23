@@ -6,7 +6,7 @@
 import { v4 as uuidv4 } from 'uuid';
 
 // Database version - increment when schema changes
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const DB_NAME = 'incrementum';
 
 // Store names
@@ -36,7 +36,8 @@ export async function openDatabase(): Promise<IDBDatabase> {
         };
 
         request.onupgradeneeded = (event) => {
-            const database = (event.target as IDBOpenDBRequest).result;
+            const target = event.target as IDBOpenDBRequest;
+            const database = target.result;
 
             // Documents store
             if (!database.objectStoreNames.contains(STORES.documents)) {
@@ -64,7 +65,13 @@ export async function openDatabase(): Promise<IDBDatabase> {
 
             // Files store (for document blobs)
             if (!database.objectStoreNames.contains(STORES.files)) {
-                database.createObjectStore(STORES.files, { keyPath: 'id' });
+                const fileStore = database.createObjectStore(STORES.files, { keyPath: 'id' });
+                fileStore.createIndex('by_filename', 'filename', { unique: false });
+            } else if (target.transaction) {
+                const fileStore = target.transaction.objectStore(STORES.files);
+                if (!fileStore.indexNames.contains('by_filename')) {
+                    fileStore.createIndex('by_filename', 'filename', { unique: false });
+                }
             }
 
             // Sync state store
@@ -530,8 +537,25 @@ export async function getFile(id: string): Promise<StoredFile | null> {
 }
 
 export async function getFileByName(filename: string): Promise<StoredFile | null> {
-    const allFiles = await getAll<StoredFile>(STORES.files);
-    return allFiles.find(f => f.filename === filename) || null;
+    const database = await openDatabase();
+    return new Promise((resolve, reject) => {
+        const tx = database.transaction(STORES.files, 'readonly');
+        const store = tx.objectStore(STORES.files);
+        if (!store.indexNames.contains('by_filename')) {
+            // Fallback for older DBs that haven't upgraded yet.
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const match = request.result.find((f: StoredFile) => f.filename === filename) || null;
+                resolve(match);
+            };
+            request.onerror = () => reject(request.error);
+            return;
+        }
+        const index = store.index('by_filename');
+        const request = index.get(filename);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+    });
 }
 
 export async function deleteFile(id: string): Promise<void> {

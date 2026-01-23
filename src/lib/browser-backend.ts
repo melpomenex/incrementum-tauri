@@ -333,11 +333,10 @@ const commandHandlers: Record<string, CommandHandler> = {
                 });
             }
 
-            // If not in memory (page refresh), we need to check IndexedDB 'files' store
-            const files = await db.getAllFiles();
+            // If not in memory (page refresh), try IndexedDB by filename (legacy storage)
             // Assumes filename is part of the virtual path and unique enough for now
             const filename = filePath.replace('browser-file://', '');
-            const storedFile = files.find(f => f.filename === filename);
+            const storedFile = await db.getFileByName(filename);
 
             if (storedFile) {
                 return new Promise((resolve, reject) => {
