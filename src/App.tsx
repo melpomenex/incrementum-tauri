@@ -85,6 +85,32 @@ function App() {
     return unsubscribe;
   }, [loadAll, loadDocuments]);
 
+  // Developer helper: expose functions to window for debugging
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as any).__incrementumDev = {
+        resetOnboarding: () => {
+          localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
+          setOnboardingStep('welcome');
+          console.log('[Dev] Onboarding reset - refresh to see welcome screen');
+        },
+        showSignupPrompt: () => {
+          setOnboardingStep('signup');
+        },
+        completeOnboarding: () => {
+          localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+          setOnboardingStep(null);
+        },
+        getAuthState: () => ({
+          isAuthenticated,
+          user,
+          hasToken: !!syncClient.getAuthToken(),
+        }),
+      };
+      console.log('[Dev] __incrementumDev available in window');
+    }
+  }, [isAuthenticated, user]);
+
   const handleCompleteOnboarding = () => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setOnboardingStep(null);
