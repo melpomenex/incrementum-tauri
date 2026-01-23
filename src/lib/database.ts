@@ -18,7 +18,11 @@ const STORES = {
     syncState: 'sync_state',
 } as const;
 
+// Avoid storing extremely large document content in IndexedDB values.
+const MAX_DOCUMENT_CONTENT_CHARS = 2_000_000;
+
 let db: IDBDatabase | null = null;
+const corruptedDocumentIds = new Set<string>();
 
 /**
  * Open the IndexedDB database
@@ -120,6 +124,17 @@ async function getAll<T>(storeName: string): Promise<T[]> {
     });
 }
 
+async function getAllKeys(storeName: string): Promise<IDBValidKey[]> {
+    const database = await openDatabase();
+    return new Promise((resolve, reject) => {
+        const tx = database.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const request = store.getAllKeys();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
 /**
  * Generic get by index
  */
@@ -203,12 +218,18 @@ export interface Document {
 
 export async function createDocument(doc: Partial<Document>): Promise<Document> {
     const now = new Date().toISOString();
+    const content = doc.content && doc.content.length > MAX_DOCUMENT_CONTENT_CHARS
+        ? undefined
+        : doc.content;
+    if (doc.content && doc.content.length > MAX_DOCUMENT_CONTENT_CHARS) {
+        console.warn('[IndexedDB] Skipping oversized document content');
+    }
     const document: Document = {
         id: doc.id || uuidv4(),
         title: doc.title || 'Untitled',
         file_path: doc.file_path || '',
         file_type: doc.file_type || 'pdf',
-        content: doc.content,
+        content,
         content_hash: doc.content_hash,
         total_pages: doc.total_pages,
         current_page: doc.current_page || 1,
@@ -235,19 +256,47 @@ export async function createDocument(doc: Partial<Document>): Promise<Document> 
 }
 
 export async function getDocument(id: string): Promise<Document | null> {
-    return getById<Document>(STORES.documents, id);
+    try {
+        return await getById<Document>(STORES.documents, id);
+    } catch (error) {
+        console.error('[IndexedDB] Failed to read document', id, error);
+        corruptedDocumentIds.add(id);
+        return null;
+    }
 }
 
 export async function getDocuments(): Promise<Document[]> {
-    const docs = await getAll<Document>(STORES.documents);
-    return docs.filter(d => !d._deleted).sort((a, b) =>
-        new Date(b.date_added).getTime() - new Date(a.date_added).getTime()
-    );
+    try {
+        const docs = await getAll<Document>(STORES.documents);
+        return docs.filter(d => !d._deleted).sort((a, b) =>
+            new Date(b.date_added).getTime() - new Date(a.date_added).getTime()
+        );
+    } catch (error) {
+        console.warn('[IndexedDB] Falling back to safe document scan:', error);
+        const ids = await getAllKeys(STORES.documents);
+        const docs: Document[] = [];
+        for (const id of ids) {
+            if (typeof id !== 'string') continue;
+            if (corruptedDocumentIds.has(id)) continue;
+            const doc = await getDocument(id);
+            if (doc && !doc._deleted) {
+                docs.push(doc);
+            }
+        }
+        return docs.sort((a, b) =>
+            new Date(b.date_added).getTime() - new Date(a.date_added).getTime()
+        );
+    }
 }
 
 export async function updateDocument(id: string, updates: Partial<Document>): Promise<Document> {
     const existing = await getDocument(id);
     if (!existing) throw new Error(`Document ${id} not found`);
+
+    if (updates.content && updates.content.length > MAX_DOCUMENT_CONTENT_CHARS) {
+        console.warn('[IndexedDB] Skipping oversized document content update');
+        updates = { ...updates, content: undefined };
+    }
 
     const updated: Document = {
         ...existing,
