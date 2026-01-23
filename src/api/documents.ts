@@ -244,3 +244,65 @@ export async function updateDocumentProgressAuto(
     current_view_state: viewStatePayload,
   });
 }
+
+/**
+ * Result from PDF to HTML conversion
+ */
+export interface PdfToHtmlResult {
+  /** The generated HTML content */
+  html_content: string;
+  /** Path where the HTML file was saved (if save_to_file was true) */
+  saved_path: string | null;
+  /** The original PDF filename */
+  original_filename: string;
+}
+
+/**
+ * Convert a PDF file to HTML format for better text selection and extraction
+ * @param filePath Path to the PDF file
+ * @param saveToFile Whether to save the HTML to a file
+ * @param outputPath Custom output path (optional, defaults to same directory as PDF)
+ */
+export async function convertPdfToHtml(
+  filePath: string,
+  saveToFile?: boolean,
+  outputPath?: string
+): Promise<PdfToHtmlResult> {
+  if (isWebMode()) {
+    return await browserInvoke<PdfToHtmlResult>("convert_pdf_to_html", {
+      file_path: filePath,
+      save_to_file: saveToFile,
+      output_path: outputPath,
+    });
+  }
+  return await invokeCommand<PdfToHtmlResult>("convert_pdf_to_html", {
+    filePath,
+    saveToFile,
+    outputPath,
+  });
+}
+
+/**
+ * Convert a PDF document by ID to HTML format
+ * @param id Document ID
+ * @param saveToFile Whether to save the HTML to a file
+ * @param outputPath Custom output path (optional)
+ */
+export async function convertDocumentPdfToHtml(
+  id: string,
+  saveToFile?: boolean,
+  outputPath?: string
+): Promise<PdfToHtmlResult> {
+  if (isWebMode()) {
+    return await browserInvoke<PdfToHtmlResult>("convert_document_pdf_to_html", {
+      id,
+      save_to_file: saveToFile,
+      output_path: outputPath,
+    });
+  }
+  return await invokeCommand<PdfToHtmlResult>("convert_document_pdf_to_html", {
+    id,
+    saveToFile,
+    outputPath,
+  });
+}

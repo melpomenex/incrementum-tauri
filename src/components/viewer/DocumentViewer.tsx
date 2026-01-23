@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize, Share2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize, Share2, FileCode, Loader2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useDocumentStore, useTabsStore, useQueueStore } from "../../stores";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -17,7 +17,7 @@ import { HoverRatingControls } from "../review/HoverRatingControls";
 import { useQueueNavigation } from "../../hooks/useQueueNavigation";
 import { cn } from "../../utils";
 import * as documentsApi from "../../api/documents";
-import { updateDocumentProgressAuto } from "../../api/documents";
+import { updateDocumentProgressAuto, convertDocumentPdfToHtml } from "../../api/documents";
 import { rateDocument } from "../../api/algorithm";
 import type { ReviewRating } from "../../api/review";
 import { autoExtractWithCache, isAutoExtractEnabled } from "../../utils/documentAutoExtract";
@@ -198,6 +198,7 @@ export function DocumentViewer({
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
+  const [isConvertingToHtml, setIsConvertingToHtml] = useState(false);
   const lastSelectionRef = useRef("");
   const lastDocumentIdRef = useRef<string | null>(null);
   const lastLoadedDocumentIdRef = useRef<string | null>(null); // Track successfully loaded documents
@@ -1101,6 +1102,40 @@ export function DocumentViewer({
     }
   };
 
+  // Convert PDF to HTML for better text selection
+  const handleConvertToHtml = async () => {
+    if (!currentDocument || docType !== 'pdf') return;
+
+    setIsConvertingToHtml(true);
+    try {
+      const result = await convertDocumentPdfToHtml(currentDocument.id, true);
+
+      if (result.saved_path) {
+        toast.success(
+          "PDF converted to HTML",
+          `Saved to: ${result.saved_path}. The HTML file allows better text selection and extraction.`
+        );
+      } else {
+        // Open in new window/tab as fallback
+        const blob = new Blob([result.html_content], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        toast.success(
+          "PDF converted to HTML",
+          "Opened in a new tab. You can now select and copy text more easily."
+        );
+      }
+    } catch (error) {
+      console.error("Failed to convert PDF to HTML:", error);
+      toast.error(
+        "Conversion failed",
+        error instanceof Error ? error.message : "Failed to convert PDF to HTML"
+      );
+    } finally {
+      setIsConvertingToHtml(false);
+    }
+  };
+
   if (!currentDocument) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -1197,6 +1232,27 @@ export function DocumentViewer({
           >
             <Share2 className="w-4 h-4" />
           </button>
+
+          {/* Convert to HTML Button (PDF only) */}
+          {docType === "pdf" && (
+            <button
+              onClick={handleConvertToHtml}
+              disabled={isConvertingToHtml}
+              className={cn(
+                "p-2 rounded-md transition-colors relative",
+                isConvertingToHtml
+                  ? "bg-muted text-muted-foreground cursor-wait"
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+              title="Convert to HTML for better text selection"
+            >
+              {isConvertingToHtml ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileCode className="w-4 h-4" />
+              )}
+            </button>
+          )}
 
           {/* View Mode Toggle */}
           <div className="flex items-center bg-muted rounded-md p-1 mr-2">

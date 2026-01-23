@@ -142,6 +142,8 @@ pub fn run() {
             commands::import_documents,
             commands::read_document_file,
             commands::fetch_url_content,
+            commands::convert_pdf_to_html,
+            commands::convert_document_pdf_to_html,
             // Extract commands
             commands::get_extracts,
             commands::get_extract,

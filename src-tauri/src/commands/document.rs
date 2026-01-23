@@ -388,6 +388,98 @@ pub struct FetchedUrlContent {
     pub content_type: String,
 }
 
+/// Result from converting PDF to HTML
+#[derive(serde::Serialize)]
+pub struct PdfToHtmlResult {
+    /// The generated HTML content
+    pub html_content: String,
+    /// Path where the HTML file was saved (if save_to_file was true)
+    pub saved_path: Option<String>,
+    /// The original PDF filename
+    pub original_filename: String,
+}
+
+/// Convert a PDF document to HTML format for better text selection and extraction
+/// This creates a structured HTML document that preserves the text content with proper styling
+#[tauri::command]
+pub async fn convert_pdf_to_html(
+    file_path: String,
+    save_to_file: Option<bool>,
+    output_path: Option<String>,
+) -> Result<PdfToHtmlResult> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+    let original_filename = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("document.pdf")
+        .to_string();
+
+    // Convert PDF to HTML
+    let html_content = processor::pdf::convert_pdf_to_html(&file_path).await?;
+
+    // Optionally save to file
+    let saved_path = if save_to_file.unwrap_or(false) {
+        Some(processor::pdf::save_pdf_as_html(&file_path, output_path.as_deref()).await?)
+    } else {
+        None
+    };
+
+    Ok(PdfToHtmlResult {
+        html_content,
+        saved_path,
+        original_filename,
+    })
+}
+
+/// Convert a PDF document by ID to HTML format
+#[tauri::command]
+pub async fn convert_document_pdf_to_html(
+    id: String,
+    save_to_file: Option<bool>,
+    output_path: Option<String>,
+    repo: State<'_, Repository>,
+) -> Result<PdfToHtmlResult> {
+    use std::path::Path;
+
+    // Get the document
+    let doc = repo.get_document(&id).await?
+        .ok_or_else(|| crate::error::IncrementumError::NotFound(format!(
+            "Document not found: {}", id
+        )))?;
+
+    // Verify it's a PDF
+    if !matches!(doc.file_type, FileType::Pdf) {
+        return Err(crate::error::IncrementumError::Internal(
+            "Document is not a PDF".to_string()
+        ));
+    }
+
+    let path = Path::new(&doc.file_path);
+    let original_filename = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("document.pdf")
+        .to_string();
+
+    // Convert PDF to HTML
+    let html_content = processor::pdf::convert_pdf_to_html(&doc.file_path).await?;
+
+    // Optionally save to file
+    let saved_path = if save_to_file.unwrap_or(false) {
+        Some(processor::pdf::save_pdf_as_html(&doc.file_path, output_path.as_deref()).await?)
+    } else {
+        None
+    };
+
+    Ok(PdfToHtmlResult {
+        html_content,
+        saved_path,
+        original_filename,
+    })
+}
+
 /// Fetch content from a URL and save it to a temporary location
 /// Used for Arxiv PDF downloads and URL-based imports
 #[tauri::command]
