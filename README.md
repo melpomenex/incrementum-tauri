@@ -286,28 +286,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ---
 
-## 🗺️ Roadmap
-
-### Near Term (1-2 weeks)
-
-- [ ] Review session limits (size/time)
-- [ ] Enhanced screenshot capture (xcap migration)
-- [ ] Advanced analytics (heatmaps, forget curves)
-
-### Medium Term (1-2 months)
-
-- [ ] Study scheduler with reminders
-- [ ] Export to Anki/SuperMemo formats
-- [ ] Algorithm tuning and personalization
-
-### Long Term (3+ months)
-
-- [ ] Collaborative features (shared decks)
-- [ ] Cloud sync service
-- [ ] Mobile companion app
-
----
-
 ## 📊 Performance
 
 | Operation | Time |
@@ -325,7 +303,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## 📝 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Apache 2.0 License - see [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 
