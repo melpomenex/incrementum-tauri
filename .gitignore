@@ -17,8 +17,7 @@ Vagrantfile
 Incrementum-CPP
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+.vscode
 .idea
 .DS_Store
 *.suo
@@ -37,4 +36,4 @@ rustc-ice-*.txt
 *.anpkg
 
 # Vagrant
-.vagrant/machines/
+.vagrant
