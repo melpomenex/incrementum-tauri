@@ -118,7 +118,7 @@ No additional dependencies required.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/incrementum-tauri.git
+git clone https://github.com/melpomenex/incrementum-tauri.git
 cd incrementum-tauri
 
 # Install dependencies
