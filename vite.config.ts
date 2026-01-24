@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
+import path from "path";
 
 // @ts-expect-error process is a nodejs global
 const rawHost = process.env.TAURI_DEV_HOST;
@@ -22,6 +23,11 @@ export default defineConfig(async ({ mode }) => {
 
   return {
     plugins,
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
+    },
 
     // Use relative asset paths so the production build works with
     // Tauri's custom protocol and when opening the file directly.
@@ -43,12 +49,14 @@ export default defineConfig(async ({ mode }) => {
       strictPort: true,
       host: host || "127.0.0.1",
       // Force HMR to a fixed port to avoid handshake issues in the Tauri webview.
-      hmr: {
-        protocol: "ws",
-        host: host || "127.0.0.1",
-        port: 15174,
-        clientPort: 15174,
-      },
+      hmr: isTauriBuild
+        ? false
+        : {
+          protocol: "ws",
+          host: host || "127.0.0.1",
+          port: 15174,
+          clientPort: 15174,
+        },
       watch: {
         // 3. tell Vite to ignore watching `src-tauri`
         ignored: ["**/src-tauri/**", "**/server/**"],
@@ -109,6 +117,10 @@ export default defineConfig(async ({ mode }) => {
             },
       },
       chunkSizeWarningLimit: 1000,
+    },
+    optimizeDeps: {
+      // Force re-optimization in Tauri dev to avoid stale pre-bundles.
+      force: isTauriBuild,
     },
   };
 });

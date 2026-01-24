@@ -200,16 +200,23 @@ export function getDeviceInfo(): DeviceInfo {
  * Register PWA on app mount
  */
 export function initializePWA(): void {
-  if (typeof window !== 'undefined') {
-    registerServiceWorker().then((registered) => {
-      if (registered) {
-        console.log('[PWA] PWA initialized successfully');
-      }
-    });
-
-    // Log initial online status
-    console.log('[PWA] Initial online status:', isOnline() ? 'online' : 'offline');
+  if (typeof window === 'undefined') {
+    return;
   }
+
+  const shouldEnablePWA = !isTauri() && (import.meta.env.MODE === 'pwa' || import.meta.env.PROD);
+  if (!shouldEnablePWA) {
+    return;
+  }
+
+  registerServiceWorker().then((registered) => {
+    if (registered) {
+      console.log('[PWA] PWA initialized successfully');
+    }
+  });
+
+  // Log initial online status
+  console.log('[PWA] Initial online status:', isOnline() ? 'online' : 'offline');
 }
 
 /**
@@ -241,3 +248,4 @@ export function usePWAStatus() {
 
 // Import useState and useEffect for the hook
 import { useState, useEffect } from 'react';
+import { isTauri } from './tauri';
