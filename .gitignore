@@ -13,6 +13,9 @@ dist-ssr
 *.local
 Vagrantfile
 
+# Ignore directories
+Incrementum-CPP
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
