@@ -17,6 +17,7 @@ import {
   GraduationCap,
   RefreshCw,
   Plug,
+  BookText,
 } from "lucide-react";
 import { KeyboardShortcutSettings } from "./KeyboardShortcutsSettings";
 import { AISettings as AIProviderSettings } from "./AIProviderSettings";
@@ -27,6 +28,7 @@ import { DocumentsSettings } from "./DocumentsSettings";
 import { CloudStorageSettings } from "./CloudStorageSettings";
 import { ThemePicker } from "./ThemePicker";
 import { IntegrationSettings } from "./IntegrationSettings";
+import { HandbookSettings } from "./HandbookSettings";
 
 /**
  * Settings tab
@@ -44,6 +46,7 @@ export enum SettingsTab {
   ImportExport = "import-export",
   Notifications = "notifications",
   Privacy = "privacy",
+  Handbook = "handbook",
 }
 
 /**
@@ -62,6 +65,7 @@ export const SETTINGS_TABS = [
   { id: SettingsTab.ImportExport, label: "Import/Export", icon: FolderOpen },
   { id: SettingsTab.Notifications, label: "Notifications", icon: Bell },
   { id: SettingsTab.Privacy, label: "Privacy", icon: Shield },
+  { id: SettingsTab.Handbook, label: "Handbook", icon: BookText },
 ];
 
 /**
@@ -184,6 +188,7 @@ export function SettingsPage() {
           {activeTab === SettingsTab.ImportExport && <ImportExportSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Notifications && <NotificationSettings onChange={() => setHasChanges(true)} />}
           {activeTab === SettingsTab.Privacy && <PrivacySettings onChange={() => setHasChanges(true)} />}
+          {activeTab === SettingsTab.Handbook && <HandbookSettings />}
         </div>
 
         {/* Footer */}
