@@ -207,7 +207,8 @@ impl ChatSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::providers::{ChatCompletionRequest, ChatCompletionResponse, LLMProvider, Message, MessageRole};
+    use crate::ai::providers::{ChatCompletionRequest, ChatCompletionResponse, LLMProvider};
+    use crate::ai::AIProvider;
 
     #[derive(Debug)]
     struct MockProvider {
@@ -239,9 +240,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_answer_with_context() {
-        let provider = Box::new(MockProvider {
-            response: "Artificial Intelligence is a field of computer science.".to_string(),
-        });
+        let provider = AIProvider::Mock(Box::new(MockProvider {
+            response: "AI (Artificial Intelligence) is a field of computer science.".to_string(),
+        }));
         let qa = QuestionAnswerer::new(provider);
 
         let result = qa
@@ -254,9 +255,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_session() {
-        let provider = Box::new(MockProvider {
+        let provider = AIProvider::Mock(Box::new(MockProvider {
             response: "That's correct!".to_string(),
-        });
+        }));
         let mut session = ChatSession::new(provider, "Test document content.".to_string());
 
         let response = session.send_message("Hello").await.unwrap();

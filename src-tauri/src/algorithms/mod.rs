@@ -10,7 +10,6 @@ use crate::models::{LearningItem, ReviewRating};
 use chrono::{Utc, Duration};
 
 pub mod optimizer;
-pub mod fsrs;
 pub mod supermemo;
 pub mod queue_selector;
 pub mod document_scheduler;
@@ -98,50 +97,6 @@ impl SM2Params {
     pub fn next_review_date(&self) -> chrono::DateTime<Utc> {
         let days = self.interval.max(0.0) as i64;
         Utc::now() + Duration::days(days)
-    }
-}
-
-/// FSRS-5 algorithm wrapper (already implemented in review.rs)
-pub struct FsrsScheduler {
-    pub desired_retention: f32,
-}
-
-impl FsrsScheduler {
-    pub fn new(desired_retention: f32) -> Self {
-        Self {
-            desired_retention,
-        }
-    }
-
-    /// Calculate next states using FSRS (simplified version)
-    pub fn calculate_next_state(
-        &self,
-        current_stability: f64,
-        current_difficulty: f64,
-        _elapsed_days: u32,
-        rating: ReviewRating,
-    ) -> (f64, f64) {
-        // This is a simplified version - the actual FSRS is used in submit_review
-        // Return (new_stability, new_difficulty)
-
-        let _rating_value = rating as i32;
-
-        // Simplified FSRS-like calculation
-        let new_stability = match rating {
-            ReviewRating::Again => current_stability * 0.5,
-            ReviewRating::Hard => current_stability * 0.8,
-            ReviewRating::Good => current_stability * 1.2,
-            ReviewRating::Easy => current_stability * 1.5,
-        };
-
-        let new_difficulty = match rating {
-            ReviewRating::Again => (current_difficulty + 0.2).min(10.0),
-            ReviewRating::Hard => (current_difficulty + 0.1).min(10.0),
-            ReviewRating::Good => current_difficulty,
-            ReviewRating::Easy => (current_difficulty - 0.1).max(1.0),
-        };
-
-        (new_stability, new_difficulty)
     }
 }
 

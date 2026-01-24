@@ -279,6 +279,7 @@ impl BatchSummarizer {
 mod tests {
     use super::*;
     use crate::ai::providers::{ChatCompletionResponse, LLMProvider, LLMProviderType};
+    use crate::ai::AIProvider;
 
     #[derive(Debug)]
     struct MockProvider {
@@ -310,9 +311,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_summarize() {
-        let provider = Box::new(MockProvider {
+        let provider = AIProvider::Mock(Box::new(MockProvider {
             response: "This is a summary.".to_string(),
-        });
+        }));
         let summarizer = Summarizer::new(provider);
 
         let result = summarizer
@@ -325,9 +326,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_key_points() {
-        let provider = Box::new(MockProvider {
+        let provider = AIProvider::Mock(Box::new(MockProvider {
             response: "- Point one\n- Point two\n- Point three".to_string(),
-        });
+        }));
         let summarizer = Summarizer::new(provider);
 
         let result = summarizer.extract_key_points("Content...", 3).await.unwrap();
@@ -338,9 +339,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_title() {
-        let provider = Box::new(MockProvider {
+        let provider = AIProvider::Mock(Box::new(MockProvider {
             response: "The Future of AI".to_string(),
-        });
+        }));
         let summarizer = Summarizer::new(provider);
 
         let result = summarizer.generate_title("Content about AI...").await.unwrap();

@@ -80,6 +80,15 @@ impl ParameterOptimizer {
         history: &[ReviewHistory],
         initial_params: OptimizationParams,
     ) -> OptimizationResult {
+        if history.is_empty() {
+            return OptimizationResult {
+                best_params: initial_params,
+                expected_retention: 0.5,
+                iterations: 0,
+                converged: false,
+            };
+        }
+
         let mut best_params = initial_params.clone();
         let mut best_score = self.evaluate_params(&best_params, history);
         let mut converged = false;

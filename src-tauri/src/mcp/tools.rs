@@ -852,6 +852,21 @@ impl MCPToolRegistry {
             document.difficulty,
             elapsed_days
         );
+        let result = match result {
+            Ok(result) => result,
+            Err(e) => {
+                return Ok(ToolCallResult {
+                    content: vec![ToolContent {
+                        r#type: "text".to_string(),
+                        text: json!({
+                            "success": false,
+                            "error": e.to_string()
+                        }).to_string(),
+                    }],
+                    is_error: Some(true),
+                });
+            }
+        };
 
         // Update the document with new scheduling data
         let new_reps = document.reps.unwrap_or(0) + 1;
@@ -953,6 +968,21 @@ impl MCPToolRegistry {
             current_difficulty,
             elapsed_days
         );
+        let result = match result {
+            Ok(result) => result,
+            Err(e) => {
+                return Ok(ToolCallResult {
+                    content: vec![ToolContent {
+                        r#type: "text".to_string(),
+                        text: json!({
+                            "success": false,
+                            "error": e.to_string()
+                        }).to_string(),
+                    }],
+                    is_error: Some(true),
+                });
+            }
+        };
 
         // Update the extract with new scheduling data
         let new_review_count = extract.review_count + 1;

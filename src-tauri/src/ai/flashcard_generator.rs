@@ -197,7 +197,8 @@ impl BatchFlashcardGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::providers::{ChatCompletionRequest, ChatCompletionResponse, LLMProvider, Message, MessageRole};
+    use crate::ai::providers::{ChatCompletionRequest, ChatCompletionResponse, LLMProvider};
+    use crate::ai::AIProvider;
 
     // Mock provider for testing
     #[derive(Debug)]
@@ -231,9 +232,9 @@ mod tests {
     #[tokio::test]
     async fn test_generate_from_extract() {
         let mock_response = r#"[{"question": "What is AI?", "answer": "Artificial Intelligence", "type": "basic"}]"#;
-        let provider = Box::new(MockProvider {
+        let provider = AIProvider::Mock(Box::new(MockProvider {
             response: mock_response.to_string(),
-        });
+        }));
         let generator = FlashcardGenerator::new(provider);
 
         let result = generator

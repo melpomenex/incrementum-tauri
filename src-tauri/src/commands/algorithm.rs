@@ -199,7 +199,7 @@ pub async fn rate_extract(
         current_stability,
         current_difficulty,
         elapsed_days
-    );
+    )?;
 
     // Update the extract with new scheduling data
     let new_review_count = extract.review_count + 1;

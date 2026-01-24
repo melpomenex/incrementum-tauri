@@ -206,6 +206,11 @@ mod tests {
             date_modified: Utc::now(),
             tags: vec![],
             category: category.map(|c| c.to_string()),
+            memory_state: None,
+            next_review_date: None,
+            last_review_date: None,
+            review_count: 0,
+            reps: 0,
         }
     }
 

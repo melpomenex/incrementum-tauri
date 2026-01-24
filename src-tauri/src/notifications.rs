@@ -15,7 +15,7 @@ pub enum NotificationPriority {
 }
 
 /// Notification type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NotificationType {
     /// Study reminder
     StudyReminder,
@@ -258,8 +258,7 @@ mod tests {
 
     #[test]
     fn test_create_study_reminder() {
-        let manager = NotificationManager::new(true);
-        let notification = manager.create_study_reminder(10, 5);
+        let notification = NotificationManager::create_study_reminder(10, 5);
 
         assert_eq!(notification.notification_type, NotificationType::StudyReminder);
         assert!(notification.title.contains("10"));
@@ -268,8 +267,7 @@ mod tests {
 
     #[test]
     fn test_create_cards_due() {
-        let manager = NotificationManager::new(true);
-        let notification = manager.create_cards_due(20, 5);
+        let notification = NotificationManager::create_cards_due(20, 5);
 
         assert_eq!(notification.notification_type, NotificationType::CardsDue);
         assert!(notification.title.contains("Overdue"));
@@ -278,8 +276,7 @@ mod tests {
 
     #[test]
     fn test_create_review_completed() {
-        let manager = NotificationManager::new(true);
-        let notification = manager.create_review_completed(25, 600, 0.85);
+        let notification = NotificationManager::create_review_completed(25, 600, 0.85);
 
         assert_eq!(notification.notification_type, NotificationType::ReviewCompleted);
         assert!(notification.title.contains("Great job"));

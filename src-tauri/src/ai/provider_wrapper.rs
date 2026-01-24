@@ -14,6 +14,8 @@ pub enum AIProvider {
     Anthropic(AnthropicProvider),
     OpenRouter(OpenRouterProvider),
     Ollama(OllamaProvider),
+    #[cfg(test)]
+    Mock(Box<dyn LLMProvider>),
 }
 
 // Implement Debug for AIProvider
@@ -24,6 +26,8 @@ impl std::fmt::Debug for AIProvider {
             AIProvider::Anthropic(p) => f.debug_tuple("Anthropic").field(p).finish(),
             AIProvider::OpenRouter(p) => f.debug_tuple("OpenRouter").field(p).finish(),
             AIProvider::Ollama(p) => f.debug_tuple("Ollama").field(p).finish(),
+            #[cfg(test)]
+            AIProvider::Mock(_) => f.debug_tuple("Mock").finish(),
         }
     }
 }
@@ -36,6 +40,8 @@ impl AIProvider {
             AIProvider::Anthropic(_) => LLMProviderType::Anthropic,
             AIProvider::OpenRouter(_) => LLMProviderType::OpenRouter,
             AIProvider::Ollama(_) => LLMProviderType::Ollama,
+            #[cfg(test)]
+            AIProvider::Mock(provider) => provider.provider_type(),
         }
     }
 
@@ -49,6 +55,8 @@ impl AIProvider {
             AIProvider::Anthropic(provider) => provider.chat_completion(request).await,
             AIProvider::OpenRouter(provider) => provider.chat_completion(request).await,
             AIProvider::Ollama(provider) => provider.chat_completion(request).await,
+            #[cfg(test)]
+            AIProvider::Mock(provider) => provider.chat_completion(request).await,
         }
     }
 
@@ -59,6 +67,8 @@ impl AIProvider {
             AIProvider::Anthropic(provider) => provider.is_available(),
             AIProvider::OpenRouter(provider) => provider.is_available(),
             AIProvider::Ollama(provider) => provider.is_available(),
+            #[cfg(test)]
+            AIProvider::Mock(provider) => provider.is_available(),
         }
     }
 
@@ -69,6 +79,8 @@ impl AIProvider {
             AIProvider::Anthropic(provider) => provider.model_name(),
             AIProvider::OpenRouter(provider) => provider.model_name(),
             AIProvider::Ollama(provider) => provider.model_name(),
+            #[cfg(test)]
+            AIProvider::Mock(_) => "mock",
         }
     }
 

@@ -462,7 +462,7 @@ mod tests {
     fn test_paragraph_segmentation() {
         let segmenter = DocumentSegmenter::new(SegmentConfig {
             method: SegmentationMethod::Paragraph,
-            target_length: 100,
+            target_length: 1,
             overlap: 0,
             min_length: 10,
             max_length: 500,

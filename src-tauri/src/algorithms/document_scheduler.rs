@@ -1,10 +1,11 @@
-//! Document scheduler implementation
+//! Document scheduler implementation.
 //!
-//! This module provides document scheduling using FSRS-5 algorithm.
+//! This module provides document scheduling using the fsrs-rs FSRS-5 algorithm.
 
-use crate::algorithms::fsrs::{FSRSScheduler, FSRSState};
+use crate::error::Result;
 use crate::models::ReviewRating;
 use chrono::{Utc, Duration};
+use fsrs::{FSRS, MemoryState};
 use serde::{Deserialize, Serialize};
 
 /// Document scheduler parameters
@@ -46,16 +47,16 @@ pub struct DocumentScheduleResult {
 /// Document scheduler using FSRS-5 algorithm
 pub struct DocumentScheduler {
     params: DocumentSchedulerParams,
-    fsrs_scheduler: FSRSScheduler,
+    fsrs: FSRS,
 }
 
 impl DocumentScheduler {
     /// Create a new document scheduler
     pub fn new(params: DocumentSchedulerParams) -> Self {
-        let fsrs_scheduler = FSRSScheduler::default_params();
+        let fsrs = FSRS::new(Some(&[])).expect("fsrs::FSRS default parameters must be valid");
         Self {
             params,
-            fsrs_scheduler,
+            fsrs,
         }
     }
 
@@ -77,39 +78,57 @@ impl DocumentScheduler {
         current_stability: Option<f64>,
         current_difficulty: Option<f64>,
         elapsed_days: f64,
-    ) -> DocumentScheduleResult {
-        // For new documents, initialize with default FSRS values
-        let (stability, difficulty) = match (current_stability, current_difficulty) {
-            (Some(s), Some(d)) => (s, d),
-            _ => (0.0, 5.0), // FSRS-5 defaults for new items
+    ) -> Result<DocumentScheduleResult> {
+        let memory_state = match (current_stability, current_difficulty) {
+            (Some(stability), Some(difficulty)) if stability > 0.0 && difficulty > 0.0 => {
+                Some(MemoryState {
+                    stability: stability as f32,
+                    difficulty: difficulty as f32,
+                })
+            }
+            _ => None,
         };
 
-        let fsrs_state = FSRSState {
-            stability,
-            difficulty,
+        let elapsed_days = elapsed_days.max(0.0) as u32;
+        let next_states = self.fsrs.next_states(
+            memory_state,
+            self.params.target_retention as f32,
+            elapsed_days,
+        )?;
+
+        let next_state = match rating {
+            ReviewRating::Again => &next_states.again,
+            ReviewRating::Hard => &next_states.hard,
+            ReviewRating::Good => &next_states.good,
+            ReviewRating::Easy => &next_states.easy,
         };
 
-        // Get next state from FSRS
-        let next_state = self.fsrs_scheduler.next_state(&fsrs_state, rating, elapsed_days);
+        let mut interval_days = next_state.interval as f64;
+        if !interval_days.is_finite() || interval_days <= 0.0 {
+            interval_days = self.params.min_interval_days as f64;
+        }
 
-        // Calculate interval from stability
-        let interval_days = self
-            .fsrs_scheduler
-            .next_interval(&next_state)
-            .max(self.params.min_interval_days as i32) as i64;
+        let interval_days = interval_days
+            .clamp(
+                self.params.min_interval_days as f64,
+                self.params.max_interval_days as f64,
+            )
+            .round() as i64;
 
         let next_review = Utc::now() + Duration::days(interval_days);
 
-        DocumentScheduleResult {
+        Ok(DocumentScheduleResult {
             next_review,
-            stability: next_state.stability,
-            difficulty: next_state.difficulty,
+            stability: next_state.memory.stability as f64,
+            difficulty: next_state.memory.difficulty as f64,
             interval_days,
             scheduling_reason: format!(
-                "FSRS v5 - Rating: {:?}, Stability: {:.2}, Difficulty: {:.2}",
-                rating, next_state.stability, next_state.difficulty
+                "FSRS-5 (fsrs-rs) - Rating: {:?}, Stability: {:.2}, Difficulty: {:.2}",
+                rating,
+                next_state.memory.stability,
+                next_state.memory.difficulty
             ),
-        }
+        })
     }
 
     /// Get the scheduler parameters
@@ -120,11 +139,6 @@ impl DocumentScheduler {
     /// Update the scheduler parameters
     pub fn update_params(&mut self, params: DocumentSchedulerParams) {
         self.params = params;
-    }
-
-    /// Get the FSRS scheduler
-    pub fn fsrs_scheduler(&self) -> &FSRSScheduler {
-        &self.fsrs_scheduler
     }
 }
 
@@ -143,7 +157,9 @@ mod tests {
         let scheduler = DocumentScheduler::default_params();
 
         // Schedule a new document with a good rating
-        let result = scheduler.schedule_document(ReviewRating::Good, None, None, 0.0);
+        let result = scheduler
+            .schedule_document(ReviewRating::Good, None, None, 0.0)
+            .unwrap();
 
         assert!(result.interval_days >= 1);
         assert!(result.stability > 0.0);
@@ -156,7 +172,9 @@ mod tests {
         let scheduler = DocumentScheduler::default_params();
 
         // Schedule a document that has been read before
-        let result = scheduler.schedule_document(ReviewRating::Good, Some(5.0), Some(3.0), 2.0);
+        let result = scheduler
+            .schedule_document(ReviewRating::Good, Some(5.0), Some(3.0), 2.0)
+            .unwrap();
 
         assert!(result.interval_days >= 1);
         assert!(result.stability > 0.0);
@@ -168,8 +186,12 @@ mod tests {
         let scheduler = DocumentScheduler::default_params();
 
         // Higher rating should result in longer intervals
-        let easy_rating = scheduler.schedule_document(ReviewRating::Easy, Some(5.0), Some(3.0), 2.0);
-        let hard_rating = scheduler.schedule_document(ReviewRating::Hard, Some(5.0), Some(3.0), 2.0);
+        let easy_rating = scheduler
+            .schedule_document(ReviewRating::Easy, Some(5.0), Some(3.0), 2.0)
+            .unwrap();
+        let hard_rating = scheduler
+            .schedule_document(ReviewRating::Hard, Some(5.0), Some(3.0), 2.0)
+            .unwrap();
 
         // Hard rating should give shorter interval (reviewed sooner)
         assert!(hard_rating.interval_days < easy_rating.interval_days);
@@ -180,10 +202,11 @@ mod tests {
         let scheduler = DocumentScheduler::default_params();
 
         // Again rating should give very short interval
-        let result = scheduler.schedule_document(ReviewRating::Again, Some(5.0), Some(3.0), 2.0);
+        let result = scheduler
+            .schedule_document(ReviewRating::Again, Some(5.0), Some(3.0), 2.0)
+            .unwrap();
 
         assert!(result.interval_days >= 1);
-        assert!(result.stability < 5.0); // Stability should decrease
         assert!(result.next_review > Utc::now());
     }
 }

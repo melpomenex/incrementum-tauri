@@ -139,6 +139,8 @@ impl QueueSelector {
             match (a_is_due, a_is_new, b_is_due, b_is_new) {
                 (true, _, false, false) => return std::cmp::Ordering::Less,  // a is due, b is future
                 (false, false, true, _) => return std::cmp::Ordering::Greater, // a is future, b is due
+                (true, _, false, true) => return std::cmp::Ordering::Less, // a is due, b is new
+                (false, true, true, _) => return std::cmp::Ordering::Greater, // a is new, b is due
                 (false, true, false, false) => return std::cmp::Ordering::Less,  // a is new, b is future
                 (false, false, false, true) => return std::cmp::Ordering::Greater, // a is future, b is new
                 _ => {} // Both are due, both are new, or both are future - continue to secondary sort
@@ -220,12 +222,7 @@ mod tests {
     use chrono::Utc;
 
     fn create_test_item(id: &str, priority: f64, due_days: i64) -> QueueItem {
-        let due_date = if due_days >= 0 {
-            Some((Utc::now() + chrono::Duration::days(due_days)).to_rfc3339())
-        } else {
-            None
-        };
-
+        let due_date = (Utc::now() + chrono::Duration::days(due_days)).to_rfc3339();
         QueueItem {
             id: id.to_string(),
             document_id: "doc1".to_string(),
@@ -236,7 +233,26 @@ mod tests {
             priority_rating: None,
             priority_slider: None,
             priority,
-            due_date,
+            due_date: Some(due_date),
+            estimated_time: 5,
+            tags: vec![],
+            category: None,
+            progress: 0,
+        }
+    }
+
+    fn create_new_item(id: &str, priority: f64) -> QueueItem {
+        QueueItem {
+            id: id.to_string(),
+            document_id: "doc1".to_string(),
+            document_title: "Test Document".to_string(),
+            extract_id: None,
+            learning_item_id: Some(id.to_string()),
+            item_type: "learning-item".to_string(),
+            priority_rating: None,
+            priority_slider: None,
+            priority,
+            due_date: None,
             estimated_time: 5,
             tags: vec![],
             category: None,
@@ -270,10 +286,10 @@ mod tests {
 
         selector.sort_queue_items(&mut items);
 
-        // Should be sorted by priority (desc), then due date (asc)
+        // Due items first, then priority (desc) and due date (asc)
         assert_eq!(items[0].id, "2"); // Priority 10, due 0 days
-        assert_eq!(items[1].id, "4"); // Priority 10, due 2 days
-        assert_eq!(items[2].id, "3"); // Priority 8
+        assert_eq!(items[1].id, "3"); // Priority 8, past due
+        assert_eq!(items[2].id, "4"); // Priority 10, due 2 days
         assert_eq!(items[3].id, "1"); // Priority 5
     }
 
@@ -299,7 +315,7 @@ mod tests {
         let selector = QueueSelector::new(0.0);
         let mut items = vec![
             // New item (no due date) - should come after due items
-            create_test_item("new", 9.0, -1),
+            create_new_item("new", 9.0),
             // Future-dated item - should come last
             create_test_item("future", 5.0, 10),
             // Due items - should come first
@@ -321,9 +337,9 @@ mod tests {
         let selector = QueueSelector::new(0.0);
         let mut items = vec![
             create_test_item("future1", 9.0, 30),  // Far future
-            create_test_item("new1", 5.0, -1),     // New item
+            create_new_item("new1", 5.0),     // New item
             create_test_item("future2", 8.0, 5),   // Near future
-            create_test_item("new2", 7.0, -1),     // New item
+            create_new_item("new2", 7.0),     // New item
         ];
 
         selector.sort_queue_items(&mut items);
@@ -386,9 +402,9 @@ mod tests {
     fn test_fsrs_queue_new_items_ordered_by_priority() {
         let selector = QueueSelector::new(0.0);
         let mut items = vec![
-            create_test_item("new_low", 5.0, -1),
-            create_test_item("new_high", 9.0, -1),
-            create_test_item("new_med", 7.0, -1),
+            create_new_item("new_low", 5.0),
+            create_new_item("new_high", 9.0),
+            create_new_item("new_med", 7.0),
         ];
 
         selector.sort_queue_items(&mut items);
