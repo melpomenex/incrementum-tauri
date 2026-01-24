@@ -86,8 +86,8 @@ export function HandbookSettings() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-[240px,1fr]">
-        <aside className="md:sticky md:top-6 self-start">
+      <div className="flex flex-col gap-6 md:flex-row md:items-start">
+        <aside className="md:sticky md:top-6 md:w-60 md:shrink-0 self-start">
           <div className="border border-border rounded-lg bg-muted/30 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
               Contents
@@ -110,7 +110,7 @@ export function HandbookSettings() {
           </div>
         </aside>
 
-        <article className="border border-border rounded-xl bg-card p-6 md:p-8 shadow-sm">
+        <article className="border border-border rounded-xl bg-card p-6 md:p-8 shadow-sm md:flex-1">
           <div
             className="prose prose-sm sm:prose-base max-w-none prose-headings:font-semibold prose-h1:text-3xl prose-h1:tracking-tight prose-h1:mt-0 prose-h1:pb-4 prose-h1:border-b prose-h1:border-border prose-h2:text-2xl prose-h2:mt-10 prose-h2:pb-2 prose-h2:border-b prose-h2:border-border/60 prose-h3:text-lg prose-h3:mt-6 prose-hr:my-8 prose-p:leading-relaxed prose-a:font-medium"
             dangerouslySetInnerHTML={{ __html: rendered }}
