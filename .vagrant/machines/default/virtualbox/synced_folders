@@ -1,1 +1,0 @@
-{"virtualbox":{"/agent-workspace":{"type":"virtualbox","guestpath":"/agent-workspace","hostpath":"/home/ubuntu/Code/Incrementum-CPP/incrementum-tauri","disabled":false,"__vagrantfile":true}}}

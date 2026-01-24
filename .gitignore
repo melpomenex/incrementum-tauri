@@ -28,3 +28,13 @@ Incrementum-CPP
 *.sw?
 .vercel
 .env*.local
+
+# Rust compiler crash reports
+rustc-ice-*.txt
+
+# Anki decks
+*.apkg
+*.anpkg
+
+# Vagrant
+.vagrant/machines/
