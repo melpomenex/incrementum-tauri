@@ -13,6 +13,9 @@ import {
 } from '../lib/demoContent';
 import * as pdfjsLib from 'pdfjs-dist';
 import ePub from 'epubjs';
+import { createEmptyCard, fsrs, Rating, State, type Card, type Grade } from 'ts-fsrs';
+import { useSettingsStore } from '../stores/settingsStore';
+import { v4 as uuidv4 } from 'uuid';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -123,6 +126,113 @@ function toCamelCase(obj: any): any {
         }, {} as any);
     }
     return obj;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getFsrsParameters() {
+    const settings = useSettingsStore.getState().settings;
+    const fsrsParams = settings.learning?.fsrsParams;
+    return {
+        request_retention: fsrsParams?.desiredRetention ?? 0.9,
+        maximum_interval: fsrsParams?.maximumInterval ?? 36500,
+        enable_fuzz: false,
+    };
+}
+
+function createFsrsScheduler() {
+    return fsrs(getFsrsParameters());
+}
+
+function toFsrsGrade(rating: number): Grade {
+    switch (rating) {
+        case 1:
+            return Rating.Again;
+        case 2:
+            return Rating.Hard;
+        case 3:
+            return Rating.Good;
+        case 4:
+            return Rating.Easy;
+        default:
+            return Rating.Good;
+    }
+}
+
+function normalizeState(state?: string): State {
+    switch ((state || '').toLowerCase()) {
+        case 'learning':
+            return State.Learning;
+        case 'review':
+            return State.Review;
+        case 'relearning':
+            return State.Relearning;
+        default:
+            return State.New;
+    }
+}
+
+function stateToString(state: State): string {
+    switch (state) {
+        case State.Learning:
+            return 'learning';
+        case State.Review:
+            return 'review';
+        case State.Relearning:
+            return 'relearning';
+        default:
+            return 'new';
+    }
+}
+
+function intervalFromDue(now: Date, due: Date, scheduledDays?: number): number {
+    const delta = (due.getTime() - now.getTime()) / DAY_MS;
+    if (!Number.isFinite(delta)) {
+        return scheduledDays ?? 0;
+    }
+    return Math.max(0, delta);
+}
+
+function buildCardFromDocument(doc: db.Document, now: Date): Card {
+    const card = createEmptyCard(now);
+    card.due = doc.next_reading_date ? new Date(doc.next_reading_date) : now;
+    card.last_review = doc.date_last_reviewed ? new Date(doc.date_last_reviewed) : undefined;
+    card.stability = doc.stability ?? 0;
+    card.difficulty = doc.difficulty ?? 0;
+    card.scheduled_days = doc.stability ?? 0;
+    card.reps = doc.reps ?? 0;
+    card.lapses = 0;
+    card.learning_steps = 0;
+    card.state = (doc.reps ?? 0) > 0 || doc.date_last_reviewed ? State.Review : State.New;
+    return card;
+}
+
+function buildCardFromExtract(extract: db.Extract, now: Date): Card {
+    const card = createEmptyCard(now);
+    card.due = extract.next_review_date ? new Date(extract.next_review_date) : now;
+    card.last_review = extract.last_review_date ? new Date(extract.last_review_date) : undefined;
+    card.stability = extract.memory_state?.stability ?? 0;
+    card.difficulty = extract.memory_state?.difficulty ?? 0;
+    card.scheduled_days = extract.memory_state?.stability ?? 0;
+    card.reps = extract.reps ?? extract.review_count ?? 0;
+    card.lapses = 0;
+    card.learning_steps = 0;
+    card.state = (extract.reps ?? extract.review_count ?? 0) > 0 ? State.Review : State.New;
+    return card;
+}
+
+function buildCardFromLearningItem(item: db.LearningItem, now: Date): Card {
+    const card = createEmptyCard(now);
+    card.due = item.due_date ? new Date(item.due_date) : now;
+    card.last_review = item.last_review_date ? new Date(item.last_review_date) : undefined;
+    card.stability = item.memory_state?.stability ?? 0;
+    card.difficulty = item.memory_state?.difficulty ?? 0;
+    card.scheduled_days = item.interval ?? 0;
+    card.reps = item.review_count ?? 0;
+    card.lapses = item.lapses ?? 0;
+    card.learning_steps = 0;
+    card.state = normalizeState(item.state);
+    return card;
 }
 
 /**
@@ -609,7 +719,71 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(items);
     },
 
-    // Document/Extract rating commands (FSRS-like scheduling for browser)
+    start_review: async () => {
+        const dueItems = await db.getDueLearningItems();
+        if (dueItems.length === 0) {
+            return '';
+        }
+        return uuidv4();
+    },
+
+    submit_review: async (args) => {
+        const itemId = (args.item_id as string) || (args.itemId as string);
+        const rating = args.rating as number;
+        const item = await db.getLearningItem(itemId);
+        if (!item) {
+            throw new Error(`Learning item ${itemId} not found`);
+        }
+
+        const now = new Date();
+        const scheduler = createFsrsScheduler();
+        const grade = toFsrsGrade(rating);
+        const card = buildCardFromLearningItem(item, now);
+        const next = scheduler.next(card, now, grade);
+        const nextCard = next.card;
+        const nextDue = nextCard.due;
+        const intervalDays = intervalFromDue(now, nextDue, nextCard.scheduled_days);
+
+        const updatedItem = await db.updateLearningItem(item.id, {
+            due_date: nextDue.toISOString(),
+            interval: intervalDays,
+            last_review_date: now.toISOString(),
+            review_count: nextCard.reps,
+            lapses: nextCard.lapses,
+            state: stateToString(nextCard.state),
+            memory_state: {
+                stability: nextCard.stability,
+                difficulty: nextCard.difficulty,
+            },
+            difficulty: nextCard.difficulty,
+        });
+
+        return toCamelCase(updatedItem);
+    },
+
+    preview_review_intervals: async (args) => {
+        const itemId = (args.item_id as string) || (args.itemId as string);
+        const item = await db.getLearningItem(itemId);
+        if (!item) {
+            throw new Error(`Learning item ${itemId} not found`);
+        }
+
+        const now = new Date();
+        const scheduler = createFsrsScheduler();
+        const card = buildCardFromLearningItem(item, now);
+        const preview = scheduler.repeat(card, now);
+
+        const intervals = {
+            again: intervalFromDue(now, preview[Rating.Again].card.due, preview[Rating.Again].card.scheduled_days),
+            hard: intervalFromDue(now, preview[Rating.Hard].card.due, preview[Rating.Hard].card.scheduled_days),
+            good: intervalFromDue(now, preview[Rating.Good].card.due, preview[Rating.Good].card.scheduled_days),
+            easy: intervalFromDue(now, preview[Rating.Easy].card.due, preview[Rating.Easy].card.scheduled_days),
+        };
+
+        return intervals;
+    },
+
+    // Document/Extract rating commands (FSRS scheduling for browser)
     rate_document: async (args) => {
         const request = args.request as { document_id: string; rating: number; time_taken?: number };
         const doc = await db.getDocument(request.document_id);
@@ -617,64 +791,33 @@ const commandHandlers: Record<string, CommandHandler> = {
             throw new Error(`Document ${request.document_id} not found`);
         }
 
-        // Simplified FSRS-like scheduling for browser mode:
-        // Rating 1 (Again) = 1 day, Rating 2 (Hard) = 2 days, 
-        // Rating 3 (Good) = current interval * 2.5, Rating 4 (Easy) = current interval * 3.5
-        const currentInterval = doc.stability || 1;
-        let nextIntervalDays: number;
-        let newStability = currentInterval;
-        let newDifficulty = doc.difficulty || 5.0;
-
-        switch (request.rating) {
-            case 1: // Again
-                nextIntervalDays = 1;
-                newStability = 1;
-                newDifficulty = Math.min(10, newDifficulty + 0.5);
-                break;
-            case 2: // Hard
-                nextIntervalDays = Math.max(1, Math.round(currentInterval * 1.2));
-                newStability = nextIntervalDays;
-                newDifficulty = Math.min(10, newDifficulty + 0.15);
-                break;
-            case 3: // Good
-                nextIntervalDays = Math.max(1, Math.round(currentInterval * 2.5));
-                newStability = nextIntervalDays;
-                newDifficulty = Math.max(1, newDifficulty - 0.15);
-                break;
-            case 4: // Easy
-                nextIntervalDays = Math.max(1, Math.round(currentInterval * 3.5));
-                newStability = nextIntervalDays;
-                newDifficulty = Math.max(1, newDifficulty - 0.3);
-                break;
-            default:
-                nextIntervalDays = Math.max(1, Math.round(currentInterval * 2.5));
-                newStability = nextIntervalDays;
-        }
-
-        // Calculate next review date
-        const nextReviewDate = new Date();
-        nextReviewDate.setDate(nextReviewDate.getDate() + nextIntervalDays);
-        const nextReviewDateIso = nextReviewDate.toISOString();
+        const now = new Date();
+        const scheduler = createFsrsScheduler();
+        const grade = toFsrsGrade(request.rating);
+        const card = buildCardFromDocument(doc, now);
+        const next = scheduler.next(card, now, grade);
+        const nextCard = next.card;
+        const nextReviewDateIso = nextCard.due.toISOString();
+        const intervalDays = intervalFromDue(now, nextCard.due, nextCard.scheduled_days);
 
         // Update document with new scheduling data
-        const newReps = (doc.reps || 0) + 1;
         const newTimeSpent = (doc.total_time_spent || 0) + (request.time_taken || 0);
 
         await db.updateDocument(request.document_id, {
             next_reading_date: nextReviewDateIso,
-            stability: newStability,
-            difficulty: newDifficulty,
-            reps: newReps,
+            stability: nextCard.stability,
+            difficulty: nextCard.difficulty,
+            reps: nextCard.reps,
             total_time_spent: newTimeSpent,
-            date_last_reviewed: new Date().toISOString(),
+            date_last_reviewed: now.toISOString(),
         });
 
         return {
             next_review_date: nextReviewDateIso,
-            stability: newStability,
-            difficulty: newDifficulty,
-            interval_days: nextIntervalDays,
-            scheduling_reason: `Browser FSRS: Rating ${request.rating} → ${nextIntervalDays} days`,
+            stability: nextCard.stability,
+            difficulty: nextCard.difficulty,
+            interval_days: intervalDays,
+            scheduling_reason: `FSRS: Rating ${request.rating} → ${intervalDays.toFixed(2)} days`,
         };
     },
 
@@ -685,59 +828,30 @@ const commandHandlers: Record<string, CommandHandler> = {
             throw new Error(`Extract ${request.extract_id} not found`);
         }
 
-        // Similar FSRS-like scheduling for extracts
-        const currentStability = extract.memory_state?.stability || 1;
-        const currentDifficulty = extract.memory_state?.difficulty || 5.0;
-        let nextIntervalDays: number;
-        let newStability = currentStability;
-        let newDifficulty = currentDifficulty;
-
-        switch (request.rating) {
-            case 1: // Again
-                nextIntervalDays = 1;
-                newStability = 1;
-                newDifficulty = Math.min(10, newDifficulty + 0.5);
-                break;
-            case 2: // Hard
-                nextIntervalDays = Math.max(1, Math.round(currentStability * 1.2));
-                newStability = nextIntervalDays;
-                newDifficulty = Math.min(10, newDifficulty + 0.15);
-                break;
-            case 3: // Good
-                nextIntervalDays = Math.max(1, Math.round(currentStability * 2.5));
-                newStability = nextIntervalDays;
-                newDifficulty = Math.max(1, newDifficulty - 0.15);
-                break;
-            case 4: // Easy
-                nextIntervalDays = Math.max(1, Math.round(currentStability * 3.5));
-                newStability = nextIntervalDays;
-                newDifficulty = Math.max(1, newDifficulty - 0.3);
-                break;
-            default:
-                nextIntervalDays = Math.max(1, Math.round(currentStability * 2.5));
-                newStability = nextIntervalDays;
-        }
-
-        // Calculate next review date
-        const nextReviewDate = new Date();
-        nextReviewDate.setDate(nextReviewDate.getDate() + nextIntervalDays);
-        const nextReviewDateIso = nextReviewDate.toISOString();
+        const now = new Date();
+        const scheduler = createFsrsScheduler();
+        const grade = toFsrsGrade(request.rating);
+        const card = buildCardFromExtract(extract, now);
+        const next = scheduler.next(card, now, grade);
+        const nextCard = next.card;
+        const nextReviewDateIso = nextCard.due.toISOString();
+        const intervalDays = intervalFromDue(now, nextCard.due, nextCard.scheduled_days);
 
         // Update extract with new scheduling data
         await db.updateExtract(request.extract_id, {
             next_review_date: nextReviewDateIso,
-            memory_state: { stability: newStability, difficulty: newDifficulty },
-            review_count: extract.review_count + 1,
-            reps: extract.reps + 1,
-            last_review_date: new Date().toISOString(),
+            memory_state: { stability: nextCard.stability, difficulty: nextCard.difficulty },
+            review_count: nextCard.reps,
+            reps: nextCard.reps,
+            last_review_date: now.toISOString(),
         });
 
         return {
             next_review_date: nextReviewDateIso,
-            stability: newStability,
-            difficulty: newDifficulty,
-            interval_days: nextIntervalDays,
-            scheduling_reason: `Browser FSRS: Rating ${request.rating} → ${nextIntervalDays} days`,
+            stability: nextCard.stability,
+            difficulty: nextCard.difficulty,
+            interval_days: intervalDays,
+            scheduling_reason: `FSRS: Rating ${request.rating} → ${intervalDays.toFixed(2)} days`,
         };
     },
 
