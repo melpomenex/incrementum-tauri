@@ -111,6 +111,14 @@ if (!(window as any).__TAURI__) {
     // Module may not be available in all build configurations
     console.log('[Demo Content] Module not available');
   });
+
+  // Initialize browser extension bridge for PWA mode
+  import('./lib/extension-bridge').then(({ initExtensionBridge }) => {
+    initExtensionBridge();
+    console.log('[Extension Bridge] Initialized for PWA mode');
+  }).catch((error) => {
+    console.log('[Extension Bridge] Module not available:', error);
+  });
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

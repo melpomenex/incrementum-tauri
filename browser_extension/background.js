@@ -225,6 +225,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             url,
             title,
             text,
+            html_content: extract.html_content, // Include rich HTML content
             type: 'extract',
             context: extract.context,
             tags: extract.tags,
@@ -396,6 +397,7 @@ async function sendToIncrementum(data) {
       title: data.title || 'Untitled',
       text: trimmedText,
       content: trimmedText, // kept for backward compatibility
+      html_content: data.html_content, // Rich HTML content for visual fidelity
       type: data.type || (trimmedText ? 'extract' : 'page'),
       source: data.source || 'browser_extension',
       timestamp: data.timestamp || new Date().toISOString(),

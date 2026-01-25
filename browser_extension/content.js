@@ -3,13 +3,189 @@
 
 (function() {
   'use strict';
-  
+
   // Only run on actual web pages, not extension pages
-  if (window.location.protocol === 'chrome-extension:' || 
+  if (window.location.protocol === 'chrome-extension:' ||
       window.location.protocol === 'moz-extension:') {
     return;
   }
-  
+
+  // ============================================================================
+  // PWA Bridge - Enables communication with Incrementum web app
+  // ============================================================================
+
+  let isPWAAvailable = false;
+  let pwaMessageQueue = [];
+  let pwaResponseHandlers = new Map();
+
+  /**
+   * Check if current page is the Incrementum PWA
+   */
+  function isIncrementumPWA() {
+    // Check for common indicators of Incrementum app
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const hasIncrementumMarker = document.querySelector('[data-incrementum-app]') !== null;
+    const hasAppTitle = document.title.includes('Incrementum');
+
+    return hasIncrementumMarker || (isLocalhost && hasAppTitle);
+  }
+
+  /**
+   * Listen for messages from the PWA
+   */
+  function setupPWABridge() {
+    window.addEventListener('message', (event) => {
+      // Only handle messages from same window
+      if (event.source !== window) return;
+
+      const message = event.data;
+      if (!message || message.source !== 'incrementum-pwa') return;
+
+      console.log('[Content] Received PWA message:', message.action);
+
+      if (message.action === 'ready' || message.action === 'pong') {
+        isPWAAvailable = true;
+        console.log('[Content] PWA bridge connected');
+
+        // Process any queued messages
+        while (pwaMessageQueue.length > 0) {
+          const queuedMsg = pwaMessageQueue.shift();
+          sendToPWA(queuedMsg.message, queuedMsg.callback);
+        }
+      }
+
+      // Handle response to a specific request
+      if (message.requestId && pwaResponseHandlers.has(message.requestId)) {
+        const handler = pwaResponseHandlers.get(message.requestId);
+        pwaResponseHandlers.delete(message.requestId);
+        handler(message);
+      }
+    });
+
+    // Ping PWA to check if it's available
+    window.postMessage({
+      source: 'incrementum-extension',
+      action: 'ping',
+      requestId: generateRequestId()
+    }, '*');
+  }
+
+  /**
+   * Generate unique request ID
+   */
+  function generateRequestId() {
+    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Send message to PWA
+   */
+  function sendToPWA(message, callback) {
+    const requestId = generateRequestId();
+    const fullMessage = {
+      source: 'incrementum-extension',
+      ...message,
+      requestId
+    };
+
+    if (callback) {
+      pwaResponseHandlers.set(requestId, callback);
+    }
+
+    if (isPWAAvailable) {
+      window.postMessage(fullMessage, '*');
+    } else {
+      // Queue message until PWA is available
+      pwaMessageQueue.push({ message, callback });
+    }
+  }
+
+  /**
+   * Save extract via PWA bridge or background script
+   */
+  async function saveExtractViaBridge(data) {
+    return new Promise((resolve) => {
+      if (isPWAAvailable && isIncrementumPWA()) {
+        // Send directly to PWA
+        sendToPWA({
+          action: 'saveExtract',
+          data: data
+        }, (response) => {
+          resolve(response);
+        });
+      } else {
+        // Fallback to background script
+        chrome.runtime.sendMessage({
+          action: 'saveExtract',
+          extract: data
+        }, resolve);
+      }
+    });
+  }
+
+  /**
+   * Capture HTML content with computed styles from selection
+   */
+  function captureSelectionHTML() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+
+    try {
+      const range = selection.getRangeAt(0);
+      const fragment = range.cloneContents();
+
+      // Create a temporary container
+      const tempDiv = document.createElement('div');
+      tempDiv.appendChild(fragment.cloneNode(true));
+
+      // Inline computed styles for visual fidelity
+      const elements = tempDiv.querySelectorAll('*');
+      elements.forEach((el) => {
+        if (el instanceof HTMLElement) {
+          // Find original element to get computed styles
+          const originalEl = document.body.contains(el) ? el : null;
+          if (!originalEl) return;
+
+          const computed = window.getComputedStyle(originalEl);
+          const essentialStyles = [
+            'font-family', 'font-size', 'font-weight', 'font-style',
+            'line-height', 'color', 'background-color', 'text-decoration',
+            'text-align', 'margin', 'padding', 'border', 'border-radius',
+            'display', 'list-style-type'
+          ];
+
+          const inlineStyles = essentialStyles
+            .map((prop) => {
+              const value = computed.getPropertyValue(prop);
+              if (value && value !== 'none' && value !== 'normal' && value !== '0px') {
+                return `${prop}: ${value}`;
+              }
+              return null;
+            })
+            .filter(Boolean)
+            .join('; ');
+
+          if (inlineStyles) {
+            el.setAttribute('style', inlineStyles);
+          }
+        }
+      });
+
+      return tempDiv.innerHTML;
+    } catch (error) {
+      console.warn('[Content] Could not capture HTML:', error);
+      return null;
+    }
+  }
+
+  // Initialize PWA bridge
+  setupPWABridge();
+
+  // ============================================================================
+  // Original content script functionality
+  // ============================================================================
+
   // State management
   let extractMode = false;
   let highlights = [];
@@ -230,10 +406,14 @@
     // Calculate priority based on text analysis and user selection
     let calculatedPriority = calculateExtractPriority(text, analysis, options.priority);
 
+    // Capture HTML content with computed styles for visual fidelity
+    const htmlContent = captureSelectionHTML();
+
     // Create enhanced extract data
     const extractData = {
       id: generateExtractId(),
       text: text,
+      html_content: htmlContent, // Rich HTML content for 1:1 visual fidelity
       context: context.substring(Math.max(0, context.indexOf(text) - 200),
                                 context.indexOf(text) + text.length + 200),
       url: window.location.href,
@@ -907,12 +1087,16 @@
     const range = selection.getRangeAt(0);
     const container = range.commonAncestorContainer;
     const context = container.textContent || container.innerText || '';
-    
+
+    // Capture HTML content with computed styles for visual fidelity
+    const htmlContent = captureSelectionHTML();
+
     // Create extract data
     const extractData = {
       id: generateExtractId(),
       text: text,
-      context: context.substring(Math.max(0, context.indexOf(text) - 100), 
+      html_content: htmlContent, // Rich HTML content for 1:1 visual fidelity
+      context: context.substring(Math.max(0, context.indexOf(text) - 100),
                                 context.indexOf(text) + text.length + 100),
       url: window.location.href,
       title: document.title,
