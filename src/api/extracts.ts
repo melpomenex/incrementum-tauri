@@ -3,7 +3,12 @@ import { invokeCommand } from "../lib/tauri";
 export interface Extract {
   id: string;
   document_id: string;
+  /** Plain text content for search and AI processing */
   content: string;
+  /** Rich HTML content with inline styles for 1:1 visual fidelity */
+  html_content?: string;
+  /** Source URL for web extracts */
+  source_url?: string;
   page_title?: string;
   page_number?: number;
   highlight_color?: string;
@@ -27,6 +32,10 @@ export interface Extract {
 export interface CreateExtractInput {
   document_id: string;
   content: string;
+  /** Rich HTML content with inline styles for 1:1 visual fidelity */
+  html_content?: string;
+  /** Source URL for web extracts */
+  source_url?: string;
   note?: string;
   tags?: string[];
   category?: string;
@@ -66,6 +75,8 @@ export async function createExtract(input: CreateExtractInput): Promise<Extract>
   return await invokeCommand<Extract>("create_extract", {
     documentId: input.document_id,
     content: input.content,
+    htmlContent: input.html_content,
+    sourceUrl: input.source_url,
     note: input.note,
     tags: input.tags,
     category: input.category,

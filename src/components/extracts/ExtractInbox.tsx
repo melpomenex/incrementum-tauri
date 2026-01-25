@@ -17,10 +17,12 @@ import {
     ChevronUp,
     ExternalLink,
     Trash2,
+    Eye,
 } from "lucide-react";
 import { getExtracts, deleteExtract, type Extract } from "../../api/extracts";
 import { summarizeContent, extractKeyPoints, generateQuestions } from "../../api/ai";
 import { cn } from "../../utils";
+import { RichContentRenderer } from "../common/RichContentRenderer";
 
 interface ExtractInboxProps {
     onSelectExtract?: (extract: Extract) => void;
@@ -198,12 +200,16 @@ export function ExtractInbox({ onSelectExtract }: ExtractInboxProps) {
                                             </h3>
                                         )}
                                         {/* Content Preview */}
-                                        <p className={cn(
-                                            "text-sm text-muted-foreground",
-                                            isExpanded ? "" : "line-clamp-2"
-                                        )}>
-                                            {extract.content}
-                                        </p>
+                                        {!isExpanded && (
+                                            <div className="flex items-start gap-2">
+                                                {extract.html_content && (
+                                                    <Eye className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" title="Rich content available" />
+                                                )}
+                                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                                    {extract.content}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         <button
@@ -248,11 +254,16 @@ export function ExtractInbox({ onSelectExtract }: ExtractInboxProps) {
                             {/* Expanded Content */}
                             {isExpanded && (
                                 <div className="border-t border-border/50">
-                                    {/* Full Content */}
+                                    {/* Full Content with Rich HTML support */}
                                     <div className="p-5 bg-muted/20">
-                                        <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                                            {extract.content}
-                                        </div>
+                                        <RichContentRenderer
+                                            content={extract.content}
+                                            htmlContent={extract.html_content}
+                                            sourceUrl={extract.source_url}
+                                            mode="full"
+                                            maxHeight="300px"
+                                            className="text-sm leading-relaxed"
+                                        />
                                     </div>
 
                                     {/* AI Analysis Section */}

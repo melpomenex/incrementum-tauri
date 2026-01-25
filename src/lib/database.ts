@@ -327,7 +327,12 @@ export interface MemoryState {
 export interface Extract {
     id: string;
     document_id: string;
+    /** Plain text content for search and AI processing */
     content: string;
+    /** Rich HTML content with inline styles for 1:1 visual fidelity */
+    html_content?: string;
+    /** Source URL for web extracts */
+    source_url?: string;
     page_title?: string;
     page_number?: number;
     highlight_color?: string;
@@ -353,6 +358,8 @@ export async function createExtract(ext: Partial<Extract>): Promise<Extract> {
         id: ext.id || uuidv4(),
         document_id: ext.document_id!,
         content: ext.content || '',
+        html_content: ext.html_content,
+        source_url: ext.source_url,
         page_title: ext.page_title,
         page_number: ext.page_number,
         highlight_color: ext.highlight_color,

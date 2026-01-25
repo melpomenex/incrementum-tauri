@@ -87,6 +87,9 @@ pub struct ExtensionRequest {
     pub title: String,
     #[serde(default)]
     pub text: String,
+    /// Rich HTML content with inline styles for 1:1 visual fidelity
+    #[serde(default)]
+    pub html_content: Option<String>,
     #[serde(default)]
     pub r#type: String, // "page", "extract", "video"
     #[serde(default)]
@@ -596,11 +599,13 @@ async fn handle_extract_request(
         created.id
     };
 
-    // Create extract
+    // Create extract with rich HTML content for visual fidelity
     let extract = Extract {
         id: uuid::Uuid::new_v4().to_string(),
         document_id: document_id.clone(),
         content: payload.text.clone(),
+        html_content: payload.html_content.clone(),
+        source_url: Some(payload.url.clone()),
         page_title: Some(payload.title.clone()),
         page_number: None,
         highlight_color: None,

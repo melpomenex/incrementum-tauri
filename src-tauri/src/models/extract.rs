@@ -11,7 +11,12 @@ pub use super::learning_item::MemoryState;
 pub struct Extract {
     pub id: String,
     pub document_id: String,
+    /// Plain text content (for search, AI processing, and fallback display)
     pub content: String,
+    /// Rich HTML content with inline styles for 1:1 visual fidelity
+    pub html_content: Option<String>,
+    /// Source URL for web extracts
+    pub source_url: Option<String>,
     pub page_title: Option<String>,
     pub page_number: Option<i32>,
     pub highlight_color: Option<String>,
@@ -40,6 +45,8 @@ impl Extract {
             id: Uuid::new_v4().to_string(),
             document_id,
             content,
+            html_content: None,
+            source_url: None,
             page_title: None,
             page_number: None,
             highlight_color: None,
@@ -56,5 +63,13 @@ impl Extract {
             review_count: 0,
             reps: 0,
         }
+    }
+
+    /// Create an extract with rich HTML content for visual fidelity
+    pub fn with_html(document_id: String, content: String, html_content: String, source_url: Option<String>) -> Self {
+        let mut extract = Self::new(document_id, content);
+        extract.html_content = Some(html_content);
+        extract.source_url = source_url;
+        extract
     }
 }
