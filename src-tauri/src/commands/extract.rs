@@ -27,6 +27,8 @@ pub async fn get_extract(
 pub async fn create_extract(
     document_id: String,
     content: String,
+    html_content: Option<String>,
+    source_url: Option<String>,
     note: Option<String>,
     tags: Option<Vec<String>>,
     category: Option<String>,
@@ -36,6 +38,8 @@ pub async fn create_extract(
     repo: State<'_, Repository>,
 ) -> Result<Extract> {
     let mut extract = Extract::new(document_id, content);
+    extract.html_content = html_content;
+    extract.source_url = source_url;
     extract.notes = note;
     extract.tags = tags.unwrap_or_default();
     extract.category = category;
@@ -52,6 +56,8 @@ pub async fn create_extract(
 pub async fn update_extract(
     id: String,
     content: Option<String>,
+    html_content: Option<String>,
+    source_url: Option<String>,
     note: Option<String>,
     tags: Option<Vec<String>>,
     category: Option<String>,
@@ -66,6 +72,12 @@ pub async fn update_extract(
     // Update fields
     if let Some(content) = content {
         extract.content = content;
+    }
+    if let Some(html_content) = html_content {
+        extract.html_content = Some(html_content);
+    }
+    if let Some(source_url) = source_url {
+        extract.source_url = Some(source_url);
     }
     if let Some(note) = note {
         extract.notes = Some(note);

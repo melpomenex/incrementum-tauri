@@ -520,6 +520,20 @@ pub const MIGRATIONS: &[Migration] = &[
         ALTER TABLE documents ADD COLUMN current_view_state TEXT;
         "#,
     ),
+    // Migration 017: Add rich HTML content support for extracts and documents
+    Migration::new(
+        "017_add_rich_html_content",
+        r#"
+        -- Add html_content field for preserving rich HTML with inline styles
+        ALTER TABLE extracts ADD COLUMN html_content TEXT;
+
+        -- Add source_url for tracking the origin of web extracts
+        ALTER TABLE extracts ADD COLUMN source_url TEXT;
+
+        -- Add html_content field for documents (full page HTML preservation)
+        ALTER TABLE documents ADD COLUMN html_content TEXT;
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

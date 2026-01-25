@@ -30,7 +30,10 @@ type WebviewType = import("@tauri-apps/api/webview").Webview; // Instance type
 
 
 interface WebExtract {
+  /** Plain text content */
   content: string;
+  /** Rich HTML content with inline styles for visual fidelity */
+  htmlContent?: string;
   url: string;
   pageTitle: string;
   timestamp: number;
@@ -38,7 +41,7 @@ interface WebExtract {
 
 interface ExtractDialogProps {
   extract: WebExtract;
-  onSave: (data: { content: string; note: string; tags: string[] }) => void;
+  onSave: (data: { content: string; htmlContent?: string; note: string; tags: string[] }) => void;
   onClose: () => void;
 }
 
@@ -69,7 +72,7 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
   };
 
   const handleSaveAsExtract = async () => {
-    onSave({ content: extract.content, note, tags });
+    onSave({ content: extract.content, htmlContent: extract.htmlContent, note, tags });
     onClose();
   };
 
@@ -113,9 +116,21 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
               Selected Content
+              {extract.htmlContent && (
+                <span className="ml-2 text-xs text-primary font-normal">
+                  (Rich formatting preserved)
+                </span>
+              )}
             </label>
             <div className="p-3 bg-muted rounded-lg text-sm text-foreground max-h-40 overflow-y-auto">
-              {extract.content}
+              {extract.htmlContent ? (
+                <div
+                  className="prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: extract.htmlContent }}
+                />
+              ) : (
+                extract.content
+              )}
             </div>
           </div>
 
@@ -391,10 +406,73 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const handleCreateExtract = useCallback(() => {
     if (isTauri()) {
       // Tauri webview mode: get selection through JavaScript injection
-      const selectedText = window.getSelection()?.toString();
+      const selection = window.getSelection();
+      const selectedText = selection?.toString();
+
       if (selectedText) {
+        let htmlContent: string | undefined;
+
+        // Try to capture HTML content with computed styles for visual fidelity
+        if (selection && selection.rangeCount > 0) {
+          try {
+            const range = selection.getRangeAt(0);
+            const fragment = range.cloneContents();
+
+            // Create a temporary container to serialize the HTML
+            const tempDiv = document.createElement("div");
+            tempDiv.appendChild(fragment);
+
+            // Inline computed styles for all elements to preserve visual appearance
+            const elements = tempDiv.querySelectorAll("*");
+            elements.forEach((el) => {
+              if (el instanceof HTMLElement) {
+                const computed = window.getComputedStyle(el);
+                // Capture essential styling properties
+                const essentialStyles = [
+                  "font-family",
+                  "font-size",
+                  "font-weight",
+                  "font-style",
+                  "line-height",
+                  "color",
+                  "background-color",
+                  "text-decoration",
+                  "text-align",
+                  "margin",
+                  "padding",
+                  "border",
+                  "border-radius",
+                  "display",
+                  "list-style-type",
+                ];
+
+                const inlineStyles = essentialStyles
+                  .map((prop) => {
+                    const value = computed.getPropertyValue(prop);
+                    // Skip default/empty values
+                    if (value && value !== "none" && value !== "normal" && value !== "0px") {
+                      return `${prop}: ${value}`;
+                    }
+                    return null;
+                  })
+                  .filter(Boolean)
+                  .join("; ");
+
+                if (inlineStyles) {
+                  el.setAttribute("style", inlineStyles);
+                }
+              }
+            });
+
+            htmlContent = tempDiv.innerHTML;
+          } catch (e) {
+            console.warn("Could not capture HTML content:", e);
+          }
+        }
+
         setExtractDialog({
           content: selectedText,
+          htmlContent,
           url: currentUrl,
           pageTitle: pageTitle,
           timestamp: Date.now(),
@@ -464,15 +542,17 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     }
   }, [currentUrl, pageTitle, toast]);
 
-  const handleSaveExtract = async (data: { content: string; note: string; tags: string[] }) => {
+  const handleSaveExtract = async (data: { content: string; htmlContent?: string; note: string; tags: string[] }) => {
     try {
       // First, create a document for this web page if it doesn't exist
       const docId = `web-${Date.now()}`;
 
-      // Create the extract
+      // Create the extract with rich HTML content for visual fidelity
       const extractInput: CreateExtractInput = {
         document_id: docId,
         content: data.content,
+        html_content: data.htmlContent,
+        source_url: extractDialog?.url || currentUrl,
         note: data.note,
         tags: data.tags,
         color: "yellow",
@@ -485,6 +565,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         ...savedExtracts,
         {
           content: data.content,
+          htmlContent: data.htmlContent,
           url: extractDialog?.url || currentUrl,
           pageTitle: extractDialog?.pageTitle || pageTitle,
           timestamp: Date.now(),

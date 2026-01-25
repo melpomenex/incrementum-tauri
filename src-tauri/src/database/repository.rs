@@ -532,17 +532,19 @@ impl Repository {
         sqlx::query(
             r#"
             INSERT INTO extracts (
-                id, document_id, content, page_title, page_number,
+                id, document_id, content, html_content, source_url, page_title, page_number,
                 highlight_color, notes, progressive_disclosure_level,
                 max_disclosure_level, date_created, date_modified,
                 tags, category, memory_state_stability, memory_state_difficulty,
                 next_review_date, last_review_date, review_count, reps
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
             "#,
         )
         .bind(&extract.id)
         .bind(&extract.document_id)
         .bind(&extract.content)
+        .bind(&extract.html_content)
+        .bind(&extract.source_url)
         .bind(&extract.page_title)
         .bind(extract.page_number)
         .bind(&extract.highlight_color)
@@ -584,6 +586,8 @@ impl Repository {
                     id: row.try_get("id")?,
                     document_id: row.try_get("document_id")?,
                     content: row.try_get("content")?,
+                    html_content: row.try_get("html_content").ok(),
+                    source_url: row.try_get("source_url").ok(),
                     page_title: row.try_get("page_title")?,
                     page_number: row.try_get("page_number")?,
                     highlight_color: row.try_get("highlight_color")?,
@@ -624,6 +628,8 @@ impl Repository {
                 id: row.try_get("id")?,
                 document_id: row.try_get("document_id")?,
                 content: row.try_get("content")?,
+                html_content: row.try_get("html_content").ok(),
+                source_url: row.try_get("source_url").ok(),
                 page_title: row.try_get("page_title")?,
                 page_number: row.try_get("page_number")?,
                 highlight_color: row.try_get("highlight_color")?,
@@ -654,15 +660,18 @@ impl Repository {
         sqlx::query(
             r#"
             UPDATE extracts SET
-                content = ?1, notes = ?2, highlight_color = ?3,
-                tags = ?4, category = ?5, date_modified = ?6,
-                memory_state_stability = ?7, memory_state_difficulty = ?8,
-                next_review_date = ?9, last_review_date = ?10,
-                review_count = ?11, reps = ?12
-            WHERE id = ?13
+                content = ?1, html_content = ?2, source_url = ?3,
+                notes = ?4, highlight_color = ?5,
+                tags = ?6, category = ?7, date_modified = ?8,
+                memory_state_stability = ?9, memory_state_difficulty = ?10,
+                next_review_date = ?11, last_review_date = ?12,
+                review_count = ?13, reps = ?14
+            WHERE id = ?15
             "#,
         )
         .bind(&extract.content)
+        .bind(&extract.html_content)
+        .bind(&extract.source_url)
         .bind(&extract.notes)
         .bind(&extract.highlight_color)
         .bind(&tags_json)
@@ -708,6 +717,8 @@ impl Repository {
                 id: row.try_get("id")?,
                 document_id: row.try_get("document_id")?,
                 content: row.try_get("content")?,
+                html_content: row.try_get("html_content").ok(),
+                source_url: row.try_get("source_url").ok(),
                 page_title: row.try_get("page_title")?,
                 page_number: row.try_get("page_number")?,
                 highlight_color: row.try_get("highlight_color")?,
@@ -748,6 +759,8 @@ impl Repository {
                 id: row.try_get("id")?,
                 document_id: row.try_get("document_id")?,
                 content: row.try_get("content")?,
+                html_content: row.try_get("html_content").ok(),
+                source_url: row.try_get("source_url").ok(),
                 page_title: row.try_get("page_title")?,
                 page_number: row.try_get("page_number")?,
                 highlight_color: row.try_get("highlight_color")?,

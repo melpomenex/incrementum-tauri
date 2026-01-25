@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Trash2, Edit, Tag, Calendar, FileText, Sparkles, Loader2, CheckSquare, Square, X } from "lucide-react";
+import { Trash2, Edit, Tag, Calendar, FileText, Sparkles, Loader2, CheckSquare, Square, X, Eye } from "lucide-react";
 import { getExtracts, type Extract } from "../../api/extracts";
 import { generateLearningItemsFromExtract } from "../../api/learning-items";
 import { bulkDeleteExtracts, bulkGenerateCards } from "../../api/extract-bulk";
@@ -8,6 +8,7 @@ import { cn } from "../../utils";
 import { EditExtractDialog } from "./EditExtractDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { GeneratedCardsPopover } from "../common/GeneratedCardsPopover";
+import { RichContentRenderer } from "../common/RichContentRenderer";
 
 interface ExtractsListProps {
   documentId: string;
@@ -378,10 +379,16 @@ export function ExtractsList({ documentId }: ExtractsListProps) {
 
             {/* Header */}
             <div className="flex items-start justify-between mb-2">
-              <div className="flex-1">
+              <div className="flex-1 flex items-center gap-2 flex-wrap">
                 {extract.category && (
-                  <span className="inline-block px-2 py-1 text-xs bg-primary/10 text-primary rounded mb-2">
+                  <span className="inline-block px-2 py-1 text-xs bg-primary/10 text-primary rounded">
                     {extract.category}
+                  </span>
+                )}
+                {extract.html_content && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-500/10 text-blue-500 rounded" title="Rich content preserved">
+                    <Eye className="w-3 h-3" />
+                    Rich
                   </span>
                 )}
               </div>
@@ -403,11 +410,23 @@ export function ExtractsList({ documentId }: ExtractsListProps) {
               </div>
             </div>
 
-            {/* Content */}
-            <div 
-              className="text-foreground mb-3 whitespace-pre-wrap"
-              dangerouslySetInnerHTML={{ __html: extract.content }}
-            />
+            {/* Content with Rich HTML support */}
+            <div className="mb-3">
+              {extract.html_content ? (
+                <RichContentRenderer
+                  content={extract.content}
+                  htmlContent={extract.html_content}
+                  sourceUrl={extract.source_url}
+                  mode="full"
+                  maxHeight="250px"
+                />
+              ) : (
+                <div
+                  className="text-foreground whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={{ __html: extract.content }}
+                />
+              )}
+            </div>
 
             {/* Notes */}
             {extract.notes && (

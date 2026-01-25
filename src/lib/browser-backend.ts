@@ -514,6 +514,8 @@ const commandHandlers: Record<string, CommandHandler> = {
         const extract = await db.createExtract({
             document_id: args.documentId as string,
             content: args.content as string,
+            html_content: args.htmlContent as string | undefined,
+            source_url: args.sourceUrl as string | undefined,
             notes: args.note as string | undefined,
             tags: args.tags as string[] | undefined,
             category: args.category as string | undefined,
@@ -527,6 +529,8 @@ const commandHandlers: Record<string, CommandHandler> = {
         const id = args.id as string;
         const extract = await db.updateExtract(id, {
             content: args.content as string | undefined,
+            html_content: args.htmlContent as string | undefined,
+            source_url: args.sourceUrl as string | undefined,
             notes: args.note as string | undefined,
             tags: args.tags as string[] | undefined,
             category: args.category as string | undefined,
