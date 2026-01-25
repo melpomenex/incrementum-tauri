@@ -1,15 +1,25 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Link2 } from "lucide-react";
 import { useDocumentStore } from "../stores";
+import { EnhancedFilePicker } from "../components/documents/EnhancedFilePicker";
+import type { ImportSource } from "../components/documents/EnhancedFilePicker";
 
 export function Documents() {
   const navigate = useNavigate();
-  const { documents, isLoading, isImporting, importProgress, error, loadDocuments, openFilePickerAndImport, importFromFiles } = useDocumentStore();
+  const { documents, isLoading, isImporting, importProgress, error, loadDocuments, openFilePickerAndImport, importFromFiles, importFromUrl, importFromArxiv } = useDocumentStore();
   const [isDragging, setIsDragging] = useState(false);
+  const [showImportPicker, setShowImportPicker] = useState(false);
+  const [initialImportSource, setInitialImportSource] = useState<'local' | 'url' | 'arxiv'>('local');
 
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
+
+  const handleImportFromUrl = () => {
+    setInitialImportSource('url');
+    setShowImportPicker(true);
+  };
 
   const handleImport = async () => {
     try {
@@ -22,6 +32,30 @@ export function Documents() {
       console.error("Failed to import:", error);
     }
   };
+
+  const handleImportFromPicker = async (source: ImportSource, data: any) => {
+    console.log('[Documents] Import from picker:', source, data);
+    try {
+      if (source === 'url') {
+        console.log('[Documents] Calling importFromUrl with:', data.url);
+        await importFromUrl(data.url);
+        console.log('[Documents] importFromUrl completed');
+        setShowImportPicker(false);
+      } else if (source === 'arxiv') {
+        console.log('[Documents] Calling importFromArxiv with:', data.url);
+        await importFromArxiv(data.url);
+        console.log('[Documents] importFromArxiv completed');
+        setShowImportPicker(false);
+      } else if (source === 'local') {
+        await importFromFiles(data.filePaths);
+        setShowImportPicker(false);
+      }
+    } catch (error) {
+      console.error("[Documents] Import error:", error);
+      // Error is handled by store
+    }
+  };
+
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -61,6 +95,7 @@ export function Documents() {
   }, [importFromFiles]);
 
   return (
+    <>
     <div
       className={`p-6 ${isDragging ? 'bg-primary/10' : ''}`}
       onDragOver={handleDragOver}
@@ -74,13 +109,23 @@ export function Documents() {
             Browse and manage your documents
           </p>
         </div>
-        <button
-          onClick={handleImport}
-          disabled={isImporting}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isImporting ? "Importing..." : "Import Document"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleImportFromUrl}
+            disabled={isImporting}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Link2 className="w-4 h-4" />
+            {isImporting ? "Importing..." : "Import from URL"}
+          </button>
+          <button
+            onClick={handleImport}
+            disabled={isImporting}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Import Document
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -208,5 +253,14 @@ export function Documents() {
         </div>
       )}
     </div>
+
+    {showImportPicker && (
+      <EnhancedFilePicker
+        onImport={handleImportFromPicker}
+        onCancel={() => setShowImportPicker(false)}
+        isLoading={isImporting}
+      />
+    )}
+  </>
   );
 }

@@ -1,0 +1,19 @@
+You are an agent tasked with fixing two behaviors in the browser view: (1) extracts within the browser view and (2) importing websites from the browser. The goal is strict 1:1 UI/UX fidelity with the original document or site.
+
+Requirements:
+- Preserve visual layout and typography precisely: spacing, font sizes/weights, line heights, colors, alignment, borders, shadows, and background treatments.
+- Maintain structure and semantics: headings, lists, tables, forms, and interactive elements should match the source behavior.
+- Capture and apply CSS rules (including @font-face, media queries, variables) and resolve computed styles so the rendered result is indistinguishable from the original.
+- Ensure images, SVGs, video posters, and icons render correctly; handle lazy-loaded assets.
+- For website imports, include external resources (fonts, stylesheets, scripts when needed) or inline them if required for fidelity.
+- Preserve layout at common breakpoints; maintain responsive behavior if present.
+- Avoid regressions: no clipping, reflow differences, missing assets, or incorrect z-index stacking.
+
+Deliverables:
+- Identify root causes of mismatch in extracts and imports (CSS, DOM serialization, resource loading, sandboxing, etc.).
+- Propose and implement fixes with minimal disruption to existing architecture.
+- Add or update tests/fixtures (screenshots or DOM snapshots if available) to lock in 1:1 fidelity.
+- Document any constraints or tradeoffs.
+
+Output:
+- Provide a brief summary of changes and verification steps.

@@ -95,12 +95,18 @@ export function Toolbar() {
   };
 
   // Import URL button
-  const handleImportUrl = () => {
-    // TODO: Implement URL import dialog
+  const handleImportUrl = async () => {
     const url = prompt("Enter URL to import:");
     if (url) {
       console.log("Import URL:", url);
-      // Will implement URL import in future
+      try {
+        const { importFromUrl } = useDocumentStore.getState();
+        await importFromUrl(url);
+        console.log("URL import completed successfully");
+      } catch (error) {
+        console.error("URL import failed:", error);
+        alert(`Failed to import URL: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
   };
 

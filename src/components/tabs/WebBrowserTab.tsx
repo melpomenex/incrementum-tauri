@@ -345,6 +345,32 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       const href = iframe.contentWindow?.location?.href;
       if (href === "about:blank") {
         setIframeStatus("blocked");
+        return;
+      }
+
+      // Inject script to handle extract requests (works for same-origin iframes)
+      try {
+        if (iframe.contentWindow && iframe.contentDocument) {
+          const script = iframe.contentDocument.createElement('script');
+          script.textContent = `
+            (function() {
+              window.addEventListener('message', function(event) {
+                if (event.data.type === 'incrementum-get-selection' &&
+                    event.data.source === 'incrementum-web-browser') {
+                  const selection = window.getSelection()?.toString() || '';
+                  event.source.postMessage({
+                    type: 'incrementum-selection-response',
+                    selection: selection
+                  }, event.origin);
+                }
+              });
+            })();
+          `;
+          iframe.contentDocument.head.appendChild(script);
+        }
+      } catch (scriptError) {
+        // Script injection failed (likely cross-origin)
+        console.log("Could not inject script into iframe:", scriptError);
       }
     } catch {
       // Cross-origin access errors are expected and not actionable here.
@@ -363,18 +389,80 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   };
 
   const handleCreateExtract = useCallback(() => {
-    // For webview, we need to get selected text through JavaScript injection
-    // This is a placeholder - actual implementation depends on Tauri webview APIs
-    const selectedText = window.getSelection()?.toString();
-    if (selectedText) {
-      setExtractDialog({
-        content: selectedText,
-        url: currentUrl,
-        pageTitle: pageTitle,
-        timestamp: Date.now(),
-      });
+    if (isTauri()) {
+      // Tauri webview mode: get selection through JavaScript injection
+      const selectedText = window.getSelection()?.toString();
+      if (selectedText) {
+        setExtractDialog({
+          content: selectedText,
+          url: currentUrl,
+          pageTitle: pageTitle,
+          timestamp: Date.now(),
+        });
+      } else {
+        toast.error("Please select some text first");
+      }
+    } else {
+      // PWA/Web mode: use postMessage to communicate with iframe
+      const iframe = iframeRef.current;
+      if (!iframe || !iframe.contentWindow) {
+        toast.error("No browser content available");
+        return;
+      }
+
+      try {
+        // Send a message to the iframe requesting the selection
+        iframe.contentWindow.postMessage({
+          type: 'incrementum-get-selection',
+          source: 'incrementum-web-browser'
+        }, '*');
+
+        // Set up a one-time listener for the response
+        const messageHandler = (event: MessageEvent) => {
+          // Verify the message is from the iframe
+          if (event.source !== iframe.contentWindow) return;
+
+          if (event.data.type === 'incrementum-selection-response') {
+            window.removeEventListener('message', messageHandler);
+
+            if (event.data.selection) {
+              setExtractDialog({
+                content: event.data.selection,
+                url: currentUrl,
+                pageTitle: pageTitle,
+                timestamp: Date.now(),
+              });
+            } else {
+              toast.error("Please select some text first");
+            }
+          }
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        // Timeout after 2 seconds
+        setTimeout(() => {
+          window.removeEventListener('message', messageHandler);
+        }, 2000);
+
+      } catch (error) {
+        console.error("Failed to communicate with iframe:", error);
+
+        // Check if it's a cross-origin issue
+        const iframeOrigin = new URL(currentUrl).origin;
+        const parentOrigin = window.location.origin;
+
+        if (iframeOrigin !== parentOrigin) {
+          toast.error(
+            `Cannot extract from ${iframeOrigin}. Try opening in system browser or import the URL as a document.`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.error("Failed to get selection. Please try selecting text again.", { duration: 4000 });
+        }
+      }
     }
-  }, [currentUrl, pageTitle]);
+  }, [currentUrl, pageTitle, toast]);
 
   const handleSaveExtract = async (data: { content: string; note: string; tags: string[] }) => {
     try {
@@ -678,6 +766,20 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     localStorage.setItem("web-browser-bookmarks", JSON.stringify(bookmarks));
   }, [bookmarks]);
 
+  // Keyboard shortcut handler for creating extracts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + Shift + E to create extract
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
+        e.preventDefault();
+        handleCreateExtract();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCreateExtract]);
+
   return (
     <div className="h-full w-full flex flex-col min-h-0">
       {/* Browser Toolbar */}
@@ -766,13 +868,13 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
             <button
               onClick={handleCreateExtract}
               className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors text-sm flex items-center gap-2"
-              title="Create extract from selected text"
+              title="Create extract from selected text (Ctrl/Cmd + Shift + E)"
             >
               <HighlighterIcon className="w-4 h-4" />
               Create Extract
             </button>
             <span className="text-xs text-muted-foreground">
-              Select text on the page, then click to create an extract or flashcard
+              Select text on the page, then click button or press Ctrl/Cmd+Shift+E
             </span>
           </div>
         )}
@@ -908,7 +1010,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                     ref={iframeRef}
                     src={currentUrl}
                     className="w-full h-full border-0"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
                     title="Web Browser"
                     onLoad={handleIframeLoad}
                     onError={handleIframeError}

@@ -34,12 +34,93 @@ export async function importFromUrl(url: string): Promise<Omit<Document, 'id'>> 
       fileType = 'other';
     }
 
+    // For HTML files, we'll read the file and store the full HTML as content
+    // This allows the viewer to display the page with proper formatting
+    let content = `Imported from ${url}`;
+    if (fileType === 'html') {
+      try {
+        // Read the fetched HTML file
+        const { readDocumentFile } = await import('../api/documents');
+        const base64Content = await readDocumentFile(fetched.file_path);
+
+        // Convert base64 to string
+        const htmlContent = atob(base64Content);
+
+        // Parse HTML and clean it up like the browser extension does
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlContent, 'text/html');
+
+        // Remove scripts, iframes, and other potentially harmful elements
+        doc.querySelectorAll('script, iframe, object, embed, form').forEach(el => el.remove());
+
+        // Add a base tag to preserve relative links and images
+        const baseTag = doc.querySelector('base');
+        if (!baseTag) {
+          const base = doc.createElement('base');
+          base.href = validUrl.origin + '/';
+          doc.head.insertBefore(base, doc.head.firstChild);
+        }
+
+        // Try to find and preserve the main content area (like browser extension does)
+        const contentSelectors = [
+          'main',
+          'article',
+          '[role="main"]',
+          '.content',
+          '.main-content',
+          '#content',
+          '#main',
+          '.post-content',
+          '.entry-content',
+          '.article-content'
+        ];
+
+        let mainElement = null;
+        for (const selector of contentSelectors) {
+          mainElement = doc.querySelector(selector);
+          if (mainElement) break;
+        }
+
+        // If we found a main content area, use it; otherwise use full body
+        const contentHtml = mainElement ? mainElement.outerHTML : doc.body.innerHTML;
+
+        // Create a clean HTML document with the content
+        const cleanDoc = document.implementation.createHTMLDocument(title || 'Imported Page');
+        cleanDoc.head.innerHTML = `
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <base href="${validUrl.origin}/">
+          <title>${title || validUrl.hostname}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
+            img { max-width: 100%; height: auto; }
+            pre { background: #f4f4f4; padding: 1em; overflow-x: auto; }
+            code { background: #f4f4f4; padding: 0.2em 0.4em; border-radius: 3px; }
+            blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 1em; color: #666; }
+          </style>
+        `;
+
+        // Copy the content
+        cleanDoc.body.innerHTML = contentHtml;
+
+        // Serialize to HTML string
+        content = cleanDoc.documentElement.outerHTML;
+      } catch (error) {
+        console.warn('Failed to process HTML content during import:', error);
+        content = `<div style="font-family: sans-serif; padding: 20px;">
+          <h2>Imported from ${validUrl.hostname}</h2>
+          <p>Content will be available once you open this document.</p>
+          <p><a href="${url}" target="_blank">View original page →</a></p>
+        </div>`;
+      }
+    }
+
     // Create document object
     const document: Omit<Document, 'id'> = {
       title: title,
       filePath: fetched.file_path,
       fileType: fileType,
-      content: `Imported from ${url}`,
+      content: content,
       contentHash: await generateHash(fetched.file_path),
       category: 'Web Import',
       tags: ['web-import', new URL(url).hostname],

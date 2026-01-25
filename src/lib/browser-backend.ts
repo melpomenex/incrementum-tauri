@@ -315,7 +315,9 @@ const commandHandlers: Record<string, CommandHandler> = {
         const filePath = doc.file_path;
         const fileType = doc.file_type?.toLowerCase() || '';
 
-        if ((fileType === 'pdf' || fileType === 'epub') && filePath.startsWith('browser-file://')) {
+        // Handle browser-file:// and browser-fetched:// paths
+        if ((fileType === 'pdf' || fileType === 'epub' || fileType === 'html') &&
+            (filePath.startsWith('browser-file://') || filePath.startsWith('browser-fetched://'))) {
             // Try to get from in-memory store first, then from IndexedDB
             const browserFile = getBrowserFile(filePath);
             let arrayBuffer: ArrayBuffer | null = null;
@@ -338,9 +340,39 @@ const commandHandlers: Record<string, CommandHandler> = {
             }
 
             if (arrayBuffer) {
-                const extractedContent = fileType === 'epub'
-                    ? await extractEpubText(arrayBuffer)
-                    : await extractPdfText(arrayBuffer);
+                let extractedContent = '';
+
+                if (fileType === 'html') {
+                    // Extract text from HTML
+                    try {
+                        const text = new TextDecoder().decode(arrayBuffer);
+                        // Create a temporary DOM element to parse HTML
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(text, 'text/html');
+
+                        // Remove script and style elements
+                        doc.querySelectorAll('script, style').forEach(el => el.remove());
+
+                        // Get text content and clean it up
+                        extractedContent = doc.body.textContent || doc.body.innerText || '';
+                        extractedContent = extractedContent
+                            .replace(/\s+/g, ' ')
+                            .replace(/\n\s*\n/g, '\n\n')
+                            .trim();
+
+                        if (extractedContent.length > 50000) {
+                            // Truncate very long content
+                            extractedContent = extractedContent.substring(0, 50000) + '\n\n... (content truncated)';
+                        }
+                    } catch (error) {
+                        console.warn('[Browser] Failed to extract HTML text:', error);
+                    }
+                } else if (fileType === 'epub') {
+                    extractedContent = await extractEpubText(arrayBuffer);
+                } else if (fileType === 'pdf') {
+                    extractedContent = await extractPdfText(arrayBuffer);
+                }
+
                 if (extractedContent) {
                     await db.updateDocument(id, { content: extractedContent });
                     return { content: extractedContent, extracted: true };
@@ -905,12 +937,98 @@ const commandHandlers: Record<string, CommandHandler> = {
         return { is_migrated: true, in_progress: false };
     },
 
-    // Fetch URL content (for ArXiv, etc.) - will need CORS proxy
+    // Fetch URL content (for ArXiv, etc.) with CORS proxy support
     fetch_url_content: async (args) => {
         const url = args.url as string;
-        // In browser, this needs a CORS proxy - return placeholder for now
-        console.warn('[Browser] fetch_url_content needs CORS proxy for:', url);
-        throw new Error('URL fetching requires a CORS proxy in browser mode');
+
+        // List of CORS proxies to try
+        const corsProxies = [
+            null, // Try direct fetch first (might work for CORS-enabled resources)
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
+        let lastError: Error | null = null;
+
+        // Helper function to extract filename from URL
+        const getFilenameFromUrl = (url: string): string => {
+            try {
+                const urlObj = new URL(url);
+                const pathname = urlObj.pathname;
+                const segments = pathname.split('/').filter(s => s);
+                return segments[segments.length - 1] || 'download';
+            } catch {
+                return 'download';
+            }
+        };
+
+        // Try direct fetch first (might work for CORS-enabled feeds)
+        try {
+            console.log('[Browser] Trying direct fetch for:', url);
+            const response = await fetch(url);
+
+            if (response.ok) {
+                const contentType = response.headers.get('content-type') || 'application/octet-stream';
+                const blob = await response.blob();
+
+                // Generate unique ID and store in IndexedDB
+                const fileId = `fetched-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                const filename = getFilenameFromUrl(url);
+                const file = new File([blob], filename, { type: contentType });
+
+                await db.storeFile(file, `browser-fetched://${fileId}`);
+
+                console.log('[Browser] Successfully fetched URL directly');
+
+                return {
+                    file_path: `browser-fetched://${fileId}`,
+                    file_name: filename,
+                    content_type: contentType
+                };
+            }
+        } catch (directError) {
+            console.log('[Browser] Direct fetch failed, trying CORS proxies:', directError);
+            lastError = directError as Error;
+        }
+
+        // Try each CORS proxy
+        for (const proxy of corsProxies) {
+            if (!proxy) continue; // Skip null (already tried direct)
+
+            try {
+                console.log('[Browser] Trying CORS proxy:', proxy);
+                const proxyUrl = proxy + encodeURIComponent(url);
+                const response = await fetch(proxyUrl);
+
+                if (response.ok) {
+                    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+                    const blob = await response.blob();
+
+                    // Generate unique ID and store in IndexedDB
+                    const fileId = `fetched-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                    const filename = getFilenameFromUrl(url);
+                    const file = new File([blob], filename, { type: contentType });
+
+                    await db.storeFile(file, `browser-fetched://${fileId}`);
+
+                    console.log('[Browser] Successfully fetched feed via proxy:', proxy);
+
+                    return {
+                        file_path: `browser-fetched://${fileId}`,
+                        file_name: filename,
+                        content_type: contentType
+                    };
+                } else {
+                    console.log('[Browser] Proxy returned status:', response.status);
+                }
+            } catch (proxyError) {
+                console.log('[Browser] Proxy failed:', proxy, proxyError);
+                lastError = proxyError as Error;
+            }
+        }
+
+        throw new Error(`Failed to fetch URL after trying all methods. Last error: ${lastError?.message || 'Unknown error'}`);
     },
 
     import_youtube_video: async (args) => {
