@@ -1719,6 +1719,7 @@ export function DocumentViewer({
             documentId={documentId}
             onRatingSubmitted={handleRating}
             position="absolute"
+            disableBackdropBlur={docType === "epub"}
           />
         )}
       </div>

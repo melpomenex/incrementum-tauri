@@ -12,6 +12,7 @@ export interface HoverRatingControlsProps {
   previewIntervals?: PreviewIntervals | null;
   className?: string;
   position?: "fixed" | "absolute";
+  disableBackdropBlur?: boolean;
 }
 
 // Rating colors from the plan
@@ -39,6 +40,7 @@ export function HoverRatingControls({
   previewIntervals: initialPreviewIntervals = null,
   className,
   position = "fixed",
+  disableBackdropBlur = false,
 }: HoverRatingControlsProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,7 +112,8 @@ export function HoverRatingControls({
       {/* Rating controls */}
       <div
         className={cn(
-          `${positionClass} bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border`,
+          `${positionClass} bottom-0 left-0 right-0 border-t border-border`,
+          disableBackdropBlur ? "bg-card" : "bg-card/95 backdrop-blur-sm",
           "transition-all duration-200 ease-out pointer-events-auto",
           (isVisible || forceVisible || hoverZoneActive)
             ? "opacity-100 translate-y-0"

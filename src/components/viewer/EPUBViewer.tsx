@@ -495,8 +495,11 @@ export function EPUBViewer({
 
           if (!mounted) return true;
 
-          // Get total locations (pages) - use larger chunk size for better performance
-          await epubBook.locations.generate(1600);
+          // Generate locations in the background to avoid blocking initial render
+          const locationChunkSize = isMobile ? 800 : 1200;
+          void epubBook.locations.generate(locationChunkSize).catch((err: unknown) => {
+            console.warn("EPUBViewer: Failed to generate locations:", err);
+          });
 
           const updateProgress = (location: any) => {
             if (!location || !location.start || !epubBook.locations) return;
