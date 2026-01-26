@@ -650,6 +650,16 @@ export function DocumentViewer({
   }, [currentDocument?.id]);
 
   useEffect(() => {
+    console.log("[DocumentViewer] Restoration effect running:", {
+      viewMode,
+      viewModeRef: viewModeRef.current,
+      docType,
+      isLoading,
+      docId: currentDocument?.id,
+      restoreScrollDone: restoreScrollDoneRef.current,
+      skipStoredScroll: skipStoredScrollRef.current,
+      restorationInProgress: restorationInProgressRef.current,
+    });
     if (viewModeRef.current !== "document") return;
     if (docType !== "pdf") return;
     if (isLoading) return;
