@@ -99,6 +99,29 @@ export function usePdfUrlState(
     return pdfState;
   }, []);
 
+  // Track previous enabled state to detect when we become enabled
+  const prevEnabledRef = useRef(enabled);
+
+  // Re-apply URL state when hook becomes enabled (e.g., returning to document view)
+  useEffect(() => {
+    const wasEnabled = prevEnabledRef.current;
+    prevEnabledRef.current = enabled;
+
+    // Only trigger when transitioning from disabled to enabled
+    if (!wasEnabled && enabled && onHashChange) {
+      const docState = parseStateFromUrl();
+      const pdfState = fromDocumentState(docState);
+
+      if (Object.keys(pdfState).length > 0) {
+        console.log("[usePdfUrlState] Re-applying URL state on enable:", pdfState);
+        // Small delay to ensure component is ready
+        setTimeout(() => {
+          onHashChange(pdfState);
+        }, 50);
+      }
+    }
+  }, [enabled, onHashChange, fromDocumentState]);
+
   // Update URL hash when state changes (debounced)
   useEffect(() => {
     if (!enabled || isRestoringRef.current) return;
@@ -135,11 +158,11 @@ export function usePdfUrlState(
     lastPushedStateRef.current = serializeState(state);
   }, [enabled, toDocumentState, serializeState]);
 
-  // Listen for popstate events (back/forward navigation)
+  // Listen for popstate and hashchange events (back/forward navigation + external hash changes)
   useEffect(() => {
     if (!enabled || !onHashChange) return;
 
-    const handlePopState = () => {
+    const handleHashChange = () => {
       isRestoringRef.current = true;
 
       const docState = parseStateFromUrl();
@@ -155,9 +178,11 @@ export function usePdfUrlState(
       }, 100);
     };
 
-    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("popstate", handleHashChange);
+    window.addEventListener("hashchange", handleHashChange);
     return () => {
-      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("popstate", handleHashChange);
+      window.removeEventListener("hashchange", handleHashChange);
     };
   }, [enabled, onHashChange, fromDocumentState]);
 
