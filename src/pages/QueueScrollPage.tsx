@@ -24,6 +24,7 @@ import { AssistantPanel, type AssistantContext, type AssistantPosition } from ".
 import { useToast } from "../components/common/Toast";
 import { getDeviceInfo } from "../lib/pwa";
 import { createDocument, updateDocumentContent } from "../api/documents";
+import { trimToTokenWindow } from "../utils/tokenizer";
 
 /**
  * Unified scroll item type for documents, RSS articles, and flashcards
@@ -58,6 +59,8 @@ export function QueueScrollPage() {
   const { tabs, activeTabId, closeTab, updateTab } = useTabsStore();
   const { settings, updateSettingsCategory } = useSettingsStore();
   const toast = useToast();
+  const contextWindowTokens = settings.ai.maxTokens;
+  const aiModel = settings.ai.model;
 
   // Always start at index 0 for fresh queue on each scroll mode session
   // Previous logic to restore indices from tab data was causing reviewed items to replay
@@ -424,49 +427,79 @@ export function QueueScrollPage() {
     return null;
   }, [currentItem, documents]);
 
-  const assistantContext = useMemo<AssistantContext | undefined>(() => {
+  const [assistantContext, setAssistantContext] = useState<AssistantContext | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
     const assistantItem = renderedItem ?? currentItem;
-    if (!assistantItem) return undefined;
-
-    if (assistantItem.type === "document" && assistantItem.documentId) {
-      const doc = documents.find(d => d.id === assistantItem.documentId);
-      const title = doc?.title || assistantItem.documentTitle;
-      const content = [title ? `Title: ${title}` : null, doc?.content]
-        .filter(Boolean)
-        .join("\n\n");
-      return {
-        type: "document",
-        documentId: assistantItem.documentId,
-        content: content || undefined,
-      };
+    if (!assistantItem) {
+      setAssistantContext(undefined);
+      return;
     }
 
-    if (assistantItem.type === "extract" && assistantItem.extract) {
-      const extractContent = [assistantItem.extract.content, assistantItem.extract.notes]
-        .filter(Boolean)
-        .join("\n\n");
-      const title = assistantItem.documentTitle ? `Title: ${assistantItem.documentTitle}` : null;
-      const content = [title, extractContent].filter(Boolean).join("\n\n");
-      return {
-        type: "document",
-        documentId: `extract:${assistantItem.extract.id}`,
-        content: content || undefined,
-      };
-    }
+    const buildContext = async () => {
+      const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
 
-    if (assistantItem.type === "rss") {
-      const title = assistantItem.rssItem?.title ? `Title: ${assistantItem.rssItem?.title}` : null;
-      const rssContent = assistantItem.rssItem?.content || assistantItem.rssItem?.description;
-      const content = [title, rssContent].filter(Boolean).join("\n\n");
-      return {
-        type: "web",
-        url: assistantItem.rssItem?.link || `rss:${assistantItem.rssItem?.id}`,
-        content: content || undefined,
-      };
-    }
+      if (assistantItem.type === "document" && assistantItem.documentId) {
+        const doc = documents.find(d => d.id === assistantItem.documentId);
+        const title = doc?.title || assistantItem.documentTitle;
+        const content = [title ? `Title: ${title}` : null, doc?.content]
+          .filter(Boolean)
+          .join("\n\n");
+        const trimmed = content ? await trimToTokenWindow(content, maxTokens, aiModel) : undefined;
+        if (!cancelled) {
+          setAssistantContext({
+            type: "document",
+            documentId: assistantItem.documentId,
+            content: trimmed || undefined,
+            contextWindowTokens: maxTokens,
+          });
+        }
+        return;
+      }
 
-    return undefined;
-  }, [currentItem, renderedItem, documents]);
+      if (assistantItem.type === "extract" && assistantItem.extract) {
+        const extractContent = [assistantItem.extract.content, assistantItem.extract.notes]
+          .filter(Boolean)
+          .join("\n\n");
+        const title = assistantItem.documentTitle ? `Title: ${assistantItem.documentTitle}` : null;
+        const content = [title, extractContent].filter(Boolean).join("\n\n");
+        const trimmed = content ? await trimToTokenWindow(content, maxTokens, aiModel) : undefined;
+        if (!cancelled) {
+          setAssistantContext({
+            type: "document",
+            documentId: `extract:${assistantItem.extract.id}`,
+            content: trimmed || undefined,
+            contextWindowTokens: maxTokens,
+          });
+        }
+        return;
+      }
+
+      if (assistantItem.type === "rss") {
+        const title = assistantItem.rssItem?.title ? `Title: ${assistantItem.rssItem?.title}` : null;
+        const rssContent = assistantItem.rssItem?.content || assistantItem.rssItem?.description;
+        const content = [title, rssContent].filter(Boolean).join("\n\n");
+        const trimmed = content ? await trimToTokenWindow(content, maxTokens, aiModel) : undefined;
+        if (!cancelled) {
+          setAssistantContext({
+            type: "web",
+            url: assistantItem.rssItem?.link || `rss:${assistantItem.rssItem?.id}`,
+            content: trimmed || undefined,
+            contextWindowTokens: maxTokens,
+          });
+        }
+        return;
+      }
+
+      setAssistantContext(undefined);
+    };
+
+    void buildContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentItem, renderedItem, documents, contextWindowTokens, aiModel]);
 
   // Debug logging
   useEffect(() => {
