@@ -15,6 +15,7 @@ import { QueueScrollPage } from "./pages/QueueScrollPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ContinueReadingPage } from "./pages/ContinueReadingPage";
 import { AIWorkflowsPage } from "./pages/AIWorkflowsPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
@@ -130,6 +131,8 @@ function App() {
 
   const renderPage = () => {
     switch (currentPage) {
+      case "continue-reading":
+        return <ContinueReadingPage />;
       case "dashboard":
         return <DashboardPage onNavigate={setCurrentPage} />;
       case "documents":
@@ -197,6 +200,7 @@ function App() {
 
   return (
     <>
+      <CommandCenter />
       <NewMainLayout
         activeItem={currentPage}
         onPageChange={setCurrentPage}

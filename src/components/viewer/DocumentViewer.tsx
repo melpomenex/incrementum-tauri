@@ -25,10 +25,41 @@ import { generateShareUrl, copyShareLink, DocumentState, parseStateFromUrl, upda
 import { usePdfUrlState } from "../../hooks/usePdfUrlState";
 import { getViewState, getViewStateKey, parseViewState, setViewState } from "../../lib/readerPosition";
 import type { ViewState } from "../../types/readerPosition";
+import { saveDocumentPosition, pagePosition, scrollPosition, cfiPosition, timePosition } from "../../api/position";
+import type { DocumentPosition } from "../../types/position";
 
 type ViewMode = "document" | "extracts" | "cards";
 
 type DocumentType = "pdf" | "epub" | "markdown" | "html" | "youtube";
+
+/**
+ * Helper to convert scroll state to unified DocumentPosition
+ */
+function getUnifiedPositionForDocument(
+  docType: DocumentType | undefined,
+  state: {
+    pageNumber: number;
+    scrollPercent: number;
+    scrollTop: number;
+  }
+): DocumentPosition | null {
+  switch (docType) {
+    case "pdf":
+      return pagePosition(state.pageNumber);
+    case "epub":
+      // EPUB uses CFI which is not available in basic scroll state
+      // Fall back to scroll percent
+      return scrollPosition(state.scrollPercent);
+    case "markdown":
+    case "html":
+      return scrollPosition(state.scrollPercent);
+    case "youtube":
+      // YouTube uses time-based position (handled separately)
+      return null;
+    default:
+      return scrollPosition(state.scrollPercent);
+  }
+}
 
 /**
  * Extract YouTube video ID from various URL formats
@@ -106,6 +137,7 @@ export function DocumentViewer({
   const scrollSaveTimeoutRef = useRef<number | null>(null);
   const restoreRequestIdRef = useRef(0);
   const restoreAttemptRef = useRef(0);
+  const restoreReadyAttemptsRef = useRef(0);
   const pendingViewStateRef = useRef<ViewState | null>(null);
   const lastViewStateRef = useRef<ViewState | null>(null);
   const pdfFingerprintRef = useRef<string | null>(null);
@@ -256,6 +288,8 @@ export function DocumentViewer({
       lastSelectionRef.current = text;
     } else {
       setSelectedText("");
+      // Don't clear lastSelectionRef on empty selection - preserve it for the toolbar button
+      // The floating action button is controlled by selectedText state, so it will hide appropriately
     }
   }, [MAX_SELECTION_CHARS]);
 
@@ -314,8 +348,16 @@ export function DocumentViewer({
       }
 
       if (docId) {
+        // Save using the legacy method
         updateDocumentProgressAuto(docId, state.pageNumber, state.scrollPercent, null, viewState ?? undefined)
           .catch((error) => console.warn("Failed to save document progress:", error));
+
+        // Also save unified position
+        const unifiedPosition = getUnifiedPositionForDocument(currentDocument?.file_type as DocumentType, state);
+        if (unifiedPosition) {
+          saveDocumentPosition(docId, unifiedPosition)
+            .catch((error) => console.warn("Failed to save unified position:", error));
+        }
       }
     },
     [currentDocument?.id, resolveViewStateKey, scale, scrollStorageKey, viewMode, zoomMode]
@@ -787,12 +829,27 @@ export function DocumentViewer({
 
     restoreRequestIdRef.current += 1;
     setRestoreRequestId(restoreRequestIdRef.current);
+    restoreAttemptRef.current = 0;
+    restoreReadyAttemptsRef.current = 0;
 
-    const verifyRestore = () => {
-      const container = document.querySelector(
-        "[data-document-scroll-container]"
-      ) as HTMLElement | null;
-      if (!container) return false;
+    const maxReadyAttempts = 100;
+    const maxVerifyAttempts = 3;
+
+    const getRestoreContainer = () =>
+      document.querySelector("[data-document-scroll-container]") as HTMLElement | null;
+
+    const getRestoreReadiness = () => {
+      const container = getRestoreContainer();
+      if (!container) return { ready: false, container: null };
+      const pageEl = container.querySelector<HTMLElement>(
+        `[data-pdf-page][data-page-number="${state.pageNumber}"]`
+      );
+      if (!pageEl) return { ready: false, container };
+      const hasLayout = pageEl.offsetHeight > 0 || container.scrollHeight > 0;
+      return { ready: hasLayout, container };
+    };
+
+    const verifyRestore = (container: HTMLElement) => {
 
       const pages = Array.from(container.querySelectorAll<HTMLElement>("[data-pdf-page]"));
       let currentPage = 1;
@@ -819,7 +876,17 @@ export function DocumentViewer({
     };
 
     const attemptVerify = () => {
-      const ok = verifyRestore();
+      const readiness = getRestoreReadiness();
+      if (!readiness.container || !readiness.ready) {
+        restoreReadyAttemptsRef.current += 1;
+        if (restoreReadyAttemptsRef.current <= maxReadyAttempts) {
+          restoreScrollTimeoutRef.current = window.setTimeout(attemptVerify, 200);
+          return;
+        }
+      }
+
+      const container = readiness.container ?? getRestoreContainer();
+      const ok = container ? verifyRestore(container) : false;
       if (ok) {
         if (state.pageNumber !== pageNumber) {
           setPageNumber(state.pageNumber);
@@ -830,7 +897,7 @@ export function DocumentViewer({
         return;
       }
 
-      if (restoreAttemptRef.current < 1) {
+      if (restoreAttemptRef.current < maxVerifyAttempts - 1) {
         restoreAttemptRef.current += 1;
         restoreRequestIdRef.current += 1;
         setRestoreRequestId(restoreRequestIdRef.current);
@@ -908,18 +975,21 @@ export function DocumentViewer({
           };
           console.log("[DocumentViewer] Cleanup - captured from DOM:", stateToSave);
         } else {
-          // DOM is gone, use current page number with estimated scroll percent
-          // If the user navigated to page N, they're approximately at that position
-          const fallbackPage = lastViewStateRef.current?.pageNumber ?? currentPageRef.current;
-          stateToSave = {
-            pageNumber: fallbackPage,
-            scrollTop: 0,
-            scrollLeft: 0,
-            scrollHeight: 0,
-            clientHeight: 0,
-            scrollPercent: 0,
-          };
-          console.log("[DocumentViewer] Cleanup - using page number fallback:", stateToSave);
+          const fallbackViewState = lastViewStateRef.current;
+          if (fallbackViewState) {
+            stateToSave = {
+              pageNumber: fallbackViewState.pageNumber ?? currentPageRef.current,
+              scrollTop: fallbackViewState.scrollTop ?? 0,
+              scrollLeft: fallbackViewState.scrollLeft ?? 0,
+              scrollHeight: 0,
+              clientHeight: 0,
+              scrollPercent: fallbackViewState.scrollPercent ?? 0,
+            };
+            console.log("[DocumentViewer] Cleanup - captured from last view state:", stateToSave);
+          } else {
+            console.log("[DocumentViewer] Cleanup - no scroll state available, skipping save");
+            return;
+          }
         }
       }
 
@@ -1573,36 +1643,32 @@ export function DocumentViewer({
             <LearningCardsList documentId={currentDocument.id} />
           </div>
         ) : docType === "pdf" && fileData ? (
-          <div className="h-full">
-            <PDFViewer
-              documentId={currentDocument.id}
-              fileData={fileData}
-              pageNumber={pageNumber}
-              scale={scale}
-              zoomMode={zoomMode}
-              suppressAutoScroll={suppressPdfAutoScroll}
-              onPageChange={handlePageChange}
-              onLoad={handleDocumentLoad}
-              onPdfInfo={handlePdfInfo}
-              onPagesRendered={() => setPagesRendered(true)}
-              onScrollPositionChange={handleScrollPositionChange}
-              restoreState={restoreState}
-              restoreRequestId={restoreRequestId}
-              contextPageWindow={contextPageWindow}
-              onTextWindowChange={handlePdfContextTextChange}
-              onSelectionChange={updateSelection}
-            />
-          </div>
+          <PDFViewer
+            documentId={currentDocument.id}
+            fileData={fileData}
+            pageNumber={pageNumber}
+            scale={scale}
+            zoomMode={zoomMode}
+            suppressAutoScroll={suppressPdfAutoScroll}
+            onPageChange={handlePageChange}
+            onLoad={handleDocumentLoad}
+            onPdfInfo={handlePdfInfo}
+            onPagesRendered={() => setPagesRendered(true)}
+            onScrollPositionChange={handleScrollPositionChange}
+            restoreState={restoreState}
+            restoreRequestId={restoreRequestId}
+            contextPageWindow={contextPageWindow}
+            onTextWindowChange={handlePdfContextTextChange}
+            onSelectionChange={updateSelection}
+          />
         ) : docType === "epub" && fileData ? (
-          <div className="h-full">
-            <EPUBViewer
-              fileData={fileData}
-              fileName={currentDocument.title}
-              documentId={currentDocument.id}
-              onLoad={handleDocumentLoad}
-              onSelectionChange={updateSelection}
-            />
-          </div>
+          <EPUBViewer
+            fileData={fileData}
+            fileName={currentDocument.title}
+            documentId={currentDocument.id}
+            onLoad={handleDocumentLoad}
+            onSelectionChange={updateSelection}
+          />
         ) : docType === "markdown" ? (
           <div className="p-8 bg-background min-h-full mobile-reading-surface">
             <MarkdownViewer document={currentDocument} content={currentDocument.content} />

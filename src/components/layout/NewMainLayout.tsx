@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Network,
+  BookMarked,
 } from "lucide-react";
 
 interface SidebarItem {
@@ -25,6 +26,7 @@ interface SidebarItem {
 }
 
 const sidebarItems: SidebarItem[] = [
+  { id: "continue-reading", label: "Continue Reading", icon: BookMarked },
   { id: "dashboard", label: "Dashboard", icon: Home },
   { id: "documents", label: "Documents", icon: BookOpen },
   { id: "queue", label: "Queue", icon: Layers },
@@ -137,7 +139,11 @@ function TopHeaderBar({
           isAuthenticated={isAuthenticated}
           onLoginClick={onLoginClick}
         />
-        <button className="p-1 hover:bg-muted rounded transition-colors" title="Search">
+        <button
+          className="p-1 hover:bg-muted rounded transition-colors"
+          title="Search (Ctrl+K)"
+          onClick={() => window.dispatchEvent(new CustomEvent('command-palette-toggle'))}
+        >
           <Search className="w-4 h-4 text-foreground-secondary" />
         </button>
         <button className="p-1 hover:bg-muted rounded transition-colors" title="Notifications">

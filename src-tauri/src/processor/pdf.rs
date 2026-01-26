@@ -24,12 +24,26 @@ pub async fn extract_pdf_content(file_path: &str) -> Result<ExtractedContent> {
     // Get file size
     let file_size = buffer.len();
 
-    // Extract text using pdf-extract
-    let text = match pdf_extract::extract_text_from_mem(&buffer) {
-        Ok(t) => t,
-        Err(e) => {
-            // If text extraction fails, return empty text with metadata
+    // Extract text using pdf-extract with a timeout to prevent hanging on large PDFs
+    // Clone buffer for the blocking task
+    let buffer_for_text = buffer.clone();
+    let text = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || {
+            pdf_extract::extract_text_from_mem(&buffer_for_text)
+        })
+    ).await {
+        Ok(Ok(Ok(t))) => t,
+        Ok(Ok(Err(e))) => {
             eprintln!("PDF text extraction failed: {}", e);
+            String::new()
+        }
+        Ok(Err(e)) => {
+            eprintln!("PDF text extraction task panicked: {}", e);
+            String::new()
+        }
+        Err(_) => {
+            eprintln!("PDF text extraction timed out after 10 seconds, skipping text extraction");
             String::new()
         }
     };

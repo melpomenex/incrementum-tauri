@@ -179,50 +179,29 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
     }
   };
 
-  const builtinThemes = themes.filter((t) =>
-    [
-      'modern-dark',
-      'material-you',
-      'snow',
-      'mistral-dark',
-      'aurora-light',
-      'forest-light',
-      'ice-blue',
-      'nocturne-dark',
-      'mapquest',
-      'milky-matcha',
-      'sandstone-light',
-      'minecraft',
-      'mistral-light',
-      'modern-polished',
-      'omar-chy-bliss',
-      'super-game-bro',
-      'cartographer',
-    ].includes(t.id)
-  );
-
-  const customThemes = themes.filter(
-    (t) =>
-      ![
-        'modern-dark',
-        'material-you',
-        'snow',
-        'mistral-dark',
-        'aurora-light',
-        'forest-light',
-        'ice-blue',
-        'nocturne-dark',
-        'mapquest',
-        'milky-matcha',
-        'sandstone-light',
-        'minecraft',
-        'mistral-light',
-        'modern-polished',
-        'omar-chy-bliss',
-        'super-game-bro',
-        'cartographer',
-      ].includes(t.id)
-  );
+  const builtinThemeIds: ThemeId[] = [
+    'modern-dark',
+    'material-you',
+    'snow',
+    'mistral-dark',
+    'aurora-light',
+    'forest-light',
+    'ice-blue',
+    'nocturne-dark',
+    'mapquest',
+    'milky-matcha',
+    'sandstone-light',
+    'minecraft',
+    'mistral-light',
+    'modern-polished',
+    'omar-chy-bliss',
+    'super-game-bro',
+    'cartographer',
+  ];
+  const builtinThemeIdSet = new Set(builtinThemeIds);
+  const builtinThemes = themes.filter((t) => builtinThemeIdSet.has(t.id));
+  const customThemes = themes.filter((t) => !builtinThemeIdSet.has(t.id));
+  const orderedThemes = [...builtinThemes, ...customThemes];
 
   return (
     <div className="theme-picker p-6 space-y-6">
@@ -274,28 +253,13 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
         </div>
       </div>
 
-      {/* Built-in Themes */}
+      {/* Built-in Themes (including custom) */}
       <section>
         <h3 className="text-lg font-semibold mb-4 text-foreground">Built-in Themes</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {builtinThemes.map((t) => (
-            <ThemeCard
-              key={t.id}
-              theme={t}
-              isSelected={theme.id === t.id}
-              onSelect={handleSelectTheme}
-              onPreview={handlePreviewTheme}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* Custom Themes */}
-      {customThemes.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Custom Themes</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {customThemes.map((t) => (
+          {orderedThemes.map((t) => {
+            const isCustom = !builtinThemeIdSet.has(t.id);
+            return (
               <div key={t.id} className="relative">
                 <ThemeCard
                   theme={t}
@@ -303,18 +267,20 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
                   onSelect={handleSelectTheme}
                   onPreview={handlePreviewTheme}
                 />
-                <button
-                  onClick={() => handleDeleteCustomTheme(t.id)}
-                  className="absolute top-2 left-2 p-1 rounded bg-destructive text-destructive-foreground hover:opacity-80 transition-opacity"
-                  title="Delete custom theme"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                {isCustom && (
+                  <button
+                    onClick={() => handleDeleteCustomTheme(t.id)}
+                    className="absolute top-2 left-2 p-1 rounded bg-destructive text-destructive-foreground hover:opacity-80 transition-opacity"
+                    title="Delete custom theme"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            );
+          })}
+        </div>
+      </section>
 
       {/* Preview Notice */}
       {previewTheme && previewTheme !== theme.id && (

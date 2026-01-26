@@ -22,6 +22,11 @@ pub mod cloud;
 pub mod scheduler;
 pub mod legacy_import;
 pub mod ocr;
+pub mod position;
+pub mod reading_goals;
+pub mod search;
+pub mod collections;
+pub mod video;
 
 // Re-export error types for use in commands
 pub use crate::error::Result;
@@ -44,6 +49,11 @@ pub use notifications::*;
 pub use legacy_import::*;
 pub use ocr::*;
 pub use extract_review::*;
+pub use position::*;
+pub use reading_goals::*;
+pub use search::*;
+pub use collections::*;
+pub use video::*;
 
 // Cloud commands
 pub use cloud::oauth::*;

@@ -138,6 +138,8 @@ impl Repository {
                     current_scroll_percent: row.try_get("current_scroll_percent").ok(),
                     current_cfi: row.try_get("current_cfi").ok(),
                     current_view_state: row.try_get("current_view_state").ok(),
+                    position_json: row.try_get("position_json").ok(),
+                    progress_percent: row.try_get("progress_percent").ok(),
                     category: row.get("category"),
                     tags,
                     date_added: row.get("date_added"),
@@ -196,6 +198,8 @@ impl Repository {
                     current_scroll_percent: row.try_get("current_scroll_percent").ok(),
                     current_cfi: row.try_get("current_cfi").ok(),
                     current_view_state: row.try_get("current_view_state").ok(),
+                    position_json: row.try_get("position_json").ok(),
+                    progress_percent: row.try_get("progress_percent").ok(),
                     category: row.get("category"),
                     tags,
                     date_added: row.get("date_added"),
@@ -253,6 +257,8 @@ impl Repository {
                 current_scroll_percent: row.try_get("current_scroll_percent").ok(),
                 current_cfi: row.try_get("current_cfi").ok(),
                 current_view_state: row.try_get("current_view_state").ok(),
+                position_json: row.try_get("position_json").ok(),
+                progress_percent: row.try_get("progress_percent").ok(),
                 category: row.get("category"),
                 tags,
                 date_added: row.get("date_added"),
@@ -1567,6 +1573,222 @@ impl Repository {
             date_created: row.get("date_created"),
             date_modified: row.get("date_modified"),
         }
+    }
+
+    // ============================================================================
+    // Video Features operations
+    // ============================================================================
+
+    /// Create a video bookmark
+    pub async fn create_video_bookmark(
+        &self,
+        id: &str,
+        document_id: &str,
+        title: &str,
+        time: f64,
+        thumbnail: Option<&str>,
+    ) -> Result<()> {
+        let now = Utc::now();
+        sqlx::query(
+            r#"
+            INSERT INTO video_bookmarks (id, document_id, title, time, thumbnail, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+        )
+        .bind(id)
+        .bind(document_id)
+        .bind(title)
+        .bind(time)
+        .bind(thumbnail)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get all bookmarks for a video document
+    pub async fn get_video_bookmarks(&self, document_id: &str) -> Result<Vec<crate::commands::video::VideoBookmark>> {
+        let rows = sqlx::query(
+            "SELECT * FROM video_bookmarks WHERE document_id = ?1 ORDER BY time"
+        )
+        .bind(document_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let bookmarks = rows.into_iter().map(|row| {
+            crate::commands::video::VideoBookmark {
+                id: row.get("id"),
+                document_id: row.get("document_id"),
+                title: row.get("title"),
+                time: row.get("time"),
+                thumbnail_url: row.try_get("thumbnail").ok(),
+                created_at: row.get("created_at"),
+            }
+        }).collect();
+
+        Ok(bookmarks)
+    }
+
+    /// Delete a video bookmark
+    pub async fn delete_video_bookmark(&self, bookmark_id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM video_bookmarks WHERE id = ?1")
+            .bind(bookmark_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Create a video chapter
+    pub async fn create_video_chapter(
+        &self,
+        id: &str,
+        document_id: &str,
+        title: &str,
+        start_time: f64,
+        end_time: f64,
+        order_index: i32,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO video_chapters (id, document_id, title, start_time, end_time, order_index)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+        )
+        .bind(id)
+        .bind(document_id)
+        .bind(title)
+        .bind(start_time)
+        .bind(end_time)
+        .bind(order_index)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get all chapters for a video document
+    pub async fn get_video_chapters(&self, document_id: &str) -> Result<Vec<crate::commands::video::VideoChapter>> {
+        let rows = sqlx::query(
+            "SELECT * FROM video_chapters WHERE document_id = ?1 ORDER BY order_index"
+        )
+        .bind(document_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let chapters = rows.into_iter().map(|row| {
+            crate::commands::video::VideoChapter {
+                id: row.get("id"),
+                document_id: row.get("document_id"),
+                title: row.get("title"),
+                start_time: row.get("start_time"),
+                end_time: row.get("end_time"),
+                order: row.get("order_index"),
+            }
+        }).collect();
+
+        Ok(chapters)
+    }
+
+    /// Set chapters for a video document (replaces all existing chapters)
+    pub async fn set_video_chapters(
+        &self,
+        document_id: &str,
+        chapters: &[crate::commands::video::VideoChapter],
+    ) -> Result<()> {
+        // Delete existing chapters
+        sqlx::query("DELETE FROM video_chapters WHERE document_id = ?1")
+            .bind(document_id)
+            .execute(&self.pool)
+            .await?;
+
+        // Insert new chapters
+        for chapter in chapters {
+            sqlx::query(
+                r#"
+                INSERT INTO video_chapters (id, document_id, title, start_time, end_time, order_index)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                "#,
+            )
+            .bind(&chapter.id)
+            .bind(document_id)
+            .bind(&chapter.title)
+            .bind(chapter.start_time)
+            .bind(chapter.end_time)
+            .bind(chapter.order)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Set transcript for a video document
+    pub async fn set_video_transcript(
+        &self,
+        document_id: &str,
+        transcript: &str,
+        segments_json: &str,
+    ) -> Result<()> {
+        let now = Utc::now();
+
+        // Check if transcript exists
+        let existing = sqlx::query("SELECT id FROM video_transcripts WHERE document_id = ?1")
+            .bind(document_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if existing.is_some() {
+            // Update existing
+            sqlx::query(
+                r#"
+                UPDATE video_transcripts
+                SET transcript = ?1, segments_json = ?2, updated_at = ?3
+                WHERE document_id = ?4
+                "#,
+            )
+            .bind(transcript)
+            .bind(segments_json)
+            .bind(now)
+            .bind(document_id)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            // Insert new
+            let id = uuid::Uuid::new_v4().to_string();
+            sqlx::query(
+                r#"
+                INSERT INTO video_transcripts (id, document_id, transcript, segments_json, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                "#,
+            )
+            .bind(id)
+            .bind(document_id)
+            .bind(transcript)
+            .bind(segments_json)
+            .bind(now)
+            .bind(now)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Get transcript for a video document
+    pub async fn get_video_transcript(&self, document_id: &str) -> Result<Option<(String, String)>> {
+        let row = sqlx::query(
+            "SELECT transcript, segments_json FROM video_transcripts WHERE document_id = ?1 LIMIT 1"
+        )
+        .bind(document_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| {
+            let transcript: String = row.get("transcript");
+            let segments_json: String = row.get("segments_json");
+            (transcript, segments_json)
+        }))
     }
 }
 

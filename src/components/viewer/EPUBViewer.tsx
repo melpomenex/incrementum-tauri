@@ -5,6 +5,7 @@ import { useThemeStore } from "../common/ThemeSystem";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { getDeviceInfo } from "../../lib/pwa";
 import { getDocumentAuto, updateDocumentProgressAuto } from "../../api/documents";
+import { saveDocumentPosition, cfiPosition } from "../../api/position";
 
 interface EPUBViewerProps {
   fileData: Uint8Array;
@@ -77,6 +78,13 @@ export function EPUBViewer({
     } catch (error) {
       // Fail gracefully - localStorage already has the position saved
       console.warn("EPUBViewer: Failed to save position to backend (localStorage saved):", error);
+    }
+
+    // Also save unified position
+    try {
+      await saveDocumentPosition(documentId, cfiPosition(cfi));
+    } catch (error) {
+      console.warn("EPUBViewer: Failed to save unified position:", error);
     }
   }, [documentId]);
 

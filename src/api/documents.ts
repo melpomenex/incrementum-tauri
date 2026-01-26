@@ -276,9 +276,9 @@ export async function convertPdfToHtml(
     });
   }
   return await invokeCommand<PdfToHtmlResult>("convert_pdf_to_html", {
-    filePath,
-    saveToFile,
-    outputPath,
+    file_path: filePath,
+    save_to_file: saveToFile,
+    output_path: outputPath,
   });
 }
 
@@ -302,7 +302,7 @@ export async function convertDocumentPdfToHtml(
   }
   return await invokeCommand<PdfToHtmlResult>("convert_document_pdf_to_html", {
     id,
-    saveToFile,
-    outputPath,
+    save_to_file: saveToFile,
+    output_path: outputPath,
   });
 }

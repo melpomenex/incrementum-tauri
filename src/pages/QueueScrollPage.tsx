@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2, Lightbulb } from "lucide-react";
+import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2, Lightbulb, MessageSquare, Code } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
@@ -77,11 +77,42 @@ export function QueueScrollPage() {
     const saved = localStorage.getItem("assistant-panel-position");
     return saved === "left" ? "left" : "right";
   });
+  const ASSISTANT_VISIBILITY_KEY = "scroll-mode-assistant-visible";
+  const [isAssistantVisible, setIsAssistantVisible] = useState(() => {
+    const stored = localStorage.getItem(ASSISTANT_VISIBILITY_KEY);
+    return stored !== "false";
+  });
+  const [selectedProvider, setSelectedProvider] = useState<"openai" | "anthropic" | "ollama" | "openrouter">(() => {
+    const stored = localStorage.getItem("assistant-llm-provider");
+    if (stored === "openai" || stored === "anthropic" || stored === "ollama" || stored === "openrouter") {
+      return stored;
+    }
+    return "openai";
+  });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const deviceInfo = getDeviceInfo();
   const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
   const [rssSelectedText, setRssSelectedText] = useState("");
   const MAX_SELECTION_CHARS = 10000;
+  const toggleAssistantVisibility = useCallback(() => {
+    setIsAssistantVisible(prev => {
+      const next = !prev;
+      localStorage.setItem(ASSISTANT_VISIBILITY_KEY, String(next));
+      return next;
+    });
+  }, []);
+
+  // Persist provider selection
+  useEffect(() => {
+    localStorage.setItem("assistant-llm-provider", selectedProvider);
+  }, [selectedProvider]);
+
+  const providers = [
+    { id: "openai", name: "OpenAI", icon: Sparkles, color: "text-green-500" },
+    { id: "anthropic", name: "Anthropic", icon: MessageSquare, color: "text-orange-500" },
+    { id: "ollama", name: "Ollama", icon: Code, color: "text-blue-500" },
+    { id: "openrouter", name: "OpenRouter", icon: Settings2, color: "text-purple-500" },
+  ] as const;
 
   // Popup state
   const [activeExtractForCloze, setActiveExtractForCloze] = useState<{ id: string, text: string, range: [number, number] } | null>(null);
@@ -821,17 +852,40 @@ export function QueueScrollPage() {
     >
       {/* Content Viewer - Document, Flashcard, or RSS Article */}
       <div className="flex h-full w-full">
-        {!isMobile && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "left" && (
-          <AssistantPanel
-            context={assistantContext}
-            className="assistant-panel flex-shrink-0"
-            onInputHoverChange={setAssistantInputActive}
-            position={assistantPosition}
-            onPositionChange={(newPosition) => {
-              setAssistantPosition(newPosition);
-              localStorage.setItem("assistant-panel-position", newPosition);
-            }}
-          />
+        {!isMobile && isAssistantVisible && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "left" && (
+          <>
+            {/* Model Chooser - Above Assistant */}
+            <div className="flex-shrink-0 flex flex-col items-center gap-2 p-2 border-r border-border bg-card z-10">
+              {providers.map((provider) => (
+                <button
+                  key={provider.id}
+                  onClick={() => setSelectedProvider(provider.id as any)}
+                  className={`p-2 rounded-lg transition-all ${
+                    selectedProvider === provider.id
+                      ? "bg-muted ring-2 ring-primary"
+                      : "hover:bg-muted"
+                  }`}
+                  title={provider.name}
+                >
+                  <provider.icon className={`w-5 h-5 ${provider.color}`} />
+                </button>
+              ))}
+            </div>
+            <div className="flex-shrink-0 z-10">
+              <AssistantPanel
+                context={assistantContext}
+                className="assistant-panel"
+                onInputHoverChange={setAssistantInputActive}
+                position={assistantPosition}
+                onPositionChange={(newPosition) => {
+                  setAssistantPosition(newPosition);
+                  localStorage.setItem("assistant-panel-position", newPosition);
+                }}
+                selectedProvider={selectedProvider}
+                onProviderChange={setSelectedProvider}
+              />
+            </div>
+          </>
         )}
         <div
           className={cn(
@@ -920,17 +974,40 @@ export function QueueScrollPage() {
             </div>
           )}
         </div>
-        {!isMobile && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "right" && (
-          <AssistantPanel
-            context={assistantContext}
-            className="assistant-panel flex-shrink-0"
-            onInputHoverChange={setAssistantInputActive}
-            position={assistantPosition}
-            onPositionChange={(newPosition) => {
-              setAssistantPosition(newPosition);
-              localStorage.setItem("assistant-panel-position", newPosition);
-            }}
-          />
+        {!isMobile && isAssistantVisible && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "right" && (
+          <>
+            <div className="flex-shrink-0 z-10">
+              <AssistantPanel
+                context={assistantContext}
+                className="assistant-panel"
+                onInputHoverChange={setAssistantInputActive}
+                position={assistantPosition}
+                onPositionChange={(newPosition) => {
+                  setAssistantPosition(newPosition);
+                  localStorage.setItem("assistant-panel-position", newPosition);
+                }}
+                selectedProvider={selectedProvider}
+                onProviderChange={setSelectedProvider}
+              />
+            </div>
+            {/* Model Chooser - Above Assistant */}
+            <div className="flex-shrink-0 flex flex-col items-center gap-2 p-2 border-l border-border bg-card z-10">
+              {providers.map((provider) => (
+                <button
+                  key={provider.id}
+                  onClick={() => setSelectedProvider(provider.id as any)}
+                  className={`p-2 rounded-lg transition-all ${
+                    selectedProvider === provider.id
+                      ? "bg-muted ring-2 ring-primary"
+                      : "hover:bg-muted"
+                  }`}
+                  title={provider.name}
+                >
+                  <provider.icon className={`w-5 h-5 ${provider.color}`} />
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -957,6 +1034,26 @@ export function QueueScrollPage() {
           }}
           onCancel={() => setActiveExtractForQA(null)}
         />
+      )}
+
+      {/* Assistant Toggle */}
+      {!isMobile && renderedItem && renderedItem.type !== "flashcard" && (
+        <div className="fixed bottom-20 md:bottom-6 left-4 md:left-6 z-[70] pointer-events-auto">
+          <button
+            onClick={toggleAssistantVisibility}
+            className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 bg-black/70 text-white rounded-lg shadow-lg hover:bg-black/80 transition-colors min-h-[44px] text-sm md:text-base"
+            title={isAssistantVisible ? "Hide assistant" : "Show assistant"}
+            aria-pressed={!isAssistantVisible}
+          >
+            <Sparkles className="w-5 h-5" />
+            <span className="font-medium hidden sm:inline">
+              {isAssistantVisible ? "Hide Assistant" : "Show Assistant"}
+            </span>
+            <span className="font-medium sm:hidden">
+              {isAssistantVisible ? "Hide" : "Show"}
+            </span>
+          </button>
+        </div>
       )}
 
       {/* RSS Extract Action */}

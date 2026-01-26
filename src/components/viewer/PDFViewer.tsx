@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs";
 import { List, ChevronLeft, ChevronRight, Maximize, Minimize } from "lucide-react";
 import { cn } from "../../utils";
 import type { PdfDest, ViewState } from "../../types/readerPosition";
+import { isTauri } from "../../lib/tauri";
 import "./PDFViewer.css";
 
-// Set up PDF.js worker
+// Set default worker for web/PWA
+// In Tauri, this will be overridden in useEffect before PDF loading
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url
@@ -61,6 +63,7 @@ export function PDFViewer({
   onSelectionChange,
 }: PDFViewerProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const outerContainerRef = useRef<HTMLDivElement>(null);
   const pageContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const textLayerRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -86,6 +89,16 @@ export function PDFViewer({
   const [outline, setOutline] = useState<any[]>([]);
   const [showTOC, setShowTOC] = useState(false);
   const [zoomMode, setZoomMode] = useState<ZoomMode>(externalZoomMode || "custom");
+  // Lazy loading: track which pages should be rendered
+  const [renderedPageRange, setRenderedPageRange] = useState<{ start: number; end: number }>({ start: 1, end: 1 });
+  const renderedPageRangeRef = useRef({ start: 1, end: 1 });
+
+  // Configure PDF.js worker for Tauri before loading any PDF
+  useEffect(() => {
+    if (isTauri()) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs";
+    }
+  }, []);
 
   // Pan state
   const [isDragging, setIsDragging] = useState(false);
@@ -116,6 +129,12 @@ export function PDFViewer({
         onPdfInfo?.({ fingerprint: (pdfDoc as any).fingerprint ?? null });
         textCacheRef.current.clear();
         setNumPages(pdfDoc.numPages);
+        // Clear and initialize rendered pages tracking
+        renderedPagesRef.current.clear();
+        // Render all pages - no lazy loading
+        const initialEnd = pdfDoc.numPages;
+        setRenderedPageRange({ start: 1, end: initialEnd });
+        renderedPageRangeRef.current = { start: 1, end: initialEnd };
         onLoad?.(pdfDoc.numPages, []);
 
         // Get outline (table of contents)
@@ -147,14 +166,18 @@ export function PDFViewer({
   useEffect(() => {
     let mounted = true;
 
-    const renderPages = async () => {
+    const renderInitialPages = async () => {
       if (!pdf) return;
       const renderId = ++renderIdRef.current;
 
-      for (let i = 1; i <= pdf.numPages; i += 1) {
+      console.log("PDFViewer: Rendering all", numPages, "pages");
+
+      for (let i = 1; i <= numPages; i++) {
         if (!mounted || renderId !== renderIdRef.current) {
           return;
         }
+        // Mark as rendered before actual render to prevent duplicate renders
+        renderedPagesRef.current.add(i);
         await renderPage(pdf, i);
       }
 
@@ -164,15 +187,19 @@ export function PDFViewer({
       }
     };
 
-    renderPages();
+    renderInitialPages();
 
     return () => {
       mounted = false;
     };
     // Note: onPagesRendered is intentionally excluded from deps as it's a callback
-    // that shouldn't trigger re-renders - only pdf, scale, and zoomMode changes should re-render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdf, scale, zoomMode]);
+  }, [pdf, numPages, scale, zoomMode]);
+
+  // Sync renderedPageRangeRef when state changes
+  useEffect(() => {
+    renderedPageRangeRef.current = renderedPageRange;
+  }, [renderedPageRange]);
 
   useEffect(() => {
     if (!pdf || !onTextWindowChange) return;
@@ -255,18 +282,23 @@ export function PDFViewer({
         }
 
         if (pdf && (zoomMode === "fit-width" || zoomMode === "fit-page")) {
-          console.log("PDFViewer: Container resized, re-rendering pages");
+          console.log("PDFViewer: Container resized, re-rendering all pages");
 
           // Save current scroll position before re-render
           const scrollTop = container.scrollTop;
           const scrollHeight = container.scrollHeight;
           const scrollPercent = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
 
+          console.log("PDFViewer: Re-rendering all", numPages, "pages");
+
+          // Re-render all pages
           const renderId = ++renderIdRef.current;
-          for (let i = 1; i <= pdf.numPages; i += 1) {
+          for (let i = 1; i <= numPages; i++) {
             if (renderId !== renderIdRef.current) {
               return;
             }
+            // Mark as rendered and re-render when zoom mode changes
+            renderedPagesRef.current.add(i);
             await renderPage(pdf, i);
           }
 
@@ -281,6 +313,10 @@ export function PDFViewer({
     });
 
     resizeObserver.observe(scrollContainerRef.current);
+    // Also observe outer container to catch width changes from assistant panel show/hide
+    if (outerContainerRef.current) {
+      resizeObserver.observe(outerContainerRef.current);
+    }
 
     return () => {
       if (resizeTimeout) {
@@ -467,6 +503,7 @@ export function PDFViewer({
 
     let targetScrollTop: number | null = null;
     let targetScrollLeft: number | null = null;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
 
     if (restoreState.dest && pageEl && viewport) {
       const left = restoreState.dest.left ?? 0;
@@ -474,17 +511,29 @@ export function PDFViewer({
       const [viewportX, viewportY] = viewport.convertToViewportPoint(left, top);
       targetScrollTop = pageEl.offsetTop + viewportY;
       targetScrollLeft = viewportX;
-    } else if (typeof restoreState.scrollTop === "number") {
-      targetScrollTop = restoreState.scrollTop;
-      targetScrollLeft = typeof restoreState.scrollLeft === "number" ? restoreState.scrollLeft : null;
-    } else if (typeof restoreState.scrollPercent === "number") {
-      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-      targetScrollTop = (restoreState.scrollPercent / 100) * maxScroll;
-      targetScrollLeft = typeof restoreState.scrollLeft === "number" ? restoreState.scrollLeft : null;
+    } else if (
+      typeof restoreState.scrollTop === "number"
+      || typeof restoreState.scrollPercent === "number"
+    ) {
+      const scrollLeft = typeof restoreState.scrollLeft === "number" ? restoreState.scrollLeft : null;
+      if (typeof restoreState.scrollPercent === "number" && maxScroll > 0) {
+        const percentScrollTop = (restoreState.scrollPercent / 100) * maxScroll;
+        if (typeof restoreState.scrollTop === "number") {
+          const delta = Math.abs(restoreState.scrollTop - percentScrollTop);
+          const threshold = Math.max(200, maxScroll * 0.05);
+          targetScrollTop = delta > threshold ? percentScrollTop : restoreState.scrollTop;
+        } else {
+          targetScrollTop = percentScrollTop;
+        }
+      } else if (typeof restoreState.scrollTop === "number") {
+        targetScrollTop = restoreState.scrollTop;
+      } else if (typeof restoreState.scrollPercent === "number") {
+        targetScrollTop = (restoreState.scrollPercent / 100) * maxScroll;
+      }
+      targetScrollLeft = scrollLeft;
     }
 
     if (targetScrollTop === null) return;
-    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
     const clamped = Math.min(Math.max(0, targetScrollTop), maxScroll);
 
     restoredPageRef.current = restoreState.pageNumber;
@@ -596,6 +645,9 @@ export function PDFViewer({
     setIsDragging(false);
   };
 
+  // Track which pages have been rendered
+  const renderedPagesRef = useRef<Set<number>>(new Set());
+
   // Sync scroll position
   const handleScroll = () => {
     const container = scrollContainerRef.current;
@@ -674,7 +726,7 @@ export function PDFViewer({
   };
 
   return (
-    <div className="flex flex-col h-full bg-background" onKeyDown={handleKeyDown} tabIndex={0}>
+    <div ref={outerContainerRef} className="flex flex-col h-full bg-background" onKeyDown={handleKeyDown} tabIndex={0}>
       {error && (
         <div className="p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg m-4">
           Failed to load PDF: {error}
@@ -817,31 +869,34 @@ export function PDFViewer({
               </div>
             ) : (
               <div className="mx-auto flex flex-col items-center gap-6">
-                {Array.from({ length: numPages }, (_, index) => (
-                  <div
-                    key={index}
-                    ref={(el) => {
-                      pageContainerRefs.current[index] = el;
-                    }}
-                    data-pdf-page
-                    data-page-number={index + 1}
-                    className="relative shadow-lg border border-border bg-white transition-transform duration-200"
-                  >
-                    <canvas
-                      ref={(el) => {
-                        canvasRefs.current[index] = el;
-                      }}
-                      className="block"
-                    />
+                {Array.from({ length: numPages }, (_, index) => {
+                  const pageNum = index + 1;
+                  return (
                     <div
+                      key={index}
                       ref={(el) => {
-                        textLayerRefs.current[index] = el;
+                        pageContainerRefs.current[index] = el;
                       }}
-                      className="absolute top-0 left-0 overflow-hidden"
-                      style={{ transformOrigin: "0 0" }}
-                    />
-                  </div>
-                ))}
+                      data-pdf-page
+                      data-page-number={pageNum}
+                      className="relative shadow-lg border border-border bg-white transition-transform duration-200"
+                    >
+                      <canvas
+                        ref={(el) => {
+                          canvasRefs.current[index] = el;
+                        }}
+                        className="block"
+                      />
+                      <div
+                        ref={(el) => {
+                          textLayerRefs.current[index] = el;
+                        }}
+                        className="absolute top-0 left-0 overflow-hidden"
+                        style={{ transformOrigin: "0 0" }}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

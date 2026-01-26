@@ -301,6 +301,8 @@ pub async fn import_from_obsidian_internal(
         current_scroll_percent: None,
         current_cfi: None,
         current_view_state: None,
+        position_json: None,
+        progress_percent: Some(0.0),
         category: None,
         tags: vec![],
         date_added: chrono::Utc::now(),

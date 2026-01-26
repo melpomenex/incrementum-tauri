@@ -25,14 +25,23 @@ import {
   Home,
   Zap
 } from "lucide-react";
+import type { TabsState } from "../../stores/tabsStore";
+import type { UIState } from "../../stores/uiStore";
+import type { StudyDeckState } from "../../stores/studyDeckStore";
+
+// Stable selectors defined outside component to avoid infinite re-renders
+const selectAddTab = (state: TabsState) => state.addTab;
+const selectActiveDeckId = (state: StudyDeckState) => state.activeDeckId;
+const selectCommandPaletteOpen = (state: UIState) => state.commandPaletteOpen;
+const selectSetCommandPaletteOpen = (state: UIState) => state.setCommandPaletteOpen;
 
 export function CommandCenter() {
   const documents = useDocumentStore(useShallow((state) => state.documents));
-  const addTab = useTabsStore((state) => state.addTab);
+  const addTab = useTabsStore(selectAddTab);
   const decks = useStudyDeckStore(useShallow((state) => state.decks));
-  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
-  const commandPaletteOpen = useUIStore((state) => state.commandPaletteOpen);
-  const setCommandPaletteOpen = useUIStore((state) => state.setCommandPaletteOpen);
+  const activeDeckId = useStudyDeckStore(selectActiveDeckId);
+  const commandPaletteOpen = useUIStore(selectCommandPaletteOpen);
+  const setCommandPaletteOpen = useUIStore(selectSetCommandPaletteOpen);
 
   const activeDeckTags = useMemo(() => {
     const deck = decks.find((item) => item.id === activeDeckId);

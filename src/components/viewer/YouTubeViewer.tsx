@@ -11,6 +11,7 @@ import { invokeCommand as invoke } from "../../lib/tauri";
 import { getYouTubeEmbedURL, getYouTubeWatchURL, formatDuration } from "../../api/youtube";
 import { getDocumentAuto, updateDocumentProgressAuto } from "../../api/documents";
 import { generateShareUrl, generateYouTubeShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
+import { saveDocumentPosition, timePosition } from "../../api/position";
 
 interface YouTubeViewerProps {
   videoId: string;
@@ -158,12 +159,14 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
     try {
       await updateDocumentProgressAuto(currentDocumentId, Math.floor(time));
+      // Also save unified position
+      await saveDocumentPosition(currentDocumentId, timePosition(Math.floor(time), duration));
       lastSavedTimeRef.current = time;
       console.log(`Saved video position: ${Math.floor(time)}s`);
     } catch (error) {
       console.log("Failed to save position:", error);
     }
-  }, []);
+  }, [duration]);
 
   // Load saved position when component mounts
   useEffect(() => {

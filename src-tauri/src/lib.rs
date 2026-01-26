@@ -1,8 +1,10 @@
 //! Incrementum Tauri application
+#![allow(dead_code, private_interfaces, unused)]
 
 mod error;
 mod models;
 mod database;
+mod services;
 mod commands;
 mod processor;
 mod generator;
@@ -138,6 +140,18 @@ pub fn run() {
             commands::update_document_priority,
             commands::update_document_progress,
             commands::delete_document,
+            // Position tracking commands
+            commands::get_document_position,
+            commands::save_document_position,
+            commands::get_document_progress,
+            commands::create_bookmark,
+            commands::list_bookmarks,
+            commands::delete_bookmark,
+            commands::start_reading_session,
+            commands::end_reading_session,
+            commands::get_active_session,
+            commands::get_documents_with_progress,
+            commands::get_daily_reading_stats,
             commands::import_document,
             commands::import_documents,
             commands::read_document_file,

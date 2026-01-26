@@ -31,7 +31,8 @@ export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWi
     return saved === "left" ? "left" : "right";
   });
   const deviceInfo = getDeviceInfo();
-  const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
+  // Only hide assistant on mobile devices (< 768px), not on tablets or small screens
+  const isMobile = deviceInfo.isMobile;
 
   useEffect(() => {
     let isActive = true;

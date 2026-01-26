@@ -4,6 +4,7 @@
 
 use sqlx::{Pool, Sqlite};
 use std::path::PathBuf;
+use regex::Regex;
 
 use crate::error::{IncrementumError, Result};
 
@@ -534,6 +535,286 @@ pub const MIGRATIONS: &[Migration] = &[
         ALTER TABLE documents ADD COLUMN html_content TEXT;
         "#,
     ),
+    // Migration 018: Add document progress tracking columns
+    Migration::new(
+        "018_add_document_progress_columns",
+        r#"
+        -- Add scroll percentage for tracking reading progress
+        ALTER TABLE documents ADD COLUMN current_scroll_percent REAL;
+
+        -- Add CFI (Canonical Fragment Identifier) for EPUB position tracking
+        ALTER TABLE documents ADD COLUMN current_cfi TEXT;
+        "#,
+    ),
+
+    // Migration 019: Add unified position tracking
+    Migration::new(
+        "019_add_unified_position_tracking",
+        r#"
+        -- Add position_json column for unified DocumentPosition storage
+        -- This will store serialized position data for all document types
+        ALTER TABLE documents ADD COLUMN position_json TEXT;
+
+        -- Add progress_percent for quick progress queries (0.0 to 100.0)
+        ALTER TABLE documents ADD COLUMN progress_percent REAL DEFAULT 0.0;
+
+        -- Create index for progress-based queries (Continue Reading)
+        CREATE INDEX IF NOT EXISTS idx_documents_progress ON documents(progress_percent, date_modified);
+        "#,
+    ),
+
+    // Migration 020: Create bookmarks table
+    Migration::new(
+        "020_add_bookmarks_table",
+        r#"
+        CREATE TABLE IF NOT EXISTS bookmarks (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            position_json TEXT NOT NULL,
+            position_type TEXT NOT NULL,
+            thumbnail TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_document_id ON bookmarks(document_id);
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at);
+        "#,
+    ),
+
+    // Migration 021: Create reading_sessions table
+    Migration::new(
+        "021_add_reading_sessions_table",
+        r#"
+        CREATE TABLE IF NOT EXISTS reading_sessions (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            duration_seconds INTEGER NOT NULL DEFAULT 0,
+            pages_read INTEGER DEFAULT 0,
+            progress_start REAL DEFAULT 0.0,
+            progress_end REAL DEFAULT 0.0,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_reading_sessions_document_id ON reading_sessions(document_id);
+        CREATE INDEX IF NOT EXISTS idx_reading_sessions_started_at ON reading_sessions(started_at);
+
+        -- Create view for daily reading stats (used for streaks and goals)
+        CREATE VIEW IF NOT EXISTS daily_reading_stats AS
+        SELECT
+            DATE(started_at) as reading_date,
+            SUM(duration_seconds) as total_seconds,
+            COUNT(DISTINCT document_id) as documents_read,
+            SUM(pages_read) as total_pages_read,
+            COUNT(*) as session_count
+        FROM reading_sessions
+        WHERE ended_at IS NOT NULL
+        GROUP BY DATE(started_at);
+        "#,
+    ),
+
+    // Migration 022: Create reading_goals table
+    Migration::new(
+        "022_add_reading_goals_table",
+        r#"
+        CREATE TABLE IF NOT EXISTS reading_goals (
+            id TEXT PRIMARY KEY,
+            goal_type TEXT NOT NULL, -- 'daily_minutes', 'daily_pages', 'weekly_minutes'
+            target_value INTEGER NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            modified_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_reading_goals_active ON reading_goals(is_active);
+
+        -- Create goal progress tracking table
+        CREATE TABLE IF NOT EXISTS goal_progress (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            current_value REAL NOT NULL DEFAULT 0.0,
+            is_completed INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (goal_id) REFERENCES reading_goals(id) ON DELETE CASCADE,
+            UNIQUE(goal_id, date)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_goal_progress_goal_date ON goal_progress(goal_id, date);
+        "#,
+    ),
+
+    // Migration 023: Create collections tables
+    Migration::new(
+        "023_add_collections_tables",
+        r#"
+        CREATE TABLE IF NOT EXISTS collections (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            parent_id TEXT,
+            collection_type TEXT NOT NULL DEFAULT 'manual', -- 'manual' or 'smart'
+            filter_query TEXT, -- For smart collections
+            icon TEXT,
+            color TEXT,
+            created_at TEXT NOT NULL,
+            modified_at TEXT NOT NULL,
+            FOREIGN KEY (parent_id) REFERENCES collections(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_collections_parent_id ON collections(parent_id);
+        CREATE INDEX IF NOT EXISTS idx_collections_type ON collections(collection_type);
+
+        -- Document-collection junction table
+        CREATE TABLE IF NOT EXISTS document_collections (
+            document_id TEXT NOT NULL,
+            collection_id TEXT NOT NULL,
+            added_at TEXT NOT NULL,
+            PRIMARY KEY (document_id, collection_id),
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_doc_collections_document ON document_collections(document_id);
+        CREATE INDEX IF NOT EXISTS idx_doc_collections_collection ON document_collections(collection_id);
+        "#,
+    ),
+
+    // Migration 024: Create full-text search index
+    Migration::new(
+        "024_add_fulltext_search",
+        r#"
+        -- Create FTS5 virtual table for document search
+        CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
+            document_id UNINDEXED,
+            title,
+            content,
+            content_type,
+            tokenize = 'porter unicode61'
+        );
+
+        -- Create triggers to keep search index in sync
+        CREATE TRIGGER IF NOT EXISTS document_search_insert AFTER INSERT ON documents BEGIN
+            INSERT INTO document_search(document_id, title, content, content_type)
+            VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), NEW.file_type);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS document_search_update AFTER UPDATE OF title, content, file_type ON documents BEGIN
+            UPDATE document_search SET
+                title = NEW.title,
+                content = COALESCE(NEW.content, ''),
+                content_type = NEW.file_type
+            WHERE document_id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS document_search_delete AFTER DELETE ON documents BEGIN
+            DELETE FROM document_search WHERE document_id = OLD.id;
+        END;
+
+        -- Index extracts for search as well
+        CREATE VIRTUAL TABLE IF NOT EXISTS extract_search USING fts5(
+            extract_id UNINDEXED,
+            document_id UNINDEXED,
+            content,
+            tokenize = 'porter unicode61'
+        );
+
+        CREATE TRIGGER IF NOT EXISTS extract_search_insert AFTER INSERT ON extracts BEGIN
+            INSERT INTO extract_search(extract_id, document_id, content)
+            VALUES (NEW.id, NEW.document_id, NEW.content);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS extract_search_update AFTER UPDATE OF content ON extracts BEGIN
+            UPDATE extract_search SET content = NEW.content WHERE extract_id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS extract_search_delete AFTER DELETE ON extracts BEGIN
+            DELETE FROM extract_search WHERE extract_id = OLD.id;
+        END;
+        "#,
+    ),
+
+    // Migration 025: Backfill position_json from existing fields
+    Migration::new(
+        "025_backfill_position_json",
+        r#"
+        -- Backfill position_json from existing position fields for documents
+        -- This ensures existing data is migrated to the new unified format
+        UPDATE documents
+        SET position_json = json_object(
+            'type', CASE
+                WHEN file_type = 'pdf' THEN 'page'
+                WHEN file_type = 'epub' THEN 'cfi'
+                WHEN file_type IN ('youtube', 'video') THEN 'time'
+                ELSE 'scroll'
+            END,
+            'page', COALESCE(current_page, 0),
+            'cfi', COALESCE(current_cfi, ''),
+            'percent', COALESCE(current_scroll_percent, 0.0)
+        )
+        WHERE position_json IS NULL
+        AND (current_page IS NOT NULL OR current_scroll_percent IS NOT NULL OR current_cfi IS NOT NULL);
+
+        -- Calculate progress_percent for PDF documents
+        UPDATE documents
+        SET progress_percent = CASE
+            WHEN total_pages > 0 AND current_page > 0 THEN (CAST(current_page AS REAL) / CAST(total_pages AS REAL)) * 100.0
+            WHEN current_scroll_percent > 0 THEN current_scroll_percent
+            ELSE 0.0
+        END
+        WHERE progress_percent = 0.0
+        AND (current_page IS NOT NULL OR current_scroll_percent IS NOT NULL);
+        "#,
+    ),
+
+    // Migration 026: Add video features tables
+    Migration::new(
+        "026_add_video_features",
+        r#"
+        -- Video bookmarks table for timestamped bookmarks
+        CREATE TABLE IF NOT EXISTS video_bookmarks (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            time REAL NOT NULL,
+            thumbnail TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_video_bookmarks_document_id ON video_bookmarks(document_id);
+        CREATE INDEX IF NOT EXISTS idx_video_bookmarks_time ON video_bookmarks(time);
+
+        -- Video chapters table for chapter navigation
+        CREATE TABLE IF NOT EXISTS video_chapters (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            start_time REAL NOT NULL,
+            end_time REAL NOT NULL,
+            order_index INTEGER NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_video_chapters_document_id ON video_chapters(document_id);
+        CREATE INDEX IF NOT EXISTS idx_video_chapters_order ON video_chapters(order_index);
+
+        -- Video transcripts table for transcript storage
+        CREATE TABLE IF NOT EXISTS video_transcripts (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            transcript TEXT NOT NULL,
+            segments_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_video_transcripts_document_id ON video_transcripts(document_id);
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path
@@ -576,6 +857,59 @@ fn get_migrations_dir() -> Result<PathBuf> {
     Err(IncrementumError::Internal("Could not locate migrations directory".to_string()))
 }
 
+/// Split SQL into individual statements, respecting CREATE TRIGGER ... BEGIN ... END blocks
+fn split_sql_statements(sql: &str) -> Vec<String> {
+    let mut statements = Vec::new();
+
+    // For triggers with BEGIN...END blocks, use regex to keep them together
+    let trigger_regex = Regex::new(
+        r"(?i)(CREATE\s+(TEMP|TEMPORARY\s+)?TRIGGER[^;]*?BEGIN.*?END;)"
+    ).unwrap();
+
+    // First, extract all triggers as complete statements
+    let mut remaining = sql;
+    while let Some(mat) = trigger_regex.find(remaining) {
+        // Process everything before the trigger
+        let before = &remaining[..mat.start()];
+        for stmt in before.split(';') {
+            let stmt = stmt.trim();
+            if !stmt.is_empty() {
+                // Check if this is only comments (no actual SQL)
+                let without_comments = stmt.lines()
+                    .filter(|line| !line.trim().starts_with("--"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if !without_comments.trim().is_empty() {
+                    statements.push(stmt.to_string());
+                }
+            }
+        }
+
+        // Add the trigger as a single statement
+        statements.push(mat.as_str().trim().to_string());
+
+        // Move past this trigger
+        remaining = &remaining[mat.end()..];
+    }
+
+    // Process any remaining non-trigger statements
+    for stmt in remaining.split(';') {
+        let stmt = stmt.trim();
+        if !stmt.is_empty() {
+            // Check if this is only comments (no actual SQL)
+            let without_comments = stmt.lines()
+                .filter(|line| !line.trim().starts_with("--"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !without_comments.trim().is_empty() {
+                statements.push(stmt.to_string());
+            }
+        }
+    }
+
+    statements
+}
+
 /// Run all pending migrations
 pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     // Ensure migration tracking table exists
@@ -614,17 +948,17 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
             .map_err(|e| IncrementumError::Internal(format!("Failed to start transaction: {}", e)))?;
 
         // Execute migration
-        for statement in migration.sql.split(';') {
-            let statement = statement.trim();
-            if statement.is_empty() {
-                continue;
-            }
-
+        // Split statements while respecting BEGIN...END blocks (for triggers)
+        let statements = split_sql_statements(migration.sql);
+        eprintln!("  Executing {} statements", statements.len());
+        for (i, statement) in statements.iter().enumerate() {
+            eprintln!("  Statement {}: {} bytes", i + 1, statement.len());
+            eprintln!("  First 100 chars: {}", &statement.chars().take(100).collect::<String>());
             sqlx::query(statement)
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| {
-                    IncrementumError::Internal(format!("Migration {} failed: {}", migration.name, e))
+                    IncrementumError::Internal(format!("Migration {} failed at statement {}: {}", migration.name, i + 1, e))
                 })?;
         }
 

@@ -217,19 +217,19 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
     "super-game-bro",
     "cartographer",
   ];
+  const builtinOrder = new Map(allThemeIds.map((id, index) => [id, index]));
+  const themeSort = (a: Theme, b: Theme) => {
+    const aIndex = builtinOrder.get(a.id as ThemeId);
+    const bIndex = builtinOrder.get(b.id as ThemeId);
+    const aRank = aIndex ?? Number.MAX_SAFE_INTEGER;
+    const bRank = bIndex ?? Number.MAX_SAFE_INTEGER;
+    if (aRank !== bRank) return aRank - bRank;
+    return a.name.localeCompare(b.name);
+  };
 
   // Group themes by variant
-  const darkThemes = allThemeIds
-    .map((id) => themes.find((t) => t.id === id))
-    .filter((t): t is Theme => !!t && t.variant === "dark");
-
-  const lightThemes = allThemeIds
-    .map((id) => themes.find((t) => t.id === id))
-    .filter((t): t is Theme => !!t && t.variant === "light");
-
-  const customThemes = themes.filter(
-    (t) => !allThemeIds.includes(t.id as ThemeId)
-  );
+  const darkThemes = themes.filter((t) => t.variant === "dark").sort(themeSort);
+  const lightThemes = themes.filter((t) => t.variant === "light").sort(themeSort);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -313,27 +313,6 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
             </section>
           )}
 
-          {/* Custom Themes */}
-          {customThemes.length > 0 && (
-            <section>
-              <h3
-                className="text-sm font-semibold mb-3 uppercase tracking-wide"
-                style={{ color: theme.colors.textSecondary }}
-              >
-                Custom Themes
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {customThemes.map((t) => (
-                  <ThemeGalleryCard
-                    key={t.id}
-                    theme={t}
-                    isSelected={theme.id === t.id}
-                    onClick={() => handleSelectTheme(t.id)}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
         </div>
 
         {/* Footer */}

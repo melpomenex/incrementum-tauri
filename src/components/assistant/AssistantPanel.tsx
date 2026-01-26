@@ -57,6 +57,8 @@ interface AssistantPanelProps {
   onWidthChange?: (width: number) => void;
   position?: AssistantPosition;
   onPositionChange?: (position: AssistantPosition) => void;
+  selectedProvider?: "openai" | "anthropic" | "ollama" | "openrouter";
+  onProviderChange?: (provider: "openai" | "anthropic" | "ollama" | "openrouter") => void;
 }
 
 const ASSISTANT_POSITION_KEY = "assistant-panel-position";
@@ -70,6 +72,8 @@ export function AssistantPanel({
   onWidthChange,
   position: externalPosition,
   onPositionChange,
+  selectedProvider: externalSelectedProvider,
+  onProviderChange,
 }: AssistantPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [width, setWidth] = useState(() => {
@@ -94,6 +98,9 @@ export function AssistantPanel({
     return "openai";
   });
   const [isInputFocused, setIsInputFocused] = useState(false);
+
+  // Use external provider if provided
+  const effectiveProvider = externalSelectedProvider ?? selectedProvider;
   const [isInputHovered, setIsInputHovered] = useState(false);
   const contextWindowTokens = useSettingsStore((state) => state.settings.ai.maxTokens);
 
@@ -123,6 +130,13 @@ export function AssistantPanel({
   useEffect(() => {
     localStorage.setItem("assistant-llm-provider", selectedProvider);
   }, [selectedProvider]);
+
+  // Sync external provider prop
+  useEffect(() => {
+    if (externalSelectedProvider && externalSelectedProvider !== selectedProvider) {
+      setSelectedProvider(externalSelectedProvider);
+    }
+  }, [externalSelectedProvider]);
 
   useEffect(() => {
     let isActive = true;
@@ -296,26 +310,26 @@ I also have context of what you're currently viewing, so feel free to ask questi
       })));
 
       // Check if the selected provider exists but is disabled
-      const selectedTypeProvider = allProviders.find((p) => p.provider === selectedProvider);
+      const selectedTypeProvider = allProviders.find((p) => p.provider === effectiveProvider);
 
       if (!selectedTypeProvider) {
         // Provider doesn't exist at all
         const availableTypes = enabledProviders.map((p) => p.provider).join(", ");
         return {
-          content: `No ${selectedProvider} provider configured. Available providers: ${availableTypes || "None"}. Please add an API key in Settings.`,
+          content: `No ${effectiveProvider} provider configured. Available providers: ${availableTypes || "None"}. Please add an API key in Settings.`,
         };
       }
 
       if (!selectedTypeProvider.enabled) {
         // Provider exists but is disabled
         return {
-          content: `The ${selectedProvider} provider is configured but disabled. Please enable it in Settings, or select a different provider.`,
+          content: `The ${effectiveProvider} provider is configured but disabled. Please enable it in Settings, or select a different provider.`,
         };
       }
 
       if (!selectedTypeProvider.apiKey || !selectedTypeProvider.apiKey.trim()) {
         return {
-          content: `${selectedProvider} provider found but API key is empty. Please remove and re-add the provider in Settings.`,
+          content: `${effectiveProvider} provider found but API key is empty. Please remove and re-add the provider in Settings.`,
         };
       }
 
@@ -347,7 +361,7 @@ I also have context of what you're currently viewing, so feel free to ask questi
 
       // Call the LLM API
       const response = await chatWithContext(
-        selectedProvider,
+        effectiveProvider,
         provider.model,
         llmMessages,
         {
@@ -589,7 +603,12 @@ Available tools: ${toolNames}`;
     );
   }
 
-  const currentProvider = providers.find((p) => p.id === selectedProvider);
+  const currentProvider = providers.find((p) => p.id === effectiveProvider);
+
+  const handleProviderChange = (providerId: "openai" | "anthropic" | "ollama" | "openrouter") => {
+    setSelectedProvider(providerId);
+    onProviderChange?.(providerId);
+  };
 
   return (
     <div
@@ -608,8 +627,8 @@ Available tools: ${toolNames}`;
             {providers.map((provider) => (
               <button
                 key={provider.id}
-                onClick={() => setSelectedProvider(provider.id as any)}
-                className={`p-1.5 rounded transition-colors ${selectedProvider === provider.id
+                onClick={() => handleProviderChange(provider.id as any)}
+                className={`p-1.5 rounded transition-colors ${effectiveProvider === provider.id
                     ? "bg-muted"
                     : "hover:bg-muted"
                   }`}
@@ -678,10 +697,10 @@ Available tools: ${toolNames}`;
                 )}
                 {message.role === "assistant" && (
                   <>
-                    {selectedProvider === "openai" && <Sparkles className="w-3 h-3 text-green-500" />}
-                    {selectedProvider === "anthropic" && <MessageSquare className="w-3 h-3 text-orange-500" />}
-                    {selectedProvider === "ollama" && <Code className="w-3 h-3 text-blue-500" />}
-                    {selectedProvider === "openrouter" && <Settings className="w-3 h-3 text-purple-500" />}
+                    {effectiveProvider === "openai" && <Sparkles className="w-3 h-3 text-green-500" />}
+                    {effectiveProvider === "anthropic" && <MessageSquare className="w-3 h-3 text-orange-500" />}
+                    {effectiveProvider === "ollama" && <Code className="w-3 h-3 text-blue-500" />}
+                    {effectiveProvider === "openrouter" && <Settings className="w-3 h-3 text-purple-500" />}
                   </>
                 )}
                 <span className="text-xs text-muted-foreground">

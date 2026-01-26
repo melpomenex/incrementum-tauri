@@ -18,6 +18,10 @@ pub struct Document {
     pub current_scroll_percent: Option<f64>,
     pub current_cfi: Option<String>,
     pub current_view_state: Option<String>,
+    /// Unified position storage as JSON (DocumentPosition enum serialized)
+    pub position_json: Option<String>,
+    /// Calculated progress percentage (0.0 to 100.0) for quick queries
+    pub progress_percent: Option<f64>,
     pub category: Option<String>,
     pub tags: Vec<String>,
     pub date_added: DateTime<Utc>,
@@ -93,6 +97,8 @@ impl Document {
             current_scroll_percent: None,
             current_cfi: None,
             current_view_state: None,
+            position_json: None,
+            progress_percent: Some(0.0),
             category: None,
             tags: Vec::new(),
             date_added: Utc::now(),

@@ -49,7 +49,8 @@ export default defineConfig(async ({ mode }) => {
       strictPort: true,
       host: host || "127.0.0.1",
       // Force HMR to a fixed port to avoid handshake issues in the Tauri webview.
-      hmr: isTauriBuild
+      // Disable HMR entirely for PWA mode to avoid websocket churn in installed builds.
+      hmr: isTauriBuild || isPWA
         ? false
         : {
           protocol: "ws",
