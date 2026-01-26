@@ -27,6 +27,7 @@ export default defineConfig(async ({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+      dedupe: ["react", "react-dom"],
     },
 
     // Use relative asset paths so the production build works with

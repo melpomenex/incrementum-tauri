@@ -579,21 +579,33 @@ export function importOPML(opmlContent: string): Feed[] {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(opmlContent, "text/xml");
 
-  const outlines = xmlDoc.querySelectorAll("outline");
   const feeds: Feed[] = [];
+  const seenUrls = new Set<string>();
 
-  outlines.forEach((outline) => {
+  const parseOutline = (outline: Element, category?: string) => {
     const xmlUrl = outline.getAttribute("xmlUrl");
     const htmlUrl = outline.getAttribute("htmlUrl");
     const title = outline.getAttribute("title") || outline.getAttribute("text") || "Unknown Feed";
+    const childOutlines = Array.from(outline.children).filter(
+      (child) => child.tagName.toLowerCase() === "outline"
+    );
 
     if (xmlUrl) {
+      const trimmedUrl = xmlUrl.trim();
+      if (!/^https?:\/\//i.test(trimmedUrl)) {
+        return;
+      }
+      if (seenUrls.has(trimmedUrl)) {
+        return;
+      }
+      seenUrls.add(trimmedUrl);
       feeds.push({
-        id: generateFeedId(xmlUrl),
+        id: generateFeedId(trimmedUrl),
         title,
         description: "",
-        link: htmlUrl || xmlUrl,
-        feedUrl: xmlUrl,
+        link: htmlUrl || trimmedUrl,
+        feedUrl: trimmedUrl,
+        category,
         lastUpdated: new Date().toISOString(),
         lastFetched: new Date().toISOString(),
         updateInterval: 60,
@@ -601,8 +613,22 @@ export function importOPML(opmlContent: string): Feed[] {
         subscribeDate: new Date().toISOString(),
         unreadCount: 0,
       });
+      return;
     }
-  });
+
+    if (childOutlines.length > 0) {
+      const nextCategory = title || category;
+      childOutlines.forEach((child) => parseOutline(child, nextCategory));
+    }
+  };
+
+  const rootOutlines = Array.from(xmlDoc.querySelectorAll("body > outline"));
+  if (rootOutlines.length > 0) {
+    rootOutlines.forEach((outline) => parseOutline(outline));
+  } else {
+    const outlines = Array.from(xmlDoc.querySelectorAll("outline"));
+    outlines.forEach((outline) => parseOutline(outline));
+  }
 
   return feeds;
 }
@@ -1035,7 +1061,12 @@ export async function setRssPreferencesAuto(
  */
 export async function getSubscribedFeedsAuto(): Promise<Feed[]> {
   if (shouldUseHttpBackend()) {
-    return await getFeedsViaHttp();
+    try {
+      return await getFeedsViaHttp();
+    } catch (error) {
+      console.warn("[RSS] HTTP backend unavailable, falling back to local feeds.", error);
+      return getSubscribedFeeds();
+    }
   }
   return getSubscribedFeeds();
 }
@@ -1045,8 +1076,12 @@ export async function getSubscribedFeedsAuto(): Promise<Feed[]> {
  */
 export async function subscribeToFeedAuto(feed: Feed): Promise<void> {
   if (shouldUseHttpBackend()) {
-    await createFeedViaHttp(feed.feedUrl);
-    return;
+    try {
+      await createFeedViaHttp(feed.feedUrl);
+      return;
+    } catch (error) {
+      console.warn("[RSS] HTTP backend unavailable, storing feed locally.", error);
+    }
   }
   subscribeToFeed(feed);
 }
@@ -1056,8 +1091,12 @@ export async function subscribeToFeedAuto(feed: Feed): Promise<void> {
  */
 export async function unsubscribeFromFeedAuto(feedId: string): Promise<void> {
   if (shouldUseHttpBackend()) {
-    await deleteFeedViaHttp(feedId);
-    return;
+    try {
+      await deleteFeedViaHttp(feedId);
+      return;
+    } catch (error) {
+      console.warn("[RSS] HTTP backend unavailable, removing local feed.", error);
+    }
   }
   unsubscribeFromFeed(feedId);
 }
@@ -1105,9 +1144,14 @@ export async function toggleItemFavoriteAuto(feedId: string, itemId: string): Pr
  */
 export async function importOpmlAuto(opmlContent: string): Promise<Feed[]> {
   if (shouldUseHttpBackend()) {
-    const result = await importOpmlViaHttp(opmlContent);
-    // Return empty array since the backend handles the import
-    return [];
+    try {
+      await importOpmlViaHttp(opmlContent);
+      // Return empty array since the backend handles the import
+      return [];
+    } catch (error) {
+      console.warn("[RSS] HTTP OPML import failed, falling back to local import.", error);
+      return importOPML(opmlContent);
+    }
   }
   return importOPML(opmlContent);
 }

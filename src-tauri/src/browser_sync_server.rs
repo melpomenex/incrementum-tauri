@@ -1217,26 +1217,61 @@ struct OpmlFeedData {
 /// Parse OPML content and extract feed data
 fn parse_opml_content(content: &str) -> Result<Vec<OpmlFeedData>, String> {
     use roxmltree::Document;
+    use std::collections::HashSet;
 
     let doc = Document::parse(content)
         .map_err(|e| format!("Failed to parse OPML XML: {}", e))?;
 
     let mut feeds = Vec::new();
+    let mut seen_urls = HashSet::new();
 
     // Find all outline elements (RSS feeds in OPML)
     for node in doc.descendants() {
         if node.tag_name().name() == "outline" {
-            if let Some(url) = node.attribute("xmlUrl").or_else(|| node.attribute("htmlUrl")) {
+            if let Some(url) = node.attribute("xmlUrl") {
+                let url = url.trim();
+                let normalized_url = if url.starts_with("feed://") {
+                    format!("https://{}", &url["feed://".len()..])
+                } else if url.starts_with("feed:http://") {
+                    url["feed:".len()..].to_string()
+                } else if url.starts_with("feed:https://") {
+                    url["feed:".len()..].to_string()
+                } else {
+                    url.to_string()
+                };
+
+                if !(normalized_url.starts_with("http://") || normalized_url.starts_with("https://")) {
+                    continue;
+                }
+
+                if !seen_urls.insert(normalized_url.clone()) {
+                    continue;
+                }
+
                 let title = node.attribute("title")
                     .or_else(|| node.attribute("text"))
                     .unwrap_or("Unknown Feed")
                     .to_string();
 
+                let mut category = None;
+                let mut parent = node.parent();
+                while let Some(ancestor) = parent {
+                    if ancestor.tag_name().name() == "outline" && ancestor.attribute("xmlUrl").is_none() {
+                        category = ancestor.attribute("title")
+                            .or_else(|| ancestor.attribute("text"))
+                            .map(|value| value.to_string());
+                        if category.is_some() {
+                            break;
+                        }
+                    }
+                    parent = ancestor.parent();
+                }
+
                 feeds.push(OpmlFeedData {
-                    url: url.to_string(),
+                    url: normalized_url,
                     title,
                     description: node.attribute("description").map(|s| s.to_string()),
-                    category: node.attribute("category").map(|s| s.to_string()),
+                    category,
                     update_interval: None,
                     auto_queue: None,
                 });

@@ -226,6 +226,8 @@ export function DocumentViewer({
     }
   }, []);
 
+  const enablePdfUrlSync = false;
+
   // URL hash state synchronization for PDF back/forward navigation
   const { pushState: pushUrlState, getInitialState: getUrlInitialState } = usePdfUrlState(
     {
@@ -235,7 +237,7 @@ export function DocumentViewer({
       scrollPercent: lastScrollStateRef.current?.scrollPercent,
     },
     {
-      enabled: viewMode === "document" && docType === "pdf",
+      enabled: enablePdfUrlSync && viewMode === "document" && docType === "pdf",
       debounceMs: 800,
       onHashChange: handleUrlHashChange,
     }
@@ -618,7 +620,7 @@ export function DocumentViewer({
 
   // Parse URL fragment and restore state after document is loaded
   useEffect(() => {
-    if (!currentDocument || !documentId) return;
+    if (!currentDocument || !documentId || !enablePdfUrlSync) return;
 
     skipStoredScrollRef.current = false;
     const state = parseStateFromUrl();

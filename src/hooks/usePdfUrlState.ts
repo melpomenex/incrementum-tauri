@@ -3,6 +3,7 @@ import {
   parseStateFromUrl,
   updateUrlHash,
   pushUrlHash,
+  isEmptyState,
   type DocumentState,
 } from "../lib/shareLink";
 
@@ -121,6 +122,15 @@ export function usePdfUrlState(
       }
     }
   }, [enabled, onHashChange, fromDocumentState]);
+
+  // Clear PDF hash state when URL sync is disabled
+  useEffect(() => {
+    if (enabled) return;
+    const docState = parseStateFromUrl();
+    if (!isEmptyState(docState)) {
+      updateUrlHash({}, true);
+    }
+  }, [enabled]);
 
   // Update URL hash when state changes (debounced)
   useEffect(() => {

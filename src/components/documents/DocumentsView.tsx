@@ -732,6 +732,11 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                       }
                       handleSelectRow(doc, event.metaKey || event.ctrlKey);
                     }}
+                    onDoubleClick={(event) => {
+                      if (isMobile) return;
+                      event.stopPropagation();
+                      onOpenDocument?.(doc);
+                    }}
                     className={`border rounded-lg p-3 cursor-pointer transition-colors ${
                       selectedIds.has(doc.id) ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted/40"
                     }`}
@@ -816,6 +821,11 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                                   return;
                                 }
                                 handleSelectRow(doc, event.metaKey || event.ctrlKey);
+                              }}
+                              onDoubleClick={(event) => {
+                                if (isMobile) return;
+                                event.stopPropagation();
+                                onOpenDocument?.(doc);
                               }}
                               className={`p-2 rounded-md border transition-shadow cursor-pointer ${
                                 selectedIds.has(doc.id)

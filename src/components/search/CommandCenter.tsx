@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { useShallow } from "zustand/react/shallow";
 import { GlobalSearch, SearchResult, SearchQuery, SearchResultType } from "./GlobalSearch";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useTabsStore } from "../../stores/tabsStore";
@@ -25,6 +24,8 @@ import {
   Home,
   Zap
 } from "lucide-react";
+import type { Document } from "../../types/document";
+import type { StudyDeck } from "../../types/study-decks";
 import type { TabsState } from "../../stores/tabsStore";
 import type { UIState } from "../../stores/uiStore";
 import type { StudyDeckState } from "../../stores/studyDeckStore";
@@ -34,11 +35,13 @@ const selectAddTab = (state: TabsState) => state.addTab;
 const selectActiveDeckId = (state: StudyDeckState) => state.activeDeckId;
 const selectCommandPaletteOpen = (state: UIState) => state.commandPaletteOpen;
 const selectSetCommandPaletteOpen = (state: UIState) => state.setCommandPaletteOpen;
+const selectDocuments = (state: { documents: Document[] }) => state.documents;
+const selectDecks = (state: { decks: StudyDeck[] }) => state.decks;
 
 export function CommandCenter() {
-  const documents = useDocumentStore(useShallow((state) => state.documents));
+  const documents = useDocumentStore(selectDocuments);
   const addTab = useTabsStore(selectAddTab);
-  const decks = useStudyDeckStore(useShallow((state) => state.decks));
+  const decks = useStudyDeckStore(selectDecks);
   const activeDeckId = useStudyDeckStore(selectActiveDeckId);
   const commandPaletteOpen = useUIStore(selectCommandPaletteOpen);
   const setCommandPaletteOpen = useUIStore(selectSetCommandPaletteOpen);

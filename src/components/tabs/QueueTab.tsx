@@ -1,5 +1,5 @@
 import { ReviewQueueView } from "../review/ReviewQueueView";
-import { useTabsStore } from "../../stores";
+import { useReviewStore, useTabsStore } from "../../stores";
 import type { QueueItem } from "../../types/queue";
 import { ReviewTab, DocumentViewer } from "./TabRegistry";
 import { QueueScrollPage } from "../../pages/QueueScrollPage";
@@ -7,7 +7,10 @@ import { QueueScrollPage } from "../../pages/QueueScrollPage";
 export function QueueTab() {
   const { addTab } = useTabsStore();
 
-  const handleStartReview = () => {
+  const handleStartReview = (itemId?: string) => {
+    if (itemId) {
+      void useReviewStore.getState().startReviewAtItem(itemId);
+    }
     addTab({
       title: "Review",
       icon: "🎴",

@@ -43,7 +43,7 @@ import {
 type QueueMode = "reading" | "review";
 
 interface ReviewQueueViewProps {
-  onStartReview?: () => void;
+  onStartReview?: (itemId?: string) => void;
   onOpenDocument?: (item: QueueItem) => void;
   onOpenScrollMode?: () => void;
 }
@@ -213,7 +213,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
       }
       if (event.key === "Enter" && selectedItem) {
         if (selectedItem.itemType === "learning-item") {
-          onStartReview?.();
+          onStartReview?.(selectedItem.learningItemId ?? selectedItem.id);
         } else {
           onOpenDocument?.(selectedItem);
         }
@@ -555,6 +555,14 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                     >
                       <div
                         onClick={() => setSelectedId(item.id)}
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                          if (item.itemType === "learning-item") {
+                            onStartReview?.(item.learningItemId ?? item.id);
+                            return;
+                          }
+                          onOpenDocument?.(item);
+                        }}
                         className="p-4 flex flex-wrap items-center justify-between gap-3 cursor-pointer"
                       >
                         <div className="flex items-center gap-3 min-w-0">
