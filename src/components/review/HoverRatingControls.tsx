@@ -11,6 +11,7 @@ export interface HoverRatingControlsProps {
   context: "review" | "document";
   previewIntervals?: PreviewIntervals | null;
   className?: string;
+  position?: "fixed" | "absolute";
 }
 
 // Rating colors from the plan
@@ -37,6 +38,7 @@ export function HoverRatingControls({
   context,
   previewIntervals: initialPreviewIntervals = null,
   className,
+  position = "fixed",
 }: HoverRatingControlsProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,10 +89,12 @@ export function HoverRatingControls({
     }
   }, [disabled, isSubmitting, itemId, context, onRatingSubmitted]);
 
+  const positionClass = position === "absolute" ? "absolute" : "fixed";
+
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-0 right-0 z-50 pointer-events-none",
+        `${positionClass} bottom-0 left-0 right-0 z-50 pointer-events-none`,
         className
       )}
       onMouseEnter={() => setHoverZoneActive(true)}
@@ -106,7 +110,7 @@ export function HoverRatingControls({
       {/* Rating controls */}
       <div
         className={cn(
-          "fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border",
+          `${positionClass} bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border`,
           "transition-all duration-200 ease-out pointer-events-auto",
           (isVisible || forceVisible || hoverZoneActive)
             ? "opacity-100 translate-y-0"

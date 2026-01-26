@@ -1631,7 +1631,7 @@ export function DocumentViewer({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-auto bg-muted/30">
+      <div className="flex-1 overflow-auto bg-muted/30 relative">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-muted-foreground">Loading document...</div>
@@ -1711,6 +1711,16 @@ export function DocumentViewer({
             </div>
           </div>
         )}
+
+        {/* Hover Rating Controls - for quick document rating */}
+        {viewMode === "document" && !disableHoverRating && docType !== "youtube" && hasDocumentHistory && (
+          <HoverRatingControls
+            context="document"
+            documentId={documentId}
+            onRatingSubmitted={handleRating}
+            position="absolute"
+          />
+        )}
       </div>
 
       {/* Floating Action Button for Extract Creation */}
@@ -1740,15 +1750,6 @@ export function DocumentViewer({
         }}
         onCreate={handleExtractCreated}
       />
-
-      {/* Hover Rating Controls - for quick document rating */}
-      {viewMode === "document" && !disableHoverRating && docType !== "youtube" && hasDocumentHistory && (
-        <HoverRatingControls
-          context="document"
-          documentId={documentId}
-          onRatingSubmitted={handleRating}
-        />
-      )}
 
       {/* Floating Fullscreen Control Bar (visible on hover in fullscreen mode) */}
       {isFullscreen && (
