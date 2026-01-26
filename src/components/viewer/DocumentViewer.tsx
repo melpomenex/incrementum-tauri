@@ -580,11 +580,18 @@ export function DocumentViewer({
 
     skipStoredScrollRef.current = false;
     const state = parseStateFromUrl();
-    skipStoredScrollRef.current = state.scroll !== undefined || state.pos !== undefined || state.zoom !== undefined;
+    const hasUrlState = state.scroll !== undefined || state.pos !== undefined || state.zoom !== undefined;
+    skipStoredScrollRef.current = hasUrlState;
 
     // Restore page number from fragment
     if (state.pos !== undefined) {
       setPageNumber(state.pos);
+      // If URL provides position, allow auto-scroll to navigate there
+      if (hasUrlState) {
+        setSuppressPdfAutoScroll(false);
+        restoreScrollDoneRef.current = true;
+        restorationInProgressRef.current = false;
+      }
     }
 
     // Restore zoom/scale from fragment
