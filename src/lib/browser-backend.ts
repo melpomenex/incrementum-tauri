@@ -1285,14 +1285,62 @@ const commandHandlers: Record<string, CommandHandler> = {
         const provider = args.provider as string;
         const model = args.model as string | undefined;
         const messages = args.messages as Array<{ role: string; content: string }>;
-        const context = args.context as { type: string; documentId?: string; content?: string };
+        const context = args.context as { type: string; documentId?: string; content?: unknown; selection?: string; contextWindowTokens?: number };
         const apiKey = args.apiKey as string | undefined;
         const baseUrl = args.baseUrl as string | undefined;
 
+        const decodeByteString = (value: string): string => {
+            const bytes = value.split(",").map((part) => parseInt(part.trim(), 10));
+            if (bytes.some((byte) => Number.isNaN(byte))) {
+                return value;
+            }
+            try {
+                return new TextDecoder("utf-8").decode(Uint8Array.from(bytes));
+            } catch {
+                return value;
+            }
+        };
+
+        const normalizeContextContent = (value: unknown): string | undefined => {
+            if (value == null) return undefined;
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                const bytePattern = /^\d{1,3}(?:,\s*\d{1,3})+$/;
+                return bytePattern.test(trimmed) ? decodeByteString(trimmed) : trimmed;
+            }
+            if (value instanceof Uint8Array) {
+                return new TextDecoder("utf-8").decode(value);
+            }
+            if (Array.isArray(value) && value.every((entry) => typeof entry === "number")) {
+                try {
+                    return new TextDecoder("utf-8").decode(Uint8Array.from(value));
+                } catch {
+                    return value.join(",");
+                }
+            }
+            return String(value);
+        };
+
+        const trimContext = (value: string | undefined, maxTokens?: number): string | undefined => {
+            if (!value) return undefined;
+            const tokenLimit = maxTokens && maxTokens > 0 ? maxTokens : 2000;
+            const maxChars = tokenLimit * 4;
+            if (value.length <= maxChars) return value;
+            return value.slice(0, maxChars);
+        };
+
+        const normalizedContent = trimContext(
+            normalizeContextContent(context.content),
+            context.contextWindowTokens
+        );
+
         // Build context prompt
         let contextPrompt = '';
-        if (context.type === 'document' && context.content) {
-            contextPrompt = `You are a helpful assistant analyzing the following document content:\n\n${context.content}\n\nAnswer questions based on this document.`;
+        if (context.type === 'document' && normalizedContent) {
+            contextPrompt = `You are a helpful assistant analyzing the following document content:\n\n${normalizedContent}\n\nAnswer questions based on this document.`;
+            if (context.selection && context.selection.trim().length > 0) {
+                contextPrompt += `\n\nSelected text:\n${context.selection}`;
+            }
         } else if (context.type === 'web') {
             contextPrompt = 'You are a helpful assistant that can search the web for information.';
         } else {

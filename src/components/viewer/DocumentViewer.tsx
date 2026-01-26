@@ -1670,6 +1670,7 @@ export function DocumentViewer({
             documentId={currentDocument.id}
             onLoad={handleDocumentLoad}
             onSelectionChange={updateSelection}
+            onContextTextChange={onPdfContextTextChange}
           />
         ) : docType === "markdown" ? (
           <div className="p-8 bg-background min-h-full mobile-reading-surface">

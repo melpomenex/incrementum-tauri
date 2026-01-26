@@ -13,6 +13,7 @@ interface EPUBViewerProps {
   documentId?: string;
   onLoad?: (toc: any[]) => void;
   onSelectionChange?: (text: string) => void;
+  onContextTextChange?: (text: string) => void;
 }
 
 export function EPUBViewer({
@@ -21,6 +22,7 @@ export function EPUBViewer({
   documentId,
   onLoad,
   onSelectionChange,
+  onContextTextChange,
 }: EPUBViewerProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -480,6 +482,48 @@ export function EPUBViewer({
             console.log("EPUBViewer: Book displayed successfully");
           }
 
+          if (onContextTextChange) {
+            const maxTokens = settings.ai.maxTokens && settings.ai.maxTokens > 0 ? settings.ai.maxTokens : 2000;
+            const maxChars = maxTokens * 4;
+            const extractContext = async () => {
+              try {
+                const spine = await epubBook.loaded.spine;
+                let combined = "";
+
+                for (const item of spine.items) {
+                  if (!mounted || combined.length >= maxChars) break;
+                  try {
+                    if (item.load) {
+                      await item.load(epubBook.load.bind(epubBook));
+                    }
+                    const text = item.document?.body?.textContent?.trim();
+                    if (text) {
+                      combined += (combined ? "\n\n" : "") + text;
+                    }
+                  } finally {
+                    try {
+                      if (item.unload) {
+                        item.unload();
+                      }
+                    } catch {
+                      // ignore unload errors
+                    }
+                  }
+                }
+
+                if (mounted) {
+                  onContextTextChange(combined.slice(0, maxChars));
+                }
+              } catch (err) {
+                console.warn("EPUBViewer: Failed to extract context text:", err);
+              }
+            };
+
+            setTimeout(() => {
+              void extractContext();
+            }, 0);
+          }
+
           // Mark initial display as complete after a delay to allow content to render
           // This prevents resize events from causing blank page issues
           setTimeout(() => {
@@ -602,7 +646,7 @@ export function EPUBViewer({
     // Note: onLoad is intentionally excluded from deps - it's a callback that
     // shouldn't trigger reloading the EPUB, only fileData changes should
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileData, documentId]);
+  }, [fileData, documentId, loadReadingPosition, onContextTextChange, saveReadingPosition, settings.ai.maxTokens]);
 
   // Re-apply styles when settings or theme change
   useEffect(() => {
