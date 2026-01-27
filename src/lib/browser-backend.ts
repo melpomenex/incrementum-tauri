@@ -1052,6 +1052,11 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(doc);
     },
 
+    get_youtube_transcript_by_id: async () => {
+        console.warn('[Browser] YouTube transcripts are not available in browser mode.');
+        return [];
+    },
+
     // Anki Import (browser implementation using jszip and sql.js)
     import_anki_package_to_learning_items: async (args) => {
         const filePath = args.apkgPath as string;

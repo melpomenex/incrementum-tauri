@@ -55,6 +55,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
   const [startTime, setStartTime] = useState(0);
   const [positionLoaded, setPositionLoaded] = useState(false);
+  const [useIframeFallback, setUseIframeFallback] = useState(false);
 
   // Update refs when values change
   useEffect(() => {
@@ -83,10 +84,15 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
     setIsLoadingTranscript(true);
     try {
-      const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }>>(
+      const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }> | null>(
         "get_youtube_transcript_by_id",
         { videoId, documentId }
       );
+
+      if (!transcriptData || !Array.isArray(transcriptData)) {
+        setTranscript([]);
+        return;
+      }
 
       const segments: TranscriptSegment[] = transcriptData.map((seg, i) => ({
         id: `seg-${i}`,
@@ -130,8 +136,8 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
     try {
       const doc = await getDocumentAuto(documentId);
-      if (doc && doc.current_page !== null && doc.current_page !== undefined) {
-        const savedTime = doc.current_page;
+      const savedTime = doc?.current_page ?? doc?.currentPage;
+      if (savedTime !== null && savedTime !== undefined) {
         // For videos, current_page stores the timestamp in seconds
         // Only restore if the video has meaningful progress (>= 3 seconds)
         const hasProgress = savedTime >= 3;
@@ -175,6 +181,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
   // Initialize player (use refs to avoid circular dependencies)
   const initializePlayer = useCallback(() => {
+    if (useIframeFallback) return;
     if (!containerRef.current) return;
 
     // Wait for position to be loaded before initializing
@@ -257,7 +264,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       },
     });
     lastVideoIdRef.current = videoId;
-  }, [videoId, saveCurrentPosition]);
+  }, [positionLoaded, saveCurrentPosition, useIframeFallback, videoId]);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -267,9 +274,18 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     }
 
     // Check if script is already present
+    let timeoutId: number | null = null;
+    let didFallback = false;
+    const shouldFallback = () => {
+      if (didFallback) return;
+      didFallback = true;
+      setUseIframeFallback(true);
+    };
+
     if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
       const tag = document.createElement("script");
       tag.src = "https://www.youtube.com/iframe_api";
+      tag.onerror = () => shouldFallback();
       const firstScriptTag = document.getElementsByTagName("script")[0];
       firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
     }
@@ -280,7 +296,16 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       initializePlayer();
     };
 
+    timeoutId = window.setTimeout(() => {
+      if (!window.YT || !window.YT.Player) {
+        shouldFallback();
+      }
+    }, 4000);
+
     return () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -425,19 +450,31 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     }
   };
 
+  const showOverlay = !useIframeFallback && !isReady;
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Video Player Container */}
       <div className="relative bg-black" style={{ paddingBottom: "56.25%" }}>
         {/* YouTube iframe */}
-        <div
-          ref={containerRef}
-          className="absolute inset-0 w-full h-full"
-          id={`youtube-player-${videoId}`}
-        />
+        {useIframeFallback ? (
+          <iframe
+            title={title || "YouTube video"}
+            className="absolute inset-0 w-full h-full"
+            src={getYouTubeEmbedURL(videoId, startTimeRef.current)}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        ) : (
+          <div
+            ref={containerRef}
+            className="absolute inset-0 w-full h-full"
+            id={`youtube-player-${videoId}`}
+          />
+        )}
 
         {/* Loading overlay */}
-        {!isReady && (
+        {showOverlay && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <div className="text-center">
               <Youtube className="w-12 h-12 text-red-500 mx-auto mb-3 animate-pulse" />
@@ -447,7 +484,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         )}
 
         {/* Custom controls overlay */}
-        {isReady && (
+        {isReady && !useIframeFallback && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 opacity-0 hover:opacity-100 transition-opacity">
             {/* Progress bar */}
             <div
