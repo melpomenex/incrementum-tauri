@@ -286,87 +286,139 @@ pub fn extract_transcript(url: &str, language: Option<&str>) -> Result<Vec<Trans
     let temp_dir = std::env::temp_dir();
     let lang = language.unwrap_or("en");
 
-    // Download subtitles using yt-dlp in JSON format for easier parsing
+    // Get video info first to extract the video ID
+    let info_output = Command::new("yt-dlp")
+        .args([
+            "--print", "%(id)s",
+            "--no-playlist",
+            url,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to get video info: {}", e))?;
+
+    if !info_output.status.success() {
+        let error = String::from_utf8_lossy(&info_output.stderr);
+        // Check for bot detection error
+        if error.contains("Sign in to confirm") || error.contains("not a bot") {
+            return Err(
+                "YouTube is requiring sign-in to access this video.\n\n\
+                To fix this, you can try:\n\
+                1. Open YouTube in your browser and watch any video briefly\n\
+                2. Export your browser cookies and configure yt-dlp to use them:\n\
+                   yt-dlp --cookies-from-browser firefox/chrome [URL]\n\
+                3. Try a different video\n\n\
+                See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp for more info.".to_string()
+            );
+        }
+        return Err(format!("Failed to get video info: {}", error));
+    }
+
+    let video_id = String::from_utf8_lossy(&info_output.stdout).trim().to_string();
+
+    // Download subtitles using yt-dlp
+    // Note: YouTube may block requests; using --extractor-args to try to mitigate this
     let output = Command::new("yt-dlp")
         .args([
             "--write-subs",
-            "--sub-lang", lang,
-            "--sub-format", "json3",  // Request JSON format if available
+            "--write-auto-subs",
+            "--sub-langs", lang,
+            "--sub-format", "vtt",
             "--skip-download",
-            "-o", "%(id)s.%(ext)s",
-            "--print", "%(subtitles.%(lang)s.0)",  // Print subtitle filename
+            "--no-playlist",
+            "--extractor-args", "youtube:player_skip=js_guard",
+            "-o", &format!("{}/%(id)s", temp_dir.to_string_lossy()),
             url,
         ])
-        .current_dir(&temp_dir)
         .output()
         .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+    
+    // Check stderr for bot detection even if command succeeded
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("Sign in to confirm") || stderr.contains("not a bot") {
+        return Err(
+            "YouTube is requiring sign-in to access this video.\n\n\
+            To fix this, you can try:\n\
+            1. Open YouTube in your browser and watch any video briefly\n\
+            2. Export your browser cookies and configure yt-dlp to use them:\n\
+               yt-dlp --cookies-from-browser firefox/chrome [URL]\n\
+            3. Try a different video\n\n\
+            See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp for more info.".to_string()
+        );
+    }
 
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
+        // Check for bot detection error
+        if error.contains("Sign in to confirm") || error.contains("not a bot") {
+            return Err(
+                "YouTube is requiring sign-in to access this video.\n\n\
+                To fix this, you can try:\n\
+                1. Open YouTube in your browser and watch any video briefly\n\
+                2. Export your browser cookies and configure yt-dlp to use them:\n\
+                   yt-dlp --cookies-from-browser firefox/chrome [URL]\n\
+                3. Try a different video\n\n\
+                See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp for more info.".to_string()
+            );
+        }
         // If subtitles aren't available, return empty rather than error
-        if error.contains("Subtitles not available") || error.contains("video doesn't have subtitles") {
+        if error.contains("Subtitles not available") 
+            || error.contains("video doesn't have subtitles")
+            || error.contains("Could not find automatic captions") {
             return Ok(vec![]);
         }
-        return Err(format!("Failed to extract transcript: {}", error));
+        // Log the error but don't fail - try fallback methods
+        eprintln!("yt-dlp warning: {}", error);
     }
 
-    // Try to parse as JSON3 format first (if available)
-    let _json_output = Command::new("yt-dlp")
-        .args([
-            "--write-subs",
-            "--sub-lang", lang,
-            "--sub-format", "vtt",  // Fall back to VTT
-            "--skip-download",
-            "-o", "%(id)s",
-            url,
-        ])
-        .current_dir(&temp_dir)
-        .output()
-        .map_err(|e| format!("Failed to run yt-dlp for VTT: {}", e))?;
+    // Look for subtitle files with various naming patterns
+    let subtitle_patterns = [
+        format!("{}.{lang}.vtt", video_id),
+        format!("{}.{}.vtt", video_id, lang.split('-').next().unwrap_or(lang)),
+        format!("{}.vtt", video_id),
+    ];
 
-    // Find the downloaded subtitle file
-    let video_id = extract_video_id(url).unwrap_or_else(|| "video".to_string());
+    // Check for subtitle files
+    for pattern in &subtitle_patterns {
+        let path = temp_dir.join(pattern);
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                let parsed = parse_vtt(&content);
+                let _ = std::fs::remove_file(&path); // Clean up
+                if !parsed.is_empty() {
+                    return Ok(parsed);
+                }
+            }
+        }
+    }
+
+    // Also check for any files starting with video_id in temp dir
     let subtitle_files = std::fs::read_dir(&temp_dir)
         .map_err(|e| format!("Failed to read temp dir: {}", e))?;
-
-    let mut parsed_segments = vec![];
 
     for entry in subtitle_files.flatten() {
         let path = entry.path();
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.contains(&video_id) && (name.ends_with(".vtt") || name.ends_with(".srt") || name.contains(".lang-")) {
-                // Read and parse the subtitle file
+            // Check if file starts with video_id and is a subtitle file
+            if name.starts_with(&video_id) && (name.ends_with(".vtt") || name.ends_with(".srt")) {
                 if let Ok(content) = std::fs::read_to_string(&path) {
-                    if name.ends_with(".vtt") {
-                        parsed_segments = parse_vtt(&content);
-                    } else if name.ends_with(".srt") {
-                        parsed_segments = parse_srt(&content);
-                    }
-
+                    let parsed = if name.ends_with(".vtt") {
+                        parse_vtt(&content)
+                    } else {
+                        parse_srt(&content)
+                    };
+                    
                     // Clean up the subtitle file
                     let _ = std::fs::remove_file(&path);
 
-                    if !parsed_segments.is_empty() {
-                        return Ok(parsed_segments);
+                    if !parsed.is_empty() {
+                        return Ok(parsed);
                     }
                 }
             }
         }
     }
 
-    // If no VTT/SRT parsing worked, try using yt-dlp's JSON output
-    let _json_output = Command::new("yt-dlp")
-        .args([
-            "--skip-download",
-            "--write-subs",
-            "--sub-format", "best",
-            "--print", "{\"id\": \"%(id)s\", \"title\": \"%(title)s\", \"subtitles\": %(subtitles)s}",
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("Failed to get subtitles info: {}", e))?;
-
-    Ok(parsed_segments)
+    Ok(vec![])
 }
 
 /// Parse WebVTT format

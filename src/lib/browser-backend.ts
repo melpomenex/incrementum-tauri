@@ -1126,6 +1126,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 errorMsg.includes('age-restricted') ||
                 errorMsg.includes('requires consent') ||
                 errorMsg.includes('bot detection') ||
+                errorMsg.includes('Sign in to confirm') ||
                 errorMsg.includes('CORS') ||
                 errorMsg.includes('local development')) {
                 throw error;
