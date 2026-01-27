@@ -29,6 +29,7 @@ import { CloudStorageSettings } from "./CloudStorageSettings";
 import { ThemePicker } from "./ThemePicker";
 import { IntegrationSettings } from "./IntegrationSettings";
 import { HandbookSettings } from "./HandbookSettings";
+import { NotificationSettings } from "./NotificationSettings";
 
 /**
  * Settings tab
@@ -487,9 +488,7 @@ function ImportExportSettings({ onChange }: { onChange: () => void }) {
   return <ImportExportSettingsComponent onChange={onChange} />;
 }
 
-function NotificationSettings({ onChange }: { onChange: () => void }) {
-  return <div className="text-center py-12 text-muted-foreground">Notification settings coming soon</div>;
-}
+
 
 function PrivacySettings({ onChange }: { onChange: () => void }) {
   return <div className="text-center py-12 text-muted-foreground">Privacy settings coming soon</div>;

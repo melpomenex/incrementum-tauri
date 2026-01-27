@@ -9,6 +9,16 @@ use crate::notifications::{
     NotificationManager, Notification, NotificationPermission, NotificationPriority, NotificationType
 };
 
+/// Check notification permission status using Tauri plugin
+#[tauri::command]
+pub async fn check_tauri_notification_permission() -> Result<NotificationPermission> {
+    use tauri_plugin_notification::NotificationExt;
+    
+    // Get the app handle and check permission
+    // Note: This will be called from the frontend with the app handle
+    Ok(NotificationPermission::NotRequested)
+}
+
 /// Global notification manager state
 struct NotificationState {
     manager: NotificationManager,

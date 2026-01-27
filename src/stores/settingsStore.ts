@@ -167,6 +167,10 @@ interface NotificationSettings {
   reminderTime: string;
   dueDateReminders: boolean;
   soundEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  showBadge: boolean;
 }
 
 /**
@@ -329,6 +333,10 @@ export const defaultSettings: Settings = {
     reminderTime: "09:00",
     dueDateReminders: true,
     soundEnabled: true,
+    quietHoursEnabled: false,
+    quietHoursStart: "22:00",
+    quietHoursEnd: "08:00",
+    showBadge: true,
   },
   privacy: {
     telemetryEnabled: false,

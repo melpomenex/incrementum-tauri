@@ -391,12 +391,84 @@ async function removePendingSyncData(id) {
 }
 
 /**
- * Message handler for manual cache control
+ * Push notification event
+ */
+self.addEventListener('push', (event) => {
+  console.log('[SW] Push received:', event);
+
+  const options = event.data?.json() || {
+    title: 'Incrementum',
+    body: 'You have a new notification',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/badge-72x72.png',
+    tag: 'general',
+    requireInteraction: false,
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(options.title, {
+      body: options.body,
+      icon: options.icon,
+      badge: options.badge,
+      tag: options.tag,
+      requireInteraction: options.requireInteraction,
+      data: options.data,
+      actions: options.actions || [],
+    })
+  );
+});
+
+/**
+ * Notification click event
+ */
+self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification clicked:', event);
+
+  event.notification.close();
+
+  const action = event.action;
+  const data = event.notification.data || {};
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // If app is already open, focus it
+      if (clientList.length > 0) {
+        const client = clientList[0];
+        client.focus();
+
+        // Send message to client about notification click
+        client.postMessage({
+          type: 'NOTIFICATION_CLICKED',
+          payload: { action, data },
+        });
+
+        // Navigate to specific route if provided
+        if (data.url) {
+          client.navigate(data.url);
+        }
+      } else {
+        // Open new window
+        const url = data.url || '/';
+        self.clients.openWindow(url);
+      }
+    })
+  );
+});
+
+/**
+ * Notification close event
+ */
+self.addEventListener('notificationclose', (event) => {
+  console.log('[SW] Notification closed:', event);
+});
+
+/**
+ * Message handler for manual cache control and notifications
  */
 self.addEventListener('message', (event) => {
-  const { action, data } = event.data;
+  const { action, data, type, payload } = event.data;
 
-  switch (action) {
+  switch (action || type) {
     case 'skipWaiting':
       self.skipWaiting();
       break;
@@ -411,6 +483,33 @@ self.addEventListener('message', (event) => {
 
     case 'get-version':
       event.ports[0].postMessage({ version: VERSION });
+      break;
+
+    case 'SHOW_NOTIFICATION':
+      // Show notification from main thread
+      if (payload) {
+        self.registration.showNotification(payload.title, {
+          body: payload.body,
+          icon: payload.icon || '/icons/icon-192x192.png',
+          badge: payload.badge || '/icons/badge-72x72.png',
+          tag: payload.tag || 'default',
+          requireInteraction: payload.requireInteraction || false,
+          silent: payload.silent || false,
+          data: payload.data || {},
+          actions: payload.actions || [],
+        });
+      }
+      break;
+
+    case 'SCHEDULE_NOTIFICATION':
+      // Store scheduled notification for later
+      // In a real implementation, you'd use the Push API or periodic sync
+      console.log('[SW] Scheduled notification:', payload);
+      break;
+
+    case 'CANCEL_NOTIFICATION':
+      // Cancel a scheduled notification
+      console.log('[SW] Cancel notification:', data);
       break;
   }
 });

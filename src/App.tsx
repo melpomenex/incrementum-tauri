@@ -10,6 +10,7 @@ import { SignupPrompt } from "./components/onboarding/SignupPrompt";
 import { KeyboardShortcutsHelp } from "./components/common/KeyboardShortcutsHelp";
 import { Breadcrumb } from "./components/common/Breadcrumb";
 import { useToast } from "./components/common/Toast";
+import { initializeNotifications } from "./utils/notificationService";
 
 // Page components
 import { DocumentsPage } from "./pages/DocumentsPage";
@@ -89,6 +90,9 @@ function App() {
       // Sync state updates could trigger UI changes here
       console.log('Sync state updated:', syncState);
     });
+
+    // Initialize notifications
+    initializeNotifications();
 
     return unsubscribe;
   }, [loadAll, loadDocuments]);
