@@ -63,6 +63,8 @@ async fn import_single_file(
         "epub" => FileType::Epub,
         "md" | "markdown" => FileType::Markdown,
         "html" | "htm" => FileType::Html,
+        "mp3" | "wav" | "m4a" | "aac" | "ogg" | "flac" | "opus" => FileType::Audio,
+        "mp4" | "webm" | "mov" | "mkv" | "avi" | "m4v" => FileType::Video,
         "txt" => FileType::Other,
         _ => FileType::Other,
     };

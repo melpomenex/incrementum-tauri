@@ -33,6 +33,23 @@ type ViewMode = "document" | "extracts" | "cards";
 
 type DocumentType = "pdf" | "epub" | "markdown" | "html" | "youtube" | "video" | "audio";
 
+const DOCUMENT_TYPES: DocumentType[] = ["pdf", "epub", "markdown", "html", "youtube", "video", "audio"];
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "ogg", "flac", "opus"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "mkv", "avi", "m4v"]);
+
+const normalizeDocumentType = (value?: string): DocumentType | undefined => {
+  if (!value) return undefined;
+  const normalized = value.toLowerCase();
+  if (DOCUMENT_TYPES.includes(normalized as DocumentType)) {
+    return normalized as DocumentType;
+  }
+  if (normalized === "md" || normalized === "markdown") return "markdown";
+  if (normalized === "htm" || normalized === "html") return "html";
+  if (AUDIO_EXTENSIONS.has(normalized)) return "audio";
+  if (VIDEO_EXTENSIONS.has(normalized)) return "video";
+  return undefined;
+};
+
 /**
  * Helper to convert scroll state to unified DocumentPosition
  */
@@ -179,20 +196,13 @@ export function DocumentViewer({
   const inferFileType = (doc?: typeof currentDocument): DocumentType => {
     if (!doc) return "other";
     if (doc.fileType && doc.fileType !== "other") {
-      return doc.fileType as DocumentType;
+      const normalized = normalizeDocumentType(doc.fileType);
+      if (normalized) return normalized;
     }
     // Fallback: infer from file extension
     const ext = doc.filePath?.split(".").pop()?.toLowerCase();
-    if (ext === "pdf") return "pdf";
-    if (ext === "epub") return "epub";
-    if (ext === "md" || ext === "markdown") return "markdown";
-    if (ext === "html" || ext === "htm") return "html";
-    if (ext === "mp3" || ext === "wav" || ext === "m4a" || ext === "aac" || ext === "ogg" || ext === "flac" || ext === "opus") {
-      return "audio";
-    }
-    if (ext === "mp4" || ext === "webm" || ext === "mov" || ext === "mkv" || ext === "avi" || ext === "m4v") {
-      return "video";
-    }
+    const inferred = normalizeDocumentType(ext);
+    if (inferred) return inferred;
     // Check if filePath is a YouTube URL or ID
     if (doc.filePath?.includes("youtube.com") ||
       doc.filePath?.includes("youtu.be") ||
@@ -509,7 +519,7 @@ export function DocumentViewer({
 
     // Infer fileType from filePath if missing (handles empty string or undefined)
     const ext = doc.filePath?.split('.').pop()?.toLowerCase();
-    const inferredType = doc.fileType || ext || "";
+    const inferredType = normalizeDocumentType(doc.fileType) ?? normalizeDocumentType(ext) ?? "";
     const needsFileData = inferredType === "pdf" || inferredType === "epub";
 
     console.log("[DocumentViewer] loadDocumentData:", {

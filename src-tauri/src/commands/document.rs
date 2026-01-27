@@ -92,7 +92,7 @@ pub async fn import_document(
         Some("epub") => FileType::Epub,
         Some("md") | Some("markdown") => FileType::Markdown,
         Some("html") | Some("htm") => FileType::Html,
-        Some("mp3") | Some("wav") | Some("m4a") | Some("ogg") => FileType::Audio,
+        Some("mp3") | Some("wav") | Some("m4a") | Some("aac") | Some("ogg") | Some("flac") | Some("opus") => FileType::Audio,
         Some("mp4") | Some("webm") | Some("mov") | Some("avi") => FileType::Video,
         _ => FileType::Other,
     };

@@ -143,7 +143,27 @@ export async function openFilePicker(options?: {
     filters: options?.filters ?? [
       {
         name: "Supported Documents",
-        extensions: ["pdf", "epub", "md", "markdown", "html", "htm"],
+        extensions: [
+          "pdf",
+          "epub",
+          "md",
+          "markdown",
+          "html",
+          "htm",
+          "mp3",
+          "wav",
+          "m4a",
+          "aac",
+          "ogg",
+          "flac",
+          "opus",
+          "mp4",
+          "webm",
+          "mov",
+          "mkv",
+          "avi",
+          "m4v",
+        ],
       },
       {
         name: "PDF",

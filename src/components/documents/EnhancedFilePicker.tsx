@@ -106,7 +106,27 @@ export function EnhancedFilePicker({
           filters: [
             {
               name: "Supported Documents",
-              extensions: ["pdf", "epub", "md", "txt", "html", "json"],
+              extensions: [
+                "pdf",
+                "epub",
+                "md",
+                "txt",
+                "html",
+                "json",
+                "mp3",
+                "wav",
+                "m4a",
+                "aac",
+                "ogg",
+                "flac",
+                "opus",
+                "mp4",
+                "webm",
+                "mov",
+                "mkv",
+                "avi",
+                "m4v",
+              ],
             },
           ],
         });
