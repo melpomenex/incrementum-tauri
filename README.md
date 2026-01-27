@@ -395,28 +395,6 @@ graph LR
 
 ---
 
-## 🗺️ Roadmap
-
-### Near Term (1-2 weeks)
-
-- [ ] Review session limits (size/time)
-- [ ] Enhanced screenshot capture (xcap migration)
-- [ ] Advanced analytics (heatmaps, forget curves)
-
-### Medium Term (1-2 months)
-
-- [ ] Study scheduler with reminders
-- [ ] Export to Anki/SuperMemo formats
-- [ ] Algorithm tuning and personalization
-
-### Long Term (3+ months)
-
-- [ ] Collaborative features (shared decks)
-- [ ] Cloud sync service
-- [ ] Mobile companion app
-
----
-
 ## 📊 Performance Benchmarks
 
 | Operation | Time | Notes |
