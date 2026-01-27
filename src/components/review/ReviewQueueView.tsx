@@ -148,7 +148,8 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     });
     const searchedItems = normalizedQuery
       ? queueItems.filter((item) => {
-        const haystack = [item.documentTitle, item.category, ...(item.tags ?? [])]
+        const hint = getLearningHint(item) ?? "";
+        const haystack = [item.documentTitle, item.category, hint, ...(item.tags ?? [])]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
