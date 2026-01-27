@@ -7,6 +7,7 @@ import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { EPUBViewer } from "./EPUBViewer";
 import { YouTubeViewer } from "./YouTubeViewer";
+import { LocalVideoPlayer } from "./LocalVideoPlayer";
 import { ExtractsList } from "../extracts/ExtractsList";
 import { LearningCardsList } from "../learning/LearningCardsList";
 import { useToast } from "../common/Toast";
@@ -30,7 +31,7 @@ import type { DocumentPosition } from "../../types/position";
 
 type ViewMode = "document" | "extracts" | "cards";
 
-type DocumentType = "pdf" | "epub" | "markdown" | "html" | "youtube";
+type DocumentType = "pdf" | "epub" | "markdown" | "html" | "youtube" | "video" | "audio";
 
 /**
  * Helper to convert scroll state to unified DocumentPosition
@@ -119,6 +120,8 @@ export function DocumentViewer({
   const [scale, setScale] = useState(1.0);
   const [zoomMode, setZoomMode] = useState<"custom" | "fit-width" | "fit-page">("fit-width");
   const [fileData, setFileData] = useState<Uint8Array | null>(null);
+  const [mediaSrc, setMediaSrc] = useState<string | null>(null);
+  const mediaSrcRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pagesRendered, setPagesRendered] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode ?? "document");
@@ -184,6 +187,12 @@ export function DocumentViewer({
     if (ext === "epub") return "epub";
     if (ext === "md" || ext === "markdown") return "markdown";
     if (ext === "html" || ext === "htm") return "html";
+    if (ext === "mp3" || ext === "wav" || ext === "m4a" || ext === "aac" || ext === "ogg" || ext === "flac" || ext === "opus") {
+      return "audio";
+    }
+    if (ext === "mp4" || ext === "webm" || ext === "mov" || ext === "mkv" || ext === "avi" || ext === "m4v") {
+      return "video";
+    }
     // Check if filePath is a YouTube URL or ID
     if (doc.filePath?.includes("youtube.com") ||
       doc.filePath?.includes("youtu.be") ||
@@ -195,6 +204,46 @@ export function DocumentViewer({
       return "markdown";
     }
     return "other";
+  };
+
+  const getVideoMimeType = (path?: string) => {
+    const ext = path?.split(".").pop()?.toLowerCase();
+    switch (ext) {
+      case "webm":
+        return "video/webm";
+      case "mov":
+        return "video/quicktime";
+      case "mkv":
+        return "video/x-matroska";
+      case "avi":
+        return "video/x-msvideo";
+      case "m4v":
+        return "video/x-m4v";
+      case "mp4":
+      default:
+        return "video/mp4";
+    }
+  };
+
+  const getAudioMimeType = (path?: string) => {
+    const ext = path?.split(".").pop()?.toLowerCase();
+    switch (ext) {
+      case "wav":
+        return "audio/wav";
+      case "m4a":
+        return "audio/mp4";
+      case "aac":
+        return "audio/aac";
+      case "ogg":
+        return "audio/ogg";
+      case "flac":
+        return "audio/flac";
+      case "opus":
+        return "audio/opus";
+      case "mp3":
+      default:
+        return "audio/mpeg";
+    }
   };
 
   const docType = inferFileType(currentDocument);
@@ -471,6 +520,12 @@ export function DocumentViewer({
       needsFileData,
     });
 
+    if (mediaSrcRef.current) {
+      URL.revokeObjectURL(mediaSrcRef.current);
+      mediaSrcRef.current = null;
+    }
+    setMediaSrc(null);
+
     if (needsFileData) {
       setFileData(null);
       try {
@@ -488,6 +543,25 @@ export function DocumentViewer({
         setFileData(bytes);
       } catch (error) {
         console.error(`Failed to load ${inferredType}:`, error);
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (inferredType === "video" || inferredType === "audio") {
+      try {
+        const base64Data = await documentsApi.readDocumentFile(doc.filePath);
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const mimeType = inferredType === "audio"
+          ? getAudioMimeType(doc.filePath)
+          : getVideoMimeType(doc.filePath);
+        const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+        mediaSrcRef.current = blobUrl;
+        setMediaSrc(blobUrl);
+      } catch (error) {
+        console.error("Failed to load video file:", error);
       } finally {
         setIsLoading(false);
       }
@@ -1672,6 +1746,16 @@ export function DocumentViewer({
             onSelectionChange={updateSelection}
             onContextTextChange={onPdfContextTextChange}
           />
+        ) : (docType === "video" || docType === "audio") && mediaSrc ? (
+          <div className={cn("h-full w-full", docType === "audio" ? "bg-background" : "bg-black")}>
+            <LocalVideoPlayer
+              src={mediaSrc}
+              documentId={currentDocument.id}
+              title={currentDocument.title}
+              className="h-full w-full"
+              mediaType={docType === "audio" ? "audio" : "video"}
+            />
+          </div>
         ) : docType === "markdown" ? (
           <div className="p-8 bg-background min-h-full mobile-reading-surface">
             <MarkdownViewer document={currentDocument} content={currentDocument.content} />

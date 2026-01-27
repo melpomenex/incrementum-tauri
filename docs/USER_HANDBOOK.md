@@ -293,6 +293,11 @@ If you have AI configured:
 - Press **Space** or click to reveal answer
 - Answer appears below
 
+**Mixed Review Sessions (Cards + Documents):**
+- Review sessions can include **learning items** and **documents** that are due for reading.
+- When a document appears, you can open it directly from the session card.
+- Rating a document schedules its next reading date, just like a card schedules its next review.
+
 **Rating Interface:**
 After revealing answer, four rating buttons appear:
 
@@ -302,6 +307,15 @@ After revealing answer, four rating buttons appear:
 ```
 
 Each button shows the **next review date** - this is the **Preview Interval** feature!
+
+**Recovery Actions (Review Queue Inspector):**
+Use these when a learning item’s schedule needs a quick nudge:
+
+- **Compress intervals**: Pull the next review closer (shorter interval).
+- **Reschedule intelligently**: Move the item to “due now”.
+- **Downgrade frequency**: Push the next review out (longer interval).
+
+These actions apply to **learning items only** and update the schedule immediately.
 
 ### Keyboard Shortcuts (Review Mode)
 

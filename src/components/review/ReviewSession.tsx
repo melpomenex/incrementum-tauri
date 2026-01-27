@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft } from "lucide-react";
-import { useReviewStore } from "../../stores/reviewStore";
+import { useReviewStore, type ReviewDocumentItem, type ReviewSessionItem } from "../../stores/reviewStore";
 import { ReviewCard } from "./ReviewCard";
+import { ReviewDocumentCard } from "./ReviewDocumentCard";
 import { RatingButtons } from "./RatingButtons";
 import { ReviewProgress } from "./ReviewProgress";
 import { ReviewComplete } from "./ReviewComplete";
 import { ReviewTransparencyPanel } from "./ReviewTransparencyPanel";
 import { QueueNavigationControls } from "../queue/QueueNavigationControls";
 import { ReviewRating } from "../../api/review";
-import { useStudyDeckStore } from "../../stores/studyDeckStore";
 
 interface ReviewSessionProps {
   onExit: () => void;
@@ -35,12 +35,11 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
     nextCard,
     goToIndex,
   } = useReviewStore();
-  const decks = useStudyDeckStore((state) => state.decks);
-  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
-  const activeDeck = decks.find((deck) => deck.id === activeDeckId) ?? null;
-
   const [isQueueListOpen, setIsQueueListOpen] = useState(false);
   const queueListRef = useRef<HTMLDivElement | null>(null);
+
+  const isDocumentItem = (item: ReviewSessionItem | null): item is ReviewDocumentItem =>
+    !!item && (item as ReviewDocumentItem).itemType === "document";
 
   const handleRating = async (rating: ReviewRating) => {
     const beforeId = currentCard?.id;
@@ -85,8 +84,8 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
         return;
       }
 
-      // Space to show answer
-      if (e.key === " " && !isAnswerShown && currentCard) {
+      // Space to show answer for learning items
+      if (e.key === " " && !isAnswerShown && currentCard && !isDocumentItem(currentCard)) {
         e.preventDefault();
         showAnswer();
       }
@@ -144,7 +143,7 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
             All Caught Up!
           </h3>
           <p className="text-muted-foreground mb-6">
-            No cards are due for review right now. Check back later!
+            No items are due for review right now. Check back later!
           </p>
           <button
             onClick={onExit}
@@ -183,6 +182,7 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
   const safeStopCount = Math.max(1, Math.min(remainingItems, Math.floor((20 * 60) / perItemSeconds)));
   const minMinutes = Math.max(1, Math.round((estimatedSecondsRemaining / 60) * 0.85));
   const maxMinutes = Math.max(1, Math.round((estimatedSecondsRemaining / 60) * 1.15));
+  const isCurrentDocument = isDocumentItem(currentCard);
 
   return (
     <div className="h-full flex flex-col p-4 md:p-6 pb-20 md:pb-6">
@@ -200,11 +200,6 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
             <p className="text-xs md:text-sm text-muted-foreground hidden md:block">
               Focused session with clear time and retention feedback
             </p>
-            {activeDeck && (
-              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
-                Deck: <span className="font-semibold">{activeDeck.name}</span>
-              </div>
-            )}
           </div>
         </div>
 
@@ -247,10 +242,13 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
                       <div className="text-xs text-muted-foreground mb-1">
                         {index + 1} / {queue.length}
                       </div>
-                      <div
-                        className="line-clamp-2"
-                        dangerouslySetInnerHTML={{ __html: item.question || item.cloze_text || "Untitled card" }}
-                      />
+                      <div className="line-clamp-2">
+                        {"documentTitle" in item ? (
+                          item.documentTitle || "Untitled document"
+                        ) : (
+                          <span dangerouslySetInnerHTML={{ __html: item.question || item.cloze_text || "Untitled card" }} />
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -289,11 +287,22 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
 
           {/* Card and Ratings */}
           <div className="flex-1 flex flex-col justify-center">
-            {isAnswerShown ? (
+            {isCurrentDocument ? (
+              <>
+                <ReviewDocumentCard item={currentCard as ReviewDocumentItem} />
+
+                <div className="mt-6">
+                  <RatingButtons
+                    onSelectRating={handleRating}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </>
+            ) : isAnswerShown ? (
               <>
                 {/* Card with answer shown */}
                 <ReviewCard
-                  card={currentCard}
+                  card={currentCard as Exclude<ReviewSessionItem, ReviewDocumentItem>}
                   showAnswer={true}
                   onShowAnswer={() => {}}
                 />
@@ -311,7 +320,7 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
               <>
                 {/* Card with answer hidden */}
                 <ReviewCard
-                  card={currentCard}
+                  card={currentCard as Exclude<ReviewSessionItem, ReviewDocumentItem>}
                   showAnswer={false}
                   onShowAnswer={showAnswer}
                 />
@@ -321,7 +330,12 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
         </div>
 
         <div className="space-y-4">
-          <ReviewTransparencyPanel card={currentCard} previewIntervals={previewIntervals} />
+          {!isCurrentDocument && (
+            <ReviewTransparencyPanel
+              card={currentCard as Exclude<ReviewSessionItem, ReviewDocumentItem>}
+              previewIntervals={previewIntervals}
+            />
+          )}
           <div className="bg-card border border-border rounded-lg p-4 text-xs text-muted-foreground">
             Session cut-off guarantee: you can stop after item {safeStopCount} without penalty.
           </div>

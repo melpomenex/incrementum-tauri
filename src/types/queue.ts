@@ -5,6 +5,9 @@ export interface QueueItem {
   documentTitle: string;
   extractId?: string;
   learningItemId?: string;
+  question?: string;
+  answer?: string;
+  clozeText?: string;
   itemType: "document" | "extract" | "learning-item";
   priorityRating?: number;
   prioritySlider?: number;

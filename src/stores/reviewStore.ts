@@ -10,8 +10,8 @@ import {
   PreviewIntervals,
   ReviewStreak,
 } from "../api/review";
-import { useStudyDeckStore } from "./studyDeckStore";
-import { filterByDeck } from "../utils/studyDecks";
+import { getDueDocumentsOnly } from "../api/queue";
+import { rateDocument } from "../api/algorithm";
 import { useCollectionStore } from "./collectionStore";
 import { getUser } from "../lib/sync-client";
 
@@ -49,11 +49,25 @@ const clearStoredSession = () => {
   window.localStorage.removeItem(getReviewSessionKey());
 };
 
+export type ReviewDocumentItem = {
+  id: string;
+  itemType: "document";
+  documentId: string;
+  documentTitle: string;
+  tags: string[];
+  dueDate?: string;
+  estimatedTime?: number;
+  category?: string;
+  progress?: number;
+};
+
+export type ReviewSessionItem = LearningItem | ReviewDocumentItem;
+
 interface ReviewState {
   // Data
-  queue: LearningItem[];
+  queue: ReviewSessionItem[];
   currentIndex: number;
-  currentCard: LearningItem | null;
+  currentCard: ReviewSessionItem | null;
   previewIntervals: PreviewIntervals | null;
 
   // UI State
@@ -109,38 +123,93 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   loadQueue: async () => {
     set({ isLoading: true, error: null });
     try {
-      const items = await getDueItems();
-      const { decks, activeDeckId } = useStudyDeckStore.getState();
-      const activeDeck = decks.find((deck) => deck.id === activeDeckId) ?? null;
-      const filteredItems = activeDeck ? filterByDeck(items, activeDeck) : items;
+      const [items, dueDocuments] = await Promise.all([getDueItems(), getDueDocumentsOnly()]);
+
+      const documentItems: ReviewDocumentItem[] = dueDocuments.map((doc) => ({
+        id: `doc:${doc.documentId}`,
+        itemType: "document",
+        documentId: doc.documentId,
+        documentTitle: doc.documentTitle,
+        tags: doc.tags ?? [],
+        dueDate: doc.dueDate,
+        estimatedTime: doc.estimatedTime,
+        category: doc.category,
+        progress: doc.progress,
+      }));
+
       const { activeCollectionId, documentAssignments } = useCollectionStore.getState();
       const collectionFilteredItems = activeCollectionId
-        ? filteredItems.filter((item) => {
-            if (!item.documentId) return true;
+        ? items.filter((item) => {
+            if (!item.document_id) return true;
+            const assigned = documentAssignments[item.document_id];
+            return assigned ? assigned === activeCollectionId : true;
+          })
+        : items;
+      const collectionFilteredDocuments = activeCollectionId
+        ? documentItems.filter((item) => {
             const assigned = documentAssignments[item.documentId];
             return assigned ? assigned === activeCollectionId : true;
           })
-        : filteredItems;
+        : documentItems;
       const storedSession = loadStoredSession();
       const reviewedIds = new Set(storedSession?.reviewedIds ?? []);
-      const pendingItems = collectionFilteredItems.filter((item) => !reviewedIds.has(item.id));
+      const pendingCards = collectionFilteredItems.filter((item) => !reviewedIds.has(item.id));
+      const pendingDocuments = collectionFilteredDocuments.filter((item) => !reviewedIds.has(item.id));
+
+      const sortByDueDate = (date: string | undefined) => {
+        if (!date) return 0;
+        const ts = new Date(date).getTime();
+        return Number.isNaN(ts) ? 0 : ts;
+      };
+
+      const sortedCards = [...pendingCards].sort(
+        (a, b) => sortByDueDate(a.due_date) - sortByDueDate(b.due_date)
+      );
+      const sortedDocuments = [...pendingDocuments].sort(
+        (a, b) => sortByDueDate(a.dueDate) - sortByDueDate(b.dueDate)
+      );
+
+      const interleaved: ReviewSessionItem[] = [];
+      let cardIndex = 0;
+      let docIndex = 0;
+      let useCards = true;
+      if (sortedCards.length > 0 && sortedDocuments.length > 0) {
+        useCards = sortByDueDate(sortedCards[0].due_date) <= sortByDueDate(sortedDocuments[0].dueDate);
+      }
+
+      while (cardIndex < sortedCards.length || docIndex < sortedDocuments.length) {
+        if (useCards && cardIndex < sortedCards.length) {
+          interleaved.push(sortedCards[cardIndex++]);
+        } else if (!useCards && docIndex < sortedDocuments.length) {
+          interleaved.push(sortedDocuments[docIndex++]);
+        } else if (cardIndex < sortedCards.length) {
+          interleaved.push(sortedCards[cardIndex++]);
+        } else if (docIndex < sortedDocuments.length) {
+          interleaved.push(sortedDocuments[docIndex++]);
+        }
+        useCards = !useCards;
+      }
 
       // Start a review session on the backend
-      const sessionId = pendingItems.length > 0 ? await startReview() : "";
+      const sessionId = interleaved.length > 0 ? await startReview() : "";
+      const firstItem = interleaved[0] || null;
+      const isFirstDocument = firstItem && (firstItem as ReviewDocumentItem).itemType === "document";
 
       set({
-        queue: pendingItems,
+        queue: interleaved,
         currentIndex: 0,
-        currentCard: pendingItems[0] || null,
+        currentCard: firstItem,
         sessionStartTime: Date.now(),
         isLoading: false,
         reviewsCompleted: 0,
         correctCount: 0,
         sessionId,
         averageTimePerCard: 0,
+        isAnswerShown: isFirstDocument ? true : false,
+        previewIntervals: null,
       });
 
-      if (pendingItems.length > 0) {
+      if (interleaved.length > 0) {
         saveStoredSession({
           reviewedIds: Array.from(reviewedIds),
           sessionId,
@@ -154,7 +223,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       get().loadStreak();
 
       // Load preview intervals for the first card
-      if (pendingItems[0]) {
+      if (interleaved.length > 0 && firstItem && !isFirstDocument) {
         get().loadPreviewIntervals();
       }
     } catch (error) {
@@ -217,11 +286,13 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       clearStoredSession();
     } else {
       const nextIndex = Math.min(currentIndex, remainingQueue.length - 1);
+      const nextItem = remainingQueue[nextIndex];
+      const nextIsDocument = nextItem && (nextItem as ReviewDocumentItem).itemType === "document";
       set({
         queue: remainingQueue,
         currentIndex: nextIndex,
-        currentCard: remainingQueue[nextIndex],
-        isAnswerShown: false,
+        currentCard: nextItem,
+        isAnswerShown: nextIsDocument ? true : false,
         isSubmitting: false,
         previewIntervals: null,
         reviewsCompleted: newReviewsCompleted,
@@ -236,12 +307,19 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       });
 
       setTimeout(() => {
-        get().loadPreviewIntervals();
+        if (!nextIsDocument) {
+          get().loadPreviewIntervals();
+        }
       }, 100);
     }
 
     try {
-      await submitReview(currentCard.id, rating, timeTaken, sessionId);
+      if ((currentCard as ReviewDocumentItem).itemType === "document") {
+        const docItem = currentCard as ReviewDocumentItem;
+        await rateDocument(docItem.documentId, rating, timeTaken);
+      } else {
+        await submitReview(currentCard.id, rating, timeTaken, sessionId);
+      }
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Failed to submit review",
@@ -252,6 +330,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   loadPreviewIntervals: async () => {
     const { currentCard } = get();
     if (!currentCard) return;
+    if ((currentCard as ReviewDocumentItem).itemType === "document") return;
 
     try {
       const intervals = await previewReviewIntervals(currentCard.id);
@@ -277,10 +356,12 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         sessionStartTime: Date.now(), // Reset for next card
       });
     } else {
+      const nextItem = queue[nextIndex];
+      const nextIsDocument = nextItem && (nextItem as ReviewDocumentItem).itemType === "document";
       set({
         currentIndex: nextIndex,
-        currentCard: queue[nextIndex],
-        isAnswerShown: false,
+        currentCard: nextItem,
+        isAnswerShown: nextIsDocument ? true : false,
         isSubmitting: false,
         previewIntervals: null,
         sessionStartTime: Date.now(), // Reset for next card
@@ -288,7 +369,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
       // Load preview intervals for the next card
       setTimeout(() => {
-        get().loadPreviewIntervals();
+        if (!nextIsDocument) {
+          get().loadPreviewIntervals();
+        }
       }, 100);
     }
   },
@@ -308,18 +391,22 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     }
 
     const clampedIndex = Math.max(0, Math.min(index, queue.length - 1));
+    const nextItem = queue[clampedIndex];
+    const nextIsDocument = nextItem && (nextItem as ReviewDocumentItem).itemType === "document";
     set({
       currentIndex: clampedIndex,
-      currentCard: queue[clampedIndex],
-      isAnswerShown: false,
+      currentCard: nextItem,
+      isAnswerShown: nextIsDocument ? true : false,
       isSubmitting: false,
       previewIntervals: null,
       sessionStartTime: Date.now(),
     });
 
-    setTimeout(() => {
-      get().loadPreviewIntervals();
-    }, 100);
+    if (!nextIsDocument) {
+      setTimeout(() => {
+        get().loadPreviewIntervals();
+      }, 100);
+    }
   },
 
   resetSession: () => {
@@ -347,17 +434,21 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     const { queue } = get();
     const index = queue.findIndex((item) => item.id === itemId);
     if (index === -1) return;
+    const nextItem = queue[index];
+    const nextIsDocument = nextItem && (nextItem as ReviewDocumentItem).itemType === "document";
     set({
       currentIndex: index,
-      currentCard: queue[index],
-      isAnswerShown: false,
+      currentCard: nextItem,
+      isAnswerShown: nextIsDocument ? true : false,
       isSubmitting: false,
       previewIntervals: null,
       sessionStartTime: Date.now(),
     });
-    setTimeout(() => {
-      get().loadPreviewIntervals();
-    }, 100);
+    if (!nextIsDocument) {
+      setTimeout(() => {
+        get().loadPreviewIntervals();
+      }, 100);
+    }
   },
 
   getEstimatedTimeRemaining: () => {

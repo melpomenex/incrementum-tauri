@@ -9,6 +9,9 @@ pub struct QueueItem {
     pub document_title: String,
     pub extract_id: Option<String>,
     pub learning_item_id: Option<String>,
+    pub question: Option<String>,
+    pub answer: Option<String>,
+    pub cloze_text: Option<String>,
     pub item_type: String, // "document", "extract", "learning-item"
     pub priority_rating: Option<i32>,
     pub priority_slider: Option<i32>,

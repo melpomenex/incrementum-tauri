@@ -15,7 +15,6 @@ import {
   Target,
 } from "lucide-react";
 import { useQueueStore, type QueueFilterMode } from "../../stores/queueStore";
-import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import type { QueueItem } from "../../types/queue";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../common/ItemDetailsPopover";
 import {
@@ -33,12 +32,13 @@ import {
   isScheduledItem,
   type SessionCustomizationOptions,
 } from "../../utils/reviewUx";
-import { filterByDeck } from "../../utils/studyDecks";
 import {
   SessionCustomizeModal,
   DEFAULT_CUSTOMIZATION,
   type SessionCustomization,
 } from "./SessionCustomizeModal";
+import { postponeItem } from "../../api/queue";
+import { useToast } from "../common/Toast";
 
 type QueueMode = "reading" | "review";
 
@@ -96,8 +96,6 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   );
   // Subscribe to selectedIds separately to avoid creating new Set reference in selector
   const selectedIds = useQueueStore((state) => state.selectedIds);
-  const decks = useStudyDeckStore((state) => state.decks);
-  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
   const [queueMode, setQueueMode] = useState<QueueMode>("reading");
   const [preset, setPreset] = useState<PriorityPreset>("maximize-retention");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -108,6 +106,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   const [isCustomizeModalOpen, setCustomizeModalOpen] = useState(false);
   const [sessionCustomization, setSessionCustomization] = useState<SessionCustomization>(DEFAULT_CUSTOMIZATION);
   const searchRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   // Debug: Check if scroll mode is available
   useEffect(() => {
@@ -115,7 +114,13 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   }, [queueMode, onOpenScrollMode]);
 
   useEffect(() => {
-    // Load queue based on current filter mode
+    if (queueMode === "review") {
+      loadDueQueueItems();
+      loadStats();
+      return;
+    }
+
+    // Reading queue: load based on current filter mode
     switch (queueFilterMode) {
       case "due-today":
         loadDueDocumentsOnly();
@@ -130,19 +135,13 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
         break;
     }
     loadStats();
-  }, [queueFilterMode, loadQueue, loadDueDocumentsOnly, loadDueQueueItems, loadStats]);
-
-  const activeDeck = useMemo(
-    () => decks.find((deck) => deck.id === activeDeckId) ?? null,
-    [decks, activeDeckId]
-  );
+  }, [queueMode, queueFilterMode, loadQueue, loadDueDocumentsOnly, loadDueQueueItems, loadStats]);
 
   const visibleItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    const deckFilteredItems = activeDeck ? filterByDeck(items, activeDeck) : items;
-    const queueItems = deckFilteredItems.filter((item) => {
+    const queueItems = items.filter((item) => {
       if (queueMode === "review") {
-        return item.itemType === "learning-item" && isScheduledItem(item);
+        return item.itemType === "learning-item";
       }
       // Reading mode: only show imported documents (books/articles/RSS), not extracts or learning items
       return item.itemType === "document";
@@ -157,12 +156,24 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
       })
       : queueItems;
     return [...searchedItems].sort((a, b) => getPriorityScore(b, preset) - getPriorityScore(a, preset));
-  }, [items, queueMode, preset, searchQuery, activeDeck]);
+  }, [items, queueMode, preset, searchQuery]);
 
   const selectableItems = useMemo(
     () => visibleItems.filter((item) => item.itemType === "learning-item"),
     [visibleItems]
   );
+
+  const getLearningHint = (item: QueueItem) => {
+    if (item.itemType !== "learning-item") return null;
+    const raw = item.clozeText || item.question || "";
+    if (!raw) return null;
+    const noCloze = raw.replace(/\[\[c\\d+::(.*?)\\]\]/g, "$1");
+    const withoutHtml = noCloze.replace(/<[^>]*>/g, " ");
+    const trimmed = withoutHtml.replace(/\s+/g, " ").trim();
+    if (!trimmed) return null;
+    const maxLength = 80;
+    return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
+  };
 
   const allSelected = selectableItems.length > 0 && selectableItems.every((item) => selectedIds.has(item.id));
 
@@ -180,6 +191,70 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     () => visibleItems.find((item) => item.id === selectedId) ?? null,
     [visibleItems, selectedId]
   );
+
+  const getDaysUntilDue = (item: QueueItem) => {
+    if (!item.dueDate) return 0;
+    const due = new Date(item.dueDate);
+    if (Number.isNaN(due.getTime())) return 0;
+    const now = Date.now();
+    return Math.round((due.getTime() - now) / (1000 * 60 * 60 * 24));
+  };
+
+  const refreshQueue = async () => {
+    if (queueMode === "review") {
+      await loadDueQueueItems();
+    } else {
+      switch (queueFilterMode) {
+        case "due-today":
+          await loadDueDocumentsOnly();
+          break;
+        case "due-all":
+          await loadDueQueueItems();
+          break;
+        case "all-items":
+        case "new-only":
+        default:
+          await loadQueue();
+          break;
+      }
+    }
+    await loadStats();
+  };
+
+  const applyScheduleShift = async (label: string, deltaDays: number) => {
+    if (!selectedItem) return;
+    if (selectedItem.itemType !== "learning-item") {
+      toast.info(`${label} applies to learning items only.`);
+      return;
+    }
+    try {
+      await postponeItem(selectedItem.id, deltaDays);
+      toast.success(label, "Updated review schedule.");
+      await refreshQueue();
+    } catch (error) {
+      toast.error(label, error instanceof Error ? error.message : "Failed to update schedule.");
+    }
+  };
+
+  const handleCompressIntervals = async () => {
+    if (!selectedItem) return;
+    const daysUntil = Math.abs(getDaysUntilDue(selectedItem));
+    const deltaDays = -Math.max(1, Math.round(daysUntil * 0.5));
+    await applyScheduleShift("Compress intervals", deltaDays);
+  };
+
+  const handleRescheduleIntelligently = async () => {
+    if (!selectedItem) return;
+    const deltaDays = -getDaysUntilDue(selectedItem);
+    await applyScheduleShift("Reschedule intelligently", deltaDays);
+  };
+
+  const handleDowngradeFrequency = async () => {
+    if (!selectedItem) return;
+    const daysUntil = Math.max(1, getDaysUntilDue(selectedItem));
+    const deltaDays = Math.max(1, Math.round(daysUntil * 0.5));
+    await applyScheduleShift("Downgrade frequency", deltaDays);
+  };
 
   useEffect(() => {
     if (!selectedItem && visibleItems.length > 0) {
@@ -307,11 +382,6 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                 ? "Imported books, articles, and RSS feeds scheduled for incremental reading"
                 : "Flashcards and learning items scheduled for review"}
             </p>
-            {activeDeck && (
-              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
-                Viewing deck: <span className="font-semibold">{activeDeck.name}</span>
-              </div>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <button
@@ -547,6 +617,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                   const status = getQueueStatus(item);
                   const priorityVector = getPriorityVector(item);
                   const estimateRange = getTimeEstimateRange(item);
+                  const learningHint = getLearningHint(item);
                   return (
                     <div
                       key={item.id}
@@ -592,6 +663,12 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                           <div className="min-w-0">
                             <div className="text-sm font-semibold text-foreground line-clamp-1">
                               {item.documentTitle}
+                              {item.itemType === "learning-item" && learningHint && (
+                                <span className="font-normal text-muted-foreground">
+                                  {" "}
+                                  — {learningHint}
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {formatMinutesRange(estimateRange)} • Priority {getPriorityScore(item, preset)}
@@ -718,13 +795,25 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
                 <div className="space-y-2">
                   <div className="text-xs text-muted-foreground">Recovery actions</div>
                   <div className="flex flex-col gap-2">
-                    <button className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground">
+                    <button
+                      onClick={handleCompressIntervals}
+                      disabled={!selectedItem || selectedItem.itemType !== "learning-item"}
+                      className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       Compress intervals
                     </button>
-                    <button className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground">
+                    <button
+                      onClick={handleRescheduleIntelligently}
+                      disabled={!selectedItem || selectedItem.itemType !== "learning-item"}
+                      className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       Reschedule intelligently
                     </button>
-                    <button className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground">
+                    <button
+                      onClick={handleDowngradeFrequency}
+                      disabled={!selectedItem || selectedItem.itemType !== "learning-item"}
+                      className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       Downgrade frequency
                     </button>
                   </div>

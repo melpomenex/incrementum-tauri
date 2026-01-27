@@ -38,6 +38,9 @@ interface RustQueueItem {
   document_title: string;
   extract_id?: string;
   learning_item_id?: string;
+  question?: string;
+  answer?: string;
+  cloze_text?: string;
   item_type: string;
   priority_rating?: number;
   priority_slider?: number;
@@ -57,6 +60,9 @@ function convertQueueItem(item: RustQueueItem): QueueItem {
     documentTitle: item.document_title,
     extractId: item.extract_id,
     learningItemId: item.learning_item_id,
+    question: item.question,
+    answer: item.answer,
+    clozeText: item.cloze_text,
     itemType: item.item_type as "document" | "extract" | "learning-item",
     priorityRating: item.priority_rating,
     prioritySlider: item.priority_slider,

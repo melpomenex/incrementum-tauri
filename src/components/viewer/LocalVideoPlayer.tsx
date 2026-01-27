@@ -3,7 +3,7 @@
  * Plays local video files with position tracking, playback speed, and keyboard shortcuts
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Play,
   Pause,
@@ -16,6 +16,7 @@ import {
   SkipBack,
   SkipForward,
 } from 'lucide-react';
+import { cn } from '../../utils';
 import { saveDocumentPosition, timePosition } from '../../api/position';
 import { useToast } from '../common/Toast';
 
@@ -25,6 +26,7 @@ interface LocalVideoPlayerProps {
   title?: string;
   onLoad?: (metadata: { duration: number; title: string }) => void;
   className?: string;
+  mediaType?: "video" | "audio";
 }
 
 export function LocalVideoPlayer({
@@ -33,6 +35,7 @@ export function LocalVideoPlayer({
   title,
   onLoad,
   className = '',
+  mediaType = "video",
 }: LocalVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -309,55 +312,153 @@ export function LocalVideoPlayer({
   // Calculate progress percentage
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  const waveformBars = useMemo(() => {
+    const seedSource = `${title || ''}|${src}`;
+    let hash = 2166136261;
+    for (let i = 0; i < seedSource.length; i += 1) {
+      hash ^= seedSource.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    let state = hash >>> 0;
+    const next = () => {
+      state += 0x6D2B79F5;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+
+    const bars: number[] = [];
+    const barCount = 64;
+    for (let i = 0; i < barCount; i += 1) {
+      const rand = next();
+      const shaped = Math.pow(rand, 0.55);
+      const height = 0.18 + shaped * 0.82;
+      bars.push(height);
+    }
+
+    return bars;
+  }, [src, title]);
+
+  const mediaElement = mediaType === "audio" ? (
+    <audio
+      ref={videoRef}
+      src={src}
+      className="sr-only"
+      onLoadedMetadata={() => {
+        if (videoRef.current) {
+          const mediaDuration = videoRef.current.duration;
+          setDuration(mediaDuration);
+          onLoad?.({ duration: mediaDuration, title: title || 'Audio' });
+        }
+      }}
+      onPlay={() => setIsPlaying(true)}
+      onPause={() => {
+        setIsPlaying(false);
+        if (videoRef.current && documentIdRef.current) {
+          savePosition(videoRef.current.currentTime);
+        }
+      }}
+      onTimeUpdate={() => {
+        if (videoRef.current) {
+          setCurrentTime(videoRef.current.currentTime);
+        }
+      }}
+      onVolumeChange={() => {
+        if (videoRef.current) {
+          setVolume(videoRef.current.volume * 100);
+          setIsMuted(videoRef.current.muted);
+        }
+      }}
+    />
+  ) : (
+    <video
+      ref={videoRef}
+      src={src}
+      className="w-full max-h-full bg-black"
+      onLoadedMetadata={() => {
+        if (videoRef.current) {
+          const mediaDuration = videoRef.current.duration;
+          setDuration(mediaDuration);
+          onLoad?.({ duration: mediaDuration, title: title || 'Video' });
+        }
+      }}
+      onPlay={() => setIsPlaying(true)}
+      onPause={() => {
+        setIsPlaying(false);
+        if (videoRef.current && documentIdRef.current) {
+          savePosition(videoRef.current.currentTime);
+        }
+      }}
+      onTimeUpdate={() => {
+        if (videoRef.current) {
+          setCurrentTime(videoRef.current.currentTime);
+        }
+      }}
+      onVolumeChange={() => {
+        if (videoRef.current) {
+          setVolume(videoRef.current.volume * 100);
+          setIsMuted(videoRef.current.muted);
+        }
+      }}
+    />
+  );
+
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col bg-black rounded-lg overflow-hidden ${className}`}
+      className={cn(
+        "flex flex-col rounded-lg overflow-hidden relative",
+        mediaType === "audio" ? "bg-background" : "bg-black",
+        className
+      )}
     >
-      {/* Video Element */}
-      <video
-        ref={videoRef}
-        src={src}
-        className="w-full max-h-full bg-black"
-        onLoadedMetadata={() => {
-          if (videoRef.current) {
-            const videoDuration = videoRef.current.duration;
-            setDuration(videoDuration);
-            onLoad?.({ duration: videoDuration, title: title || 'Video' });
-          }
-        }}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => {
-          setIsPlaying(false);
-          // Save position when pausing
-          if (videoRef.current && documentIdRef.current) {
-            savePosition(videoRef.current.currentTime);
-          }
-        }}
-        onTimeUpdate={() => {
-          if (videoRef.current) {
-            setCurrentTime(videoRef.current.currentTime);
-          }
-        }}
-        onVolumeChange={() => {
-          if (videoRef.current) {
-            setVolume(videoRef.current.volume * 100);
-            setIsMuted(videoRef.current.muted);
-          }
-        }}
-      />
+      {/* Media Element */}
+      {mediaElement}
+
+      {mediaType === "audio" && (
+        <div className="flex-1 w-full flex items-center justify-center px-10 py-12">
+          <div className="w-full max-w-5xl h-48 md:h-64">
+            <div className="flex items-end gap-1 h-full">
+              {waveformBars.map((height, index) => {
+                const filled = (index / waveformBars.length) * 100 <= progressPercent;
+                return (
+                  <div
+                    key={`wave-${index}`}
+                    className={cn(
+                      "flex-1 rounded-full transition-colors",
+                      filled ? "bg-primary" : "bg-muted-foreground/30"
+                    )}
+                    style={{ height: `${Math.max(8, Math.round(height * 100))}%` }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Controls Overlay */}
-      <div className="absolute inset-0 flex flex-col justify-between opacity-0 hover:opacity-100 transition-opacity bg-gradient-to-b from-black/30 via-transparent to-black/50 p-4">
+      <div
+        className={cn(
+          "absolute inset-0 flex flex-col justify-between opacity-0 hover:opacity-100 transition-opacity p-4",
+          mediaType === "audio"
+            ? "bg-gradient-to-b from-background/80 via-transparent to-background/80"
+            : "bg-gradient-to-b from-black/30 via-transparent to-black/50"
+        )}
+      >
         {/* Top Controls */}
         <div className="flex items-center justify-between">
-          <div className="text-white text-sm truncate">{title || 'Video'}</div>
+          <div className={cn("text-sm truncate", mediaType === "audio" ? "text-foreground" : "text-white")}>
+            {title || (mediaType === "audio" ? "Audio" : "Video")}
+          </div>
           <button
             onClick={toggleFullscreen}
             className="p-1 hover:bg-white/20 rounded transition-colors"
             title="Fullscreen (F)"
           >
-            <Maximize className="w-5 h-5 text-white" />
+            <Maximize className={cn("w-5 h-5", mediaType === "audio" ? "text-foreground" : "text-white")} />
           </button>
         </div>
 
@@ -368,7 +469,7 @@ export function LocalVideoPlayer({
             className="p-2 hover:bg-white/20 rounded-full transition-colors"
             title="Back 10s (←)"
           >
-            <SkipBack className="w-5 h-5 text-white" />
+            <SkipBack className={cn("w-5 h-5", mediaType === "audio" ? "text-foreground" : "text-white")} />
           </button>
 
           <button
@@ -376,7 +477,7 @@ export function LocalVideoPlayer({
             className="p-2 hover:bg-white/20 rounded-full transition-colors"
             title="Back 5s"
           >
-            <SkipBack className="w-5 h-5 text-white" />
+            <SkipBack className={cn("w-5 h-5", mediaType === "audio" ? "text-foreground" : "text-white")} />
           </button>
 
           <button
@@ -385,9 +486,9 @@ export function LocalVideoPlayer({
             title="Play/Pause (Space/K)"
           >
             {isPlaying ? (
-              <Pause className="w-6 h-6 text-white" />
+              <Pause className={cn("w-6 h-6", mediaType === "audio" ? "text-foreground" : "text-white")} />
             ) : (
-              <Play className="w-6 h-6 text-white ml-0.5" />
+              <Play className={cn("w-6 h-6 ml-0.5", mediaType === "audio" ? "text-foreground" : "text-white")} />
             )}
           </button>
 
@@ -396,7 +497,7 @@ export function LocalVideoPlayer({
             className="p-2 hover:bg-white/20 rounded-full transition-colors"
             title="Forward 5s"
           >
-            <SkipForward className="w-5 h-5 text-white" />
+            <SkipForward className={cn("w-5 h-5", mediaType === "audio" ? "text-foreground" : "text-white")} />
           </button>
 
           <button
@@ -404,7 +505,7 @@ export function LocalVideoPlayer({
             className="p-2 hover:bg-white/20 rounded-full transition-colors"
             title="Forward 10s"
           >
-            <SkipForward className="w-5 h-5 text-white" />
+            <SkipForward className={cn("w-5 h-5", mediaType === "audio" ? "text-foreground" : "text-white")} />
           </button>
         </div>
 
@@ -428,7 +529,7 @@ export function LocalVideoPlayer({
           </div>
 
           {/* Control Bar */}
-          <div className="flex items-center justify-between text-white">
+          <div className={cn("flex items-center justify-between", mediaType === "audio" ? "text-foreground" : "text-white")}>
             {/* Left side - Time and playback speed */}
             <div className="flex items-center gap-4">
               <span className="text-sm font-mono">
@@ -482,7 +583,10 @@ export function LocalVideoPlayer({
       </div>
 
       {/* Keyboard Shortcuts Hint */}
-      <div className="absolute top-4 right-4 p-2 bg-black/70 rounded text-xs text-white opacity-0 hover:opacity-100 transition-opacity">
+      <div className={cn(
+        "absolute top-4 right-4 p-2 rounded text-xs opacity-0 hover:opacity-100 transition-opacity",
+        mediaType === "audio" ? "bg-background/90 text-foreground border border-border" : "bg-black/70 text-white"
+      )}>
         <div className="font-semibold mb-1">Shortcuts:</div>
         <div>Space/K: Play/Pause</div>
         <div>←/→: 5s</div>

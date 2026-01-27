@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
-import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { useCollectionStore } from "../../stores/collectionStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
 import type { Document } from "../../types/document";
@@ -22,7 +21,6 @@ import {
   parseDocumentSearch,
   sortDocuments,
 } from "../../utils/documentsView";
-import { filterByDeck } from "../../utils/studyDecks";
 import { importYouTubeVideo, resolveDocumentCover } from "../../api/documents";
 import { getYouTubeThumbnail } from "../../api/youtube";
 import { getDeviceInfo } from "../../lib/pwa";
@@ -107,8 +105,6 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     updateDocument,
     deleteDocument,
   } = useDocumentStore();
-  const decks = useStudyDeckStore((state) => state.decks);
-  const activeDeckId = useStudyDeckStore((state) => state.activeDeckId);
   const activeCollectionId = useCollectionStore((state) => state.activeCollectionId);
   const documentAssignments = useCollectionStore((state) => state.documentAssignments);
   const collections = useCollectionStore((state) => state.collections);
@@ -179,20 +175,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   }, [savedViews]);
 
   const searchTokens = useMemo(() => parseDocumentSearch(debouncedSearch), [debouncedSearch]);
-  const activeDeck = useMemo(
-    () => decks.find((deck) => deck.id === activeDeckId) ?? null,
-    [decks, activeDeckId]
-  );
-
   const filteredDocuments = useMemo(() => {
     const base = documents.filter((doc) => matchesDocumentSearch(doc, searchTokens));
-    const deckFiltered = activeDeck ? filterByDeck(base, activeDeck) : base;
-    if (!activeCollectionId) return deckFiltered;
-    return deckFiltered.filter((doc) => {
+    if (!activeCollectionId) return base;
+    return base.filter((doc) => {
       const assigned = documentAssignments[doc.id];
       return assigned ? assigned === activeCollectionId : true;
     });
-  }, [documents, searchTokens, activeDeck, activeCollectionId, documentAssignments]);
+  }, [documents, searchTokens, activeCollectionId, documentAssignments]);
 
   const sortedDocuments = useMemo(() => {
     return sortDocuments(filteredDocuments, sortKey, sortDirection);
@@ -498,11 +488,6 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
             <p className="text-sm text-muted-foreground">
               {sortedDocuments.length} documents • prioritize your next action
             </p>
-            {activeDeck && (
-              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
-                Viewing deck: <span className="font-semibold">{activeDeck.name}</span>
-              </div>
-            )}
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
             {enableYouTubeImport && (
