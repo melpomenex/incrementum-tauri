@@ -280,94 +280,101 @@ pub fn download_video(
     Ok(output_dir)
 }
 
+/// Try to run yt-dlp with browser cookies from common browsers
+fn try_with_browser_cookies(url: &str, args: &[&str]) -> Result<std::process::Output, String> {
+    let browsers = ["chrome", "firefox", "safari", "edge", "brave", "vivaldi", "opera"];
+    
+    // First try without cookies
+    let output = Command::new("yt-dlp")
+        .args(args)
+        .arg(url)
+        .output()
+        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+    
+    // If successful or not a bot error, return as-is
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if output.status.success() && !stderr.contains("Sign in to confirm") {
+        return Ok(output);
+    }
+    
+    // Try with each browser's cookies
+    for browser in &browsers {
+        let cookie_output = Command::new("yt-dlp")
+            .args(args)
+            .arg("--cookies-from-browser")
+            .arg(browser)
+            .arg(url)
+            .output();
+        
+        match cookie_output {
+            Ok(result) => {
+                let result_stderr = String::from_utf8_lossy(&result.stderr);
+                // If successful and no bot error, use this result
+                if result.status.success() && !result_stderr.contains("Sign in to confirm") {
+                    eprintln!("Successfully used cookies from {}", browser);
+                    return Ok(result);
+                }
+                // If browser not found error, try next browser
+                if result_stderr.contains("could not find") || result_stderr.contains("not installed") {
+                    continue;
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    
+    // Return original output if all cookie attempts failed
+    if !output.status.success() || stderr.contains("Sign in to confirm") {
+        return Err(
+            "YouTube is requiring sign-in to access this video.\n\n\
+            To fix this:\n\
+            1. Open YouTube in your browser (Chrome, Firefox, Safari, or Edge)\n\
+            2. Watch any video for 10-20 seconds\n\
+            3. Try again in the app\n\n\
+            The app will automatically use your browser cookies if available.".to_string()
+        );
+    }
+    
+    Ok(output)
+}
+
 /// Extract transcript using yt-dlp
 pub fn extract_transcript(url: &str, language: Option<&str>) -> Result<Vec<TranscriptSegment>, String> {
     // Create temp directory for subtitle download
     let temp_dir = std::env::temp_dir();
     let lang = language.unwrap_or("en");
 
-    // Get video info first to extract the video ID
-    let info_output = Command::new("yt-dlp")
-        .args([
-            "--print", "%(id)s",
-            "--no-playlist",
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("Failed to get video info: {}", e))?;
-
-    if !info_output.status.success() {
-        let error = String::from_utf8_lossy(&info_output.stderr);
-        // Check for bot detection error
-        if error.contains("Sign in to confirm") || error.contains("not a bot") {
-            return Err(
-                "YouTube is requiring sign-in to access this video.\n\n\
-                To fix this, you can try:\n\
-                1. Open YouTube in your browser and watch any video briefly\n\
-                2. Export your browser cookies and configure yt-dlp to use them:\n\
-                   yt-dlp --cookies-from-browser firefox/chrome [URL]\n\
-                3. Try a different video\n\n\
-                See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp for more info.".to_string()
-            );
-        }
-        return Err(format!("Failed to get video info: {}", error));
-    }
+    // Try to get video info with browser cookies first (helps avoid bot detection)
+    let info_output = try_with_browser_cookies(url, &[
+        "--print", "%(id)s",
+        "--no-playlist",
+    ])?;
 
     let video_id = String::from_utf8_lossy(&info_output.stdout).trim().to_string();
 
-    // Download subtitles using yt-dlp
-    // Note: YouTube may block requests; using --extractor-args to try to mitigate this
-    let output = Command::new("yt-dlp")
-        .args([
-            "--write-subs",
-            "--write-auto-subs",
-            "--sub-langs", lang,
-            "--sub-format", "vtt",
-            "--skip-download",
-            "--no-playlist",
-            "--extractor-args", "youtube:player_skip=js_guard",
-            "-o", &format!("{}/%(id)s", temp_dir.to_string_lossy()),
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+    // Download subtitles using yt-dlp with browser cookies
+    let output_template = format!("{}/%(id)s", temp_dir.to_string_lossy());
+    let subtitle_args = vec![
+        "--write-subs",
+        "--write-auto-subs",
+        "--sub-langs", lang,
+        "--sub-format", "vtt",
+        "--skip-download",
+        "--no-playlist",
+        "-o", &output_template,
+    ];
     
-    // Check stderr for bot detection even if command succeeded
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if stderr.contains("Sign in to confirm") || stderr.contains("not a bot") {
-        return Err(
-            "YouTube is requiring sign-in to access this video.\n\n\
-            To fix this, you can try:\n\
-            1. Open YouTube in your browser and watch any video briefly\n\
-            2. Export your browser cookies and configure yt-dlp to use them:\n\
-               yt-dlp --cookies-from-browser firefox/chrome [URL]\n\
-            3. Try a different video\n\n\
-            See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp for more info.".to_string()
-        );
-    }
+    let output = try_with_browser_cookies(url, &subtitle_args)?;
 
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr);
-        // Check for bot detection error
-        if error.contains("Sign in to confirm") || error.contains("not a bot") {
-            return Err(
-                "YouTube is requiring sign-in to access this video.\n\n\
-                To fix this, you can try:\n\
-                1. Open YouTube in your browser and watch any video briefly\n\
-                2. Export your browser cookies and configure yt-dlp to use them:\n\
-                   yt-dlp --cookies-from-browser firefox/chrome [URL]\n\
-                3. Try a different video\n\n\
-                See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp for more info.".to_string()
-            );
-        }
-        // If subtitles aren't available, return empty rather than error
-        if error.contains("Subtitles not available") 
-            || error.contains("video doesn't have subtitles")
-            || error.contains("Could not find automatic captions") {
-            return Ok(vec![]);
-        }
-        // Log the error but don't fail - try fallback methods
-        eprintln!("yt-dlp warning: {}", error);
+    // Check stderr for warnings
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // If subtitles aren't available, return empty rather than error
+    if !output.status.success() && (
+        stderr.contains("Subtitles not available") 
+        || stderr.contains("video doesn't have subtitles")
+        || stderr.contains("Could not find automatic captions")
+    ) {
+        return Ok(vec![]);
     }
 
     // Look for subtitle files with various naming patterns
