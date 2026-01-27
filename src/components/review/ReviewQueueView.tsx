@@ -137,6 +137,18 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     loadStats();
   }, [queueMode, queueFilterMode, loadQueue, loadDueDocumentsOnly, loadDueQueueItems, loadStats]);
 
+  const getLearningHint = (item: QueueItem) => {
+    if (item.itemType !== "learning-item") return null;
+    const raw = item.clozeText || item.question || "";
+    if (!raw) return null;
+    const noCloze = raw.replace(/\[\[c\\d+::(.*?)\\]\]/g, "$1");
+    const withoutHtml = noCloze.replace(/<[^>]*>/g, " ");
+    const trimmed = withoutHtml.replace(/\s+/g, " ").trim();
+    if (!trimmed) return null;
+    const maxLength = 80;
+    return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
+  };
+
   const visibleItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     const queueItems = items.filter((item) => {
@@ -163,18 +175,6 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     () => visibleItems.filter((item) => item.itemType === "learning-item"),
     [visibleItems]
   );
-
-  const getLearningHint = (item: QueueItem) => {
-    if (item.itemType !== "learning-item") return null;
-    const raw = item.clozeText || item.question || "";
-    if (!raw) return null;
-    const noCloze = raw.replace(/\[\[c\\d+::(.*?)\\]\]/g, "$1");
-    const withoutHtml = noCloze.replace(/<[^>]*>/g, " ");
-    const trimmed = withoutHtml.replace(/\s+/g, " ").trim();
-    if (!trimmed) return null;
-    const maxLength = 80;
-    return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
-  };
 
   const allSelected = selectableItems.length > 0 && selectableItems.every((item) => selectedIds.has(item.id));
 
