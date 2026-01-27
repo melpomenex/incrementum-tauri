@@ -23,6 +23,7 @@ export function MainLayout() {
   const loadDocuments = useDocumentStore((state) => state.loadDocuments);
   const initializedRef = useRef(false);
   const [vimiumEnabled] = useVimiumEnabled();
+  const documentsLoadedRef = useRef(false);
 
   // Setup keyboard shortcuts
   useGlobalShortcuts();
@@ -65,6 +66,12 @@ export function MainLayout() {
       loadTabs();
     }
   }, []);
+
+  useEffect(() => {
+    if (documentsLoadedRef.current) return;
+    documentsLoadedRef.current = true;
+    void loadDocuments();
+  }, [loadDocuments]);
 
   const resolveUrl = (inputUrl: string) => {
     if (!inputUrl.trim()) return "";

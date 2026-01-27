@@ -6,6 +6,7 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { initializePWA } from "./lib/pwa";
+import { isTauri } from "./lib/tauri";
 
 // Mobile PWA Components
 import { MobileLayoutWrapper } from "./components/mobile/MobileLayoutWrapper";
@@ -100,6 +101,19 @@ console.log('Starting Incrementum app...');
 
 // Initialize PWA (works in both Tauri and Web)
 initializePWA();
+
+// Dev/Tauri: ensure no service worker or cache is present to avoid stale assets.
+if ((import.meta.env.DEV || isTauri()) && "serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    registrations.forEach((registration) => registration.unregister());
+  });
+}
+
+if ((import.meta.env.DEV || isTauri()) && "caches" in window) {
+  caches.keys().then((keys) => {
+    keys.forEach((key) => caches.delete(key));
+  });
+}
 
 // Initialize demo content for web/PWA (only in browser mode, not Tauri)
 if (!(window as any).__TAURI__) {

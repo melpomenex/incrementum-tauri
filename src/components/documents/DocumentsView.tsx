@@ -554,7 +554,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Search documents or use tag:History extracts=0"
-              className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
@@ -562,7 +562,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
             <select
               value={activeViewId ?? ""}
               onChange={(event) => handleApplyView(event.target.value)}
-              className="px-3 py-2 bg-background border border-border rounded-md text-sm"
+              className="px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground"
             >
               <option value="">Saved Views</option>
               {savedViews.map((view) => (
@@ -614,19 +614,19 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
           <div className="flex items-center gap-2">
             <button
               onClick={handleBulkTag}
-              className="px-3 py-1.5 bg-background border border-border rounded text-sm hover:bg-muted"
+              className="px-3 py-1.5 bg-background border border-border rounded text-sm text-foreground hover:bg-muted"
             >
               Tag
             </button>
             <button
               onClick={handleBulkMoveCollection}
-              className="px-3 py-1.5 bg-background border border-border rounded text-sm hover:bg-muted"
+              className="px-3 py-1.5 bg-background border border-border rounded text-sm text-foreground hover:bg-muted"
             >
               Move
             </button>
             <button
               onClick={handleBulkReprioritize}
-              className="px-3 py-1.5 bg-background border border-border rounded text-sm hover:bg-muted"
+              className="px-3 py-1.5 bg-background border border-border rounded text-sm text-foreground hover:bg-muted"
             >
               Reprioritize
             </button>
@@ -716,11 +716,9 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                         return;
                       }
                       handleSelectRow(doc, event.metaKey || event.ctrlKey);
-                    }}
-                    onDoubleClick={(event) => {
-                      if (isMobile) return;
-                      event.stopPropagation();
-                      onOpenDocument?.(doc);
+                      if (event.detail > 1) {
+                        onOpenDocument?.(doc);
+                      }
                     }}
                     className={`border rounded-lg p-3 cursor-pointer transition-colors ${
                       selectedIds.has(doc.id) ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted/40"
@@ -806,11 +804,9 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                                   return;
                                 }
                                 handleSelectRow(doc, event.metaKey || event.ctrlKey);
-                              }}
-                              onDoubleClick={(event) => {
-                                if (isMobile) return;
-                                event.stopPropagation();
-                                onOpenDocument?.(doc);
+                                if (event.detail > 1) {
+                                  onOpenDocument?.(doc);
+                                }
                               }}
                               className={`p-2 rounded-md border transition-shadow cursor-pointer ${
                                 selectedIds.has(doc.id)
@@ -953,7 +949,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                     </button>
                     <button
                       onClick={() => onOpenDocument?.(activeDocument)}
-                      className="px-3 py-2 bg-background border border-border rounded text-sm"
+                      className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground"
                     >
                       Extract
                     </button>
@@ -964,7 +960,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                           priorityScore: (activeDocument.priorityScore ?? 0) + 10,
                         })
                       }
-                      className="px-3 py-2 bg-background border border-border rounded text-sm"
+                      className="px-3 py-2 bg-background border border-border rounded text-sm text-foreground"
                     >
                       Reprioritize
                     </button>

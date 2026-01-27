@@ -139,6 +139,8 @@ export const BUILTIN_THEMES = {
   SUPER_GAME_BRO: 'super-game-bro',
   CARTOGRAPHER: 'cartographer',
   MODERN_POLISHED: 'modern-polished',
+  HIGH_CONTRAST_LIGHT: 'high-contrast-light',
+  HIGH_CONTRAST_DARK: 'high-contrast-dark',
 } as const;
 
 export type BuiltInThemeId = typeof BUILTIN_THEMES[keyof typeof BUILTIN_THEMES];

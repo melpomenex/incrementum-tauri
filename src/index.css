@@ -36,8 +36,48 @@
 }
 
 @layer base {
+  html,
+  body {
+    color: var(--color-foreground);
+    background-color: var(--color-background);
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+
   .text-foreground-secondary {
     color: var(--color-muted-foreground);
+  }
+
+  /* Ensure readable text on themed backgrounds, especially in dark themes. */
+  .bg-background {
+    color: var(--color-foreground);
+  }
+
+  input,
+  select,
+  textarea {
+    color: var(--color-foreground) !important;
+    background-color: var(--color-background) !important;
+  }
+
+  select {
+    appearance: none;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-muted-foreground);
+  }
+
+  select option {
+    color: var(--color-foreground) !important;
+    background-color: var(--color-background) !important;
   }
 
   button:enabled {

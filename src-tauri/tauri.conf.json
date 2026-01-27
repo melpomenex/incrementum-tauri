@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "com.incrementum.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "TAURI_ENV=true npm run dev",
     "devUrl": "http://127.0.0.1:15173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"

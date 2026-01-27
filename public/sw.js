@@ -6,6 +6,31 @@
  */
 
 const VERSION = 'incrementum-v2';
+
+// Disable SW on localhost/dev (unregister and bypass all caching)
+const IS_DEV_HOST = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+
+if (IS_DEV_HOST) {
+  self.addEventListener('install', (event) => {
+    event.waitUntil(
+      (async () => {
+        await self.skipWaiting();
+        const registrations = await self.registration.unregister();
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+        return registrations;
+      })()
+    );
+  });
+
+  self.addEventListener('activate', (event) => {
+    event.waitUntil(self.clients.claim());
+  });
+
+  self.addEventListener('fetch', (event) => {
+    event.respondWith(fetch(event.request));
+  });
+}
 const CACHE_NAME = `${VERSION}-main`;
 const STATIC_CACHE = `${VERSION}-static`;
 const API_CACHE = `${VERSION}-api`;

@@ -197,6 +197,8 @@ export function ThemePicker({ onClose }: ThemePickerProps) {
     'omar-chy-bliss',
     'super-game-bro',
     'cartographer',
+    'high-contrast-light',
+    'high-contrast-dark',
   ];
   const builtinThemeIdSet = new Set(builtinThemeIds);
   const builtinThemes = themes.filter((t) => builtinThemeIdSet.has(t.id));

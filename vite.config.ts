@@ -15,11 +15,16 @@ export default defineConfig(async ({ mode }) => {
     process.env.TAURI_DEV_HOST ||
       process.env.TAURI_PLATFORM ||
       process.env.TAURI_ARCH ||
-      process.env.TAURI_FAMILY
+      process.env.TAURI_FAMILY ||
+      process.env.TAURI_ENV
   );
   const isPWA = mode === "pwa" || (!isTauriBuild && isProd);
 
-  const plugins = [react(), tailwindcss(), wasm()];
+  const plugins = [
+    react({ fastRefresh: !isTauriBuild }),
+    tailwindcss(),
+    wasm(),
+  ];
 
   return {
     plugins,
@@ -59,6 +64,8 @@ export default defineConfig(async ({ mode }) => {
           port: 15174,
           clientPort: 15174,
         },
+      // In Tauri, disable the websocket server entirely to stop client WS attempts.
+      ws: isTauriBuild ? false : undefined,
       watch: {
         // 3. tell Vite to ignore watching `src-tauri`
         ignored: ["**/src-tauri/**", "**/server/**"],

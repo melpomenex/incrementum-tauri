@@ -20,21 +20,24 @@
   <link rel="manifest" href="/manifest.json" />
 
   <title>Incrementum</title>
+  <script>
+    (function () {
+      const isDevHost = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+      const isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || /Tauri/i.test(navigator.userAgent));
+      if (!("serviceWorker" in navigator) || !(isDevHost || isTauri)) return;
+      if (sessionStorage.getItem("__sw_cleared__") === "1") return;
+      sessionStorage.setItem("__sw_cleared__", "1");
+      navigator.serviceWorker.getRegistrations()
+        .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
+        .then(() => ("caches" in window ? caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))) : undefined))
+        .then(() => location.reload());
+    })();
+  </script>
 </head>
 
 <body data-incrementum-app="true">
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
-  <script>
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator && !window.__TAURI__) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(registration => console.log('SW registered:', registration.scope))
-          .catch(error => console.log('SW registration failed:', error));
-      });
-    }
-  </script>
 </body>
 
 </html>

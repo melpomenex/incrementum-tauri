@@ -16,7 +16,11 @@ let tauriEventListen: (<T>(event: string, handler: (event: T) => void) => Promis
  * Check if running in Tauri environment
  */
 export function isTauri(): boolean {
-  return "__TAURI__" in window;
+  return (
+    "__TAURI__" in window ||
+    "__TAURI_INTERNALS__" in window ||
+    /Tauri/i.test(navigator.userAgent)
+  );
 }
 
 /**

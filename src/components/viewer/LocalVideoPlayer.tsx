@@ -77,7 +77,7 @@ export function LocalVideoPlayer({
 
     try {
       const doc = await getDocumentAuto(documentId);
-      const savedTime = doc?.current_page ?? 0;
+      const savedTime = doc?.currentPage ?? doc?.current_page ?? 0;
       console.log("[LocalVideoPlayer] Loaded saved time:", {
         documentId,
         savedTime,

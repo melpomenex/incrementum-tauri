@@ -204,6 +204,10 @@ export function initializePWA(): void {
     return;
   }
 
+  if (import.meta.env.DEV) {
+    return;
+  }
+
   const shouldEnablePWA = !isTauri() && (import.meta.env.MODE === 'pwa' || import.meta.env.PROD);
   if (!shouldEnablePWA) {
     return;

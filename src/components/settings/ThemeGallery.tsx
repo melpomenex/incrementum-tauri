@@ -216,6 +216,8 @@ export function ThemeGallery({ onClose, onThemeSelect }: ThemeGalleryProps) {
     "omar-chy-bliss",
     "super-game-bro",
     "cartographer",
+    "high-contrast-light",
+    "high-contrast-dark",
   ];
   const builtinOrder = new Map(allThemeIds.map((id, index) => [id, index]));
   const themeSort = (a: Theme, b: Theme) => {

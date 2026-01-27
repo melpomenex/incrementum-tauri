@@ -4,7 +4,6 @@ import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs";
 import { List, ChevronLeft, ChevronRight, Maximize, Minimize } from "lucide-react";
 import { cn } from "../../utils";
 import type { PdfDest, ViewState } from "../../types/readerPosition";
-import { isTauri } from "../../lib/tauri";
 import "./PDFViewer.css";
 
 // Set default worker for web/PWA
@@ -92,13 +91,6 @@ export function PDFViewer({
   // Lazy loading: track which pages should be rendered
   const [renderedPageRange, setRenderedPageRange] = useState<{ start: number; end: number }>({ start: 1, end: 1 });
   const renderedPageRangeRef = useRef({ start: 1, end: 1 });
-
-  // Configure PDF.js worker for Tauri before loading any PDF
-  useEffect(() => {
-    if (isTauri()) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs";
-    }
-  }, []);
 
   // Pan state
   const [isDragging, setIsDragging] = useState(false);
