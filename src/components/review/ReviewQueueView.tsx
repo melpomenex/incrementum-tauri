@@ -137,7 +137,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     loadStats();
   }, [queueMode, queueFilterMode, loadQueue, loadDueDocumentsOnly, loadDueQueueItems, loadStats]);
 
-  const getLearningHint = (item: QueueItem) => {
+  function getLearningHint(item: QueueItem) {
     if (item.itemType !== "learning-item") return null;
     const raw = item.clozeText || item.question || "";
     if (!raw) return null;
@@ -147,7 +147,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     if (!trimmed) return null;
     const maxLength = 80;
     return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
-  };
+  }
 
   const visibleItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
