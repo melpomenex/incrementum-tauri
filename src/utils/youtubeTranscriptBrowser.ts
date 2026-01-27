@@ -226,6 +226,9 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
     
     if (!response.ok || !data.success) {
       // Handle specific error codes
+      if (data.code === 'YOUTUBE_BOT_DETECTED') {
+        throw new Error('YouTube is blocking transcript requests due to bot detection. This is a temporary limitation.');
+      }
       if (data.code === 'YOUTUBE_CONSENT_REQUIRED') {
         throw new Error('YouTube requires consent. Please try a different video.');
       }

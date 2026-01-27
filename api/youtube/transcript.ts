@@ -69,9 +69,17 @@ function extractCaptionTracks(html: string): Array<{ baseUrl: string; name: stri
     const playerResponse = JSON.parse(playerResponseStr);
     
     // Check for playability errors
-    const playabilityError = playerResponse?.playabilityStatus?.errorScreen;
-    if (playabilityError) {
-      const reason = playerResponse?.playabilityStatus?.reason || 'Video unavailable';
+    const playabilityStatus = playerResponse?.playabilityStatus;
+    if (playabilityStatus?.status === 'LOGIN_REQUIRED' || 
+        playabilityStatus?.status === 'ERROR' ||
+        playabilityStatus?.reason?.includes('bot') ||
+        playabilityStatus?.reason?.includes('Sign in')) {
+      const reason = playabilityStatus?.reason || 'Video requires sign-in';
+      throw new Error(`YOUTUBE_BOT_DETECTED: ${reason}`);
+    }
+    
+    if (playabilityStatus?.status !== 'OK' && playabilityStatus?.status !== undefined) {
+      const reason = playabilityStatus?.reason || 'Video unavailable';
       throw new Error(`YouTube error: ${reason}`);
     }
 
@@ -291,6 +299,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Return more specific error codes
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (errorMessage.includes('YOUTUBE_BOT_DETECTED')) {
+      return res.status(503).json({
+        success: false,
+        error: 'YouTube has detected automated access and is requiring verification. Transcripts cannot be fetched at this time.',
+        code: 'YOUTUBE_BOT_DETECTED',
+      });
+    }
     
     if (errorMessage.includes('sign-in') || errorMessage.includes('consent')) {
       return res.status(503).json({

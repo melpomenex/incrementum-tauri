@@ -678,6 +678,12 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                           <p className="text-sm text-muted-foreground">
                             YouTube requires additional consent for this video. Transcripts cannot be fetched.
                           </p>
+                        ) : transcriptError.includes('bot detection') || transcriptError.includes('blocking transcript') ? (
+                          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                            <p className="text-xs text-amber-600">
+                              <strong>Bot Detection:</strong> YouTube is currently blocking automated transcript requests. This is a temporary limitation. Please try again later or use the desktop app.
+                            </p>
+                          </div>
                         ) : transcriptError.includes('CORS') || transcriptError.includes('local development') ? (
                           <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                             <p className="text-xs text-amber-600">

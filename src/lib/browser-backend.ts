@@ -1125,6 +1125,7 @@ const commandHandlers: Record<string, CommandHandler> = {
             if (errorMsg.includes('does not have captions') || 
                 errorMsg.includes('age-restricted') ||
                 errorMsg.includes('requires consent') ||
+                errorMsg.includes('bot detection') ||
                 errorMsg.includes('CORS') ||
                 errorMsg.includes('local development')) {
                 throw error;
