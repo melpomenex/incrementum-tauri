@@ -663,15 +663,37 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                 <div className="h-full flex items-center justify-center text-muted-foreground">
                   <div className="text-center max-w-md px-4">
                     <p className="mb-2">No transcript available for this video</p>
-                    <p className="text-sm mb-2">
-                      Transcripts are available if the video has closed captions or subtitles
-                    </p>
-                    {transcriptError && transcriptError.includes('CORS') && (
-                      <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                        <p className="text-xs text-amber-600">
-                          <strong>Development Mode:</strong> Transcript fetching requires CORS proxies in local development, which may be unreliable. Deploy to Vercel for full functionality.
-                        </p>
+                    
+                    {transcriptError ? (
+                      <div className="mt-4 space-y-2">
+                        {transcriptError.includes('does not have captions') ? (
+                          <p className="text-sm text-muted-foreground">
+                            This video doesn&apos;t have captions or subtitles enabled by the creator.
+                          </p>
+                        ) : transcriptError.includes('age-restricted') ? (
+                          <p className="text-sm text-muted-foreground">
+                            This video is age-restricted and transcripts cannot be fetched.
+                          </p>
+                        ) : transcriptError.includes('requires consent') ? (
+                          <p className="text-sm text-muted-foreground">
+                            YouTube requires additional consent for this video. Transcripts cannot be fetched.
+                          </p>
+                        ) : transcriptError.includes('CORS') || transcriptError.includes('local development') ? (
+                          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                            <p className="text-xs text-amber-600">
+                              <strong>Development Mode:</strong> Transcript fetching requires CORS proxies in local development, which may be unreliable. Deploy to Vercel for full functionality.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Error: {transcriptError}
+                          </p>
+                        )}
                       </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Transcripts are available if the video has closed captions or subtitles
+                      </p>
                     )}
                   </div>
                 </div>

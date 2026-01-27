@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
+import { DocumentViewer } from "../components/tabs/TabRegistry";
 import type { QueueItem } from "../types";
 
 export interface DocumentGroup {
@@ -25,7 +26,7 @@ export interface QueueNavigationState {
 
 export function useQueueNavigation() {
   const { filteredItems: queueItems } = useQueueStore();
-  const { addTab } = useTabsStore();
+  const { addTab, setActiveTab } = useTabsStore();
 
   // Group queue items by documentId
   const documentGroups = useMemo(() => {
@@ -49,13 +50,13 @@ export function useQueueNavigation() {
   }, [queueItems]);
 
   // Track current document and item
-  const [currentDocumentIndex, setCurrentDocumentIndex] = React.useState(0);
-  const [currentGroup, setCurrentGroup] = React.useState<DocumentGroup | null>(
+  const [currentDocumentIndex, setCurrentDocumentIndex] = useState(0);
+  const [currentGroup, setCurrentGroup] = useState<DocumentGroup | null>(
     documentGroups[0] || null
   );
 
   // Update current group when document groups change
-  React.useEffect(() => {
+  useEffect(() => {
     if (documentGroups.length > 0) {
       setCurrentGroup(documentGroups[currentDocumentIndex] || documentGroups[0]);
     } else {
@@ -76,6 +77,19 @@ export function useQueueNavigation() {
     ? currentGroup.currentIndex < currentGroup.items.length - 1
     : false;
 
+  // Open document viewer tab
+  const openDocumentViewer = useCallback((item: QueueItem) => {
+    const tabId = addTab({
+      title: item.documentTitle || "Document",
+      icon: "document",
+      type: "document-viewer",
+      content: DocumentViewer,
+      closable: true,
+      data: { documentId: item.documentId },
+    });
+    setActiveTab(tabId);
+  }, [addTab, setActiveTab]);
+
   // Navigation actions
   const goToPreviousDocument = useCallback(() => {
     if (!canGoToPreviousDocument) return;
@@ -88,7 +102,7 @@ export function useQueueNavigation() {
     if (prevGroup && prevGroup.items[0]) {
       openDocumentViewer(prevGroup.items[0]);
     }
-  }, [canGoToPreviousDocument, currentDocumentIndex, documentGroups]);
+  }, [canGoToPreviousDocument, currentDocumentIndex, documentGroups, openDocumentViewer]);
 
   const goToNextDocument = useCallback(() => {
     if (!canGoToNextDocument) return;
@@ -101,7 +115,7 @@ export function useQueueNavigation() {
     if (nextGroup && nextGroup.items[0]) {
       openDocumentViewer(nextGroup.items[0]);
     }
-  }, [canGoToNextDocument, currentDocumentIndex, documentGroups]);
+  }, [canGoToNextDocument, currentDocumentIndex, documentGroups, openDocumentViewer]);
 
   const goToNextChunk = useCallback(() => {
     if (!canGoToNextChunk || !currentGroup) return;
@@ -117,7 +131,7 @@ export function useQueueNavigation() {
     if (nextItem) {
       openDocumentViewer(nextItem);
     }
-  }, [canGoToNextChunk, currentGroup]);
+  }, [canGoToNextChunk, currentGroup, openDocumentViewer]);
 
   const goToDocument = useCallback((documentId: string) => {
     const index = documentGroups.findIndex((g) => g.documentId === documentId);
@@ -130,14 +144,7 @@ export function useQueueNavigation() {
         openDocumentViewer(group.items[0]);
       }
     }
-  }, [documentGroups]);
-
-  // Open document viewer tab
-  const openDocumentViewer = useCallback((item: QueueItem) => {
-    // This will be handled by the component that uses this hook
-    // We just emit the item and let the component decide what to do
-    return item;
-  }, []);
+  }, [documentGroups, openDocumentViewer]);
 
   return {
     // State
@@ -160,6 +167,3 @@ export function useQueueNavigation() {
     openDocumentViewer,
   };
 }
-
-// Import React for useState and useEffect
-import React from "react";

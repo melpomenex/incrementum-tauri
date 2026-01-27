@@ -1120,7 +1120,16 @@ const commandHandlers: Record<string, CommandHandler> = {
             return result.segments;
         } catch (error) {
             console.warn('[Browser] Failed to fetch YouTube transcript:', error);
-            // Return empty array rather than throwing to maintain compatibility
+            // Re-throw specific errors so the UI can show appropriate messages
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            if (errorMsg.includes('does not have captions') || 
+                errorMsg.includes('age-restricted') ||
+                errorMsg.includes('requires consent') ||
+                errorMsg.includes('CORS') ||
+                errorMsg.includes('local development')) {
+                throw error;
+            }
+            // Return empty array for other errors to maintain compatibility
             return [];
         }
     },

@@ -215,10 +215,7 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
     if (language) params.append('language', language);
 
     const response = await fetch(`/api/youtube/transcript?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error(`API returned ${response.status}`);
-    }
-
+    
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
     if (!contentType?.includes('application/json')) {
@@ -226,8 +223,19 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
     }
 
     const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.error || 'API returned unsuccessful response');
+    
+    if (!response.ok || !data.success) {
+      // Handle specific error codes
+      if (data.code === 'YOUTUBE_CONSENT_REQUIRED') {
+        throw new Error('YouTube requires consent. Please try a different video.');
+      }
+      if (data.code === 'AGE_RESTRICTED') {
+        throw new Error('This video is age-restricted and cannot have transcripts fetched.');
+      }
+      if (data.code === 'NO_CAPTIONS') {
+        throw new Error('This video does not have captions/subtitles available.');
+      }
+      throw new Error(data.error || `API returned ${response.status}`);
     }
 
     return {
@@ -237,7 +245,7 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
     };
   } catch (error) {
     console.warn('[YouTubeTranscript] API fetch failed:', error);
-    return null;
+    throw error; // Re-throw to be handled by caller
   }
 }
 
@@ -256,22 +264,32 @@ export async function fetchYouTubeTranscript(
     throw new Error('Invalid YouTube video ID or URL');
   }
 
-  // Try API endpoint first (works best on Vercel deployments)
-  const apiResult = await fetchFromApi(videoId, language);
-  if (apiResult) {
-    console.log('[YouTubeTranscript] Successfully fetched via API');
-    return apiResult;
-  }
-
   // Check if running locally
   const isLocalhost = typeof window !== 'undefined' && 
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  
-  if (isLocalhost) {
-    console.warn(
-      '[YouTubeTranscript] Note: Transcript fetching in local development may fail due to CORS. ' +
-      'Deploy to Vercel for full functionality, or use `vercel dev` to test API endpoints locally.'
-    );
+
+  // Try API endpoint first (works best on Vercel deployments)
+  try {
+    const apiResult = await fetchFromApi(videoId, language);
+    console.log('[YouTubeTranscript] Successfully fetched via API');
+    return apiResult;
+  } catch (apiError) {
+    // If it's a specific error (like no captions), don't try fallback
+    const errorMsg = apiError instanceof Error ? apiError.message : '';
+    if (errorMsg.includes('does not have captions') || 
+        errorMsg.includes('age-restricted') ||
+        errorMsg.includes('requires consent')) {
+      throw apiError;
+    }
+    
+    console.warn('[YouTubeTranscript] API fetch failed:', apiError);
+    
+    if (isLocalhost) {
+      console.warn(
+        '[YouTubeTranscript] Note: Transcript fetching in local development may fail due to CORS. ' +
+        'Deploy to Vercel for full functionality, or use `vercel dev` to test API endpoints locally.'
+      );
+    }
   }
 
   // Fallback to CORS proxy method
