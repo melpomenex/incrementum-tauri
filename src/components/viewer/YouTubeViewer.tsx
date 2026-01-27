@@ -53,6 +53,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [showTranscript, setShowTranscript] = useState(true);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [startTime, setStartTime] = useState(0);
   const [positionLoaded, setPositionLoaded] = useState(false);
   const [useIframeFallback, setUseIframeFallback] = useState(false);
@@ -86,6 +87,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     if (!videoId) return;
 
     setIsLoadingTranscript(true);
+    setTranscriptError(null);
     try {
       const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }> | null>(
         "get_youtube_transcript_by_id",
@@ -107,6 +109,8 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       setTranscript(segments);
     } catch (error) {
       console.log("Transcript not available:", error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setTranscriptError(errorMsg);
       setTranscript([]);
     } finally {
       setIsLoadingTranscript(false);
@@ -653,14 +657,22 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                   showTimestamps={true}
                   showSpeakers={false}
                   onExport={handleExportTranscript}
+                  className="flex-1 h-full"
                 />
               ) : (
                 <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
+                  <div className="text-center max-w-md px-4">
                     <p className="mb-2">No transcript available for this video</p>
-                    <p className="text-sm">
+                    <p className="text-sm mb-2">
                       Transcripts are available if the video has closed captions or subtitles
                     </p>
+                    {transcriptError && transcriptError.includes('CORS') && (
+                      <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                        <p className="text-xs text-amber-600">
+                          <strong>Development Mode:</strong> Transcript fetching requires CORS proxies in local development, which may be unreliable. Deploy to Vercel for full functionality.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

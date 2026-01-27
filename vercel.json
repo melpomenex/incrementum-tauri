@@ -4,6 +4,10 @@
     "framework": "vite",
     "rewrites": [
         {
+            "source": "/api/youtube/(.*)",
+            "destination": "/api/youtube/$1"
+        },
+        {
             "source": "/api/(.*)",
             "destination": "$VERCEL_API_URL/$1"
         },

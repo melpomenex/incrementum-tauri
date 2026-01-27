@@ -17,6 +17,11 @@ import { createEmptyCard, fsrs, Rating, State, type Card, type Grade } from 'ts-
 import { useSettingsStore } from '../stores/settingsStore';
 import { v4 as uuidv4 } from 'uuid';
 import { getPositionProgress } from '../types/position';
+import {
+    fetchYouTubeTranscript,
+    checkTranscriptAvailable,
+    getAvailableLanguages,
+} from '../utils/youtubeTranscriptBrowser';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -1099,9 +1104,94 @@ const commandHandlers: Record<string, CommandHandler> = {
         return toCamelCase(doc);
     },
 
-    get_youtube_transcript_by_id: async () => {
-        console.warn('[Browser] YouTube transcripts are not available in browser mode.');
-        return [];
+    get_youtube_transcript_by_id: async (args) => {
+        const videoId = args.videoId as string;
+        const language = args.language as string | undefined;
+
+        if (!videoId) {
+            console.warn('[Browser] No videoId provided for transcript fetch');
+            return [];
+        }
+
+        try {
+            console.log('[Browser] Fetching YouTube transcript for:', videoId);
+            const result = await fetchYouTubeTranscript(videoId, language);
+            console.log(`[Browser] Successfully fetched ${result.segments.length} transcript segments`);
+            return result.segments;
+        } catch (error) {
+            console.warn('[Browser] Failed to fetch YouTube transcript:', error);
+            // Return empty array rather than throwing to maintain compatibility
+            return [];
+        }
+    },
+
+    get_youtube_transcript: async (args) => {
+        const url = args.url as string;
+        const language = args.language as string | undefined;
+
+        if (!url) {
+            console.warn('[Browser] No URL provided for transcript fetch');
+            return [];
+        }
+
+        try {
+            console.log('[Browser] Fetching YouTube transcript for URL:', url);
+            const result = await fetchYouTubeTranscript(url, language);
+            console.log(`[Browser] Successfully fetched ${result.segments.length} transcript segments`);
+            return result.segments;
+        } catch (error) {
+            console.warn('[Browser] Failed to fetch YouTube transcript:', error);
+            return [];
+        }
+    },
+
+    check_ytdlp: async () => {
+        // In browser mode, we use the browser-based transcript fetching
+        // which doesn't require yt-dlp, so we return true
+        return true;
+    },
+
+    get_youtube_video_info: async (args) => {
+        const url = args.url as string;
+
+        if (!url) {
+            throw new Error('No URL provided');
+        }
+
+        // Extract video ID
+        const idMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+            || url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/)
+            || url.match(/youtube\.com\/v\/([a-zA-Z0-9_-]{11})/)
+            || url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/);
+        const videoId = idMatch ? idMatch[1] : null;
+
+        if (!videoId) {
+            throw new Error('Invalid YouTube URL');
+        }
+
+        // Use noembed to get video info
+        const response = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch video info');
+        }
+
+        const data = await response.json();
+
+        return {
+            id: videoId,
+            title: data.title || 'Unknown',
+            description: data.html || '',
+            channel: data.author_name || 'Unknown',
+            channel_id: '',
+            duration: 0, // noembed doesn't provide duration
+            view_count: 0,
+            upload_date: '',
+            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+            publish_date: '',
+            tags: [],
+            category: '',
+            live_content: false,
+        };
     },
 
     // Anki Import (browser implementation using jszip and sql.js)

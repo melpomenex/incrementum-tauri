@@ -20,6 +20,7 @@ interface TranscriptSyncProps {
   showTimestamps?: boolean;
   showSpeakers?: boolean;
   onExport?: () => void;
+  className?: string;
 }
 
 export function TranscriptSync({
@@ -30,6 +31,7 @@ export function TranscriptSync({
   showTimestamps = true,
   showSpeakers = true,
   onExport,
+  className = "h-[400px]",
 }: TranscriptSyncProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredSegments, setFilteredSegments] = useState<TranscriptSegment[]>(segments);
@@ -144,7 +146,7 @@ export function TranscriptSync({
       {/* Transcript segments */}
       <div
         ref={containerRef}
-        className="h-[400px] overflow-y-auto p-4 space-y-2"
+        className={`${className} overflow-y-auto p-4 space-y-2`}
         data-transcript-scroll="true"
       >
         {filteredSegments.length === 0 ? (
