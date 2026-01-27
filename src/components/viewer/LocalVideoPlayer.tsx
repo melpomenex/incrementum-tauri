@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils';
 import { saveDocumentPosition, timePosition } from '../../api/position';
+import { getDocumentAuto, updateDocumentProgressAuto } from '../../api/documents';
 import { useToast } from '../common/Toast';
 
 interface LocalVideoPlayerProps {
@@ -53,6 +54,7 @@ export function LocalVideoPlayer({
   // Position tracking
   const [positionLoaded, setPositionLoaded] = useState(false);
   const [startTime, setStartTime] = useState(0);
+  const startTimeRef = useRef(0);
   const lastSavedTimeRef = useRef(0);
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const documentIdRef = useRef(documentId);
@@ -62,6 +64,10 @@ export function LocalVideoPlayer({
     documentIdRef.current = documentId;
   }, [documentId]);
 
+  useEffect(() => {
+    startTimeRef.current = startTime;
+  }, [startTime]);
+
   // Load saved position from document
   const loadSavedPosition = useCallback(async () => {
     if (!documentId) {
@@ -70,26 +76,27 @@ export function LocalVideoPlayer({
     }
 
     try {
-      const response = await fetch('/api/position/' + documentId);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.position && data.position.type === 'time') {
-          const savedTime = data.position.seconds || 0;
-          if (savedTime >= 3) {
-            setStartTime(savedTime);
-            if (videoRef.current) {
-              videoRef.current.currentTime = savedTime;
-            }
-            console.log(`[VideoPlayer] Restored position: ${savedTime}s`);
-          }
+      const doc = await getDocumentAuto(documentId);
+      const savedTime = doc?.current_page ?? 0;
+      console.log("[LocalVideoPlayer] Loaded saved time:", {
+        documentId,
+        savedTime,
+        mediaType,
+        src,
+      });
+      if (savedTime >= 3) {
+        setStartTime(savedTime);
+        if (videoRef.current) {
+          videoRef.current.currentTime = savedTime;
         }
+        console.log(`[LocalVideoPlayer] Restored position: ${savedTime}s`);
       }
     } catch (error) {
-      console.log('[VideoPlayer] Failed to load position:', error);
+      console.log('[LocalVideoPlayer] Failed to load position:', error);
     } finally {
       setPositionLoaded(true);
     }
-  }, [documentId]);
+  }, [documentId, mediaType, src]);
 
   // Save current position
   const savePosition = useCallback(async (time: number) => {
@@ -102,15 +109,25 @@ export function LocalVideoPlayer({
     }
 
     try {
-      await saveDocumentPosition(
-        currentDocumentId,
-        timePosition(Math.floor(time), duration)
-      );
+      const roundedTime = Math.floor(time);
+      console.log("[LocalVideoPlayer] Saving position:", {
+        documentId: currentDocumentId,
+        time: roundedTime,
+        duration,
+        mediaType,
+      });
+      await updateDocumentProgressAuto(currentDocumentId, roundedTime);
+      if (typeof window !== "undefined" && "__TAURI__" in window) {
+        await saveDocumentPosition(
+          currentDocumentId,
+          timePosition(roundedTime, duration)
+        );
+      }
       lastSavedTimeRef.current = time;
     } catch (error) {
-      console.log('[VideoPlayer] Failed to save position:', error);
+      console.log('[LocalVideoPlayer] Failed to save position:', error);
     }
-  }, [duration]);
+  }, [duration, mediaType]);
 
   // Load position on mount
   useEffect(() => {
@@ -351,6 +368,10 @@ export function LocalVideoPlayer({
           const mediaDuration = videoRef.current.duration;
           setDuration(mediaDuration);
           onLoad?.({ duration: mediaDuration, title: title || 'Audio' });
+          if (startTimeRef.current > 0) {
+            videoRef.current.currentTime = startTimeRef.current;
+            console.log("[LocalVideoPlayer] Seeked audio to saved time:", startTimeRef.current);
+          }
         }
       }}
       onPlay={() => setIsPlaying(true)}
@@ -382,6 +403,10 @@ export function LocalVideoPlayer({
           const mediaDuration = videoRef.current.duration;
           setDuration(mediaDuration);
           onLoad?.({ duration: mediaDuration, title: title || 'Video' });
+          if (startTimeRef.current > 0) {
+            videoRef.current.currentTime = startTimeRef.current;
+            console.log("[LocalVideoPlayer] Seeked video to saved time:", startTimeRef.current);
+          }
         }
       }}
       onPlay={() => setIsPlaying(true)}
