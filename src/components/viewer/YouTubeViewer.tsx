@@ -9,7 +9,7 @@ import { useToast } from "../common/Toast";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
 import { getYouTubeEmbedURL, getYouTubeWatchURL, formatDuration } from "../../api/youtube";
-import { getDocumentAuto, updateDocumentProgressAuto } from "../../api/documents";
+import { getDocumentAuto, updateDocument, updateDocumentProgressAuto } from "../../api/documents";
 import { generateShareUrl, generateYouTubeShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
 import { saveDocumentPosition, timePosition } from "../../api/position";
 
@@ -56,6 +56,8 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [startTime, setStartTime] = useState(0);
   const [positionLoaded, setPositionLoaded] = useState(false);
   const [useIframeFallback, setUseIframeFallback] = useState(false);
+  const [resolvedTitle, setResolvedTitle] = useState<string | undefined>(title);
+  const titleFetchRef = useRef<string | null>(null);
 
   // Update refs when values change
   useEffect(() => {
@@ -68,6 +70,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
   useEffect(() => {
     titleRef.current = title;
+    setResolvedTitle(title);
   }, [title]);
 
   useEffect(() => {
@@ -114,6 +117,29 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   useEffect(() => {
     loadTranscript();
   }, [loadTranscript]);
+
+  // Resolve YouTube title in browser mode when document title is still a URL
+  useEffect(() => {
+    if (!videoId || !documentId) return;
+    const currentTitle = (titleRef.current || "").trim();
+    const looksLikeUrl = currentTitle.startsWith("http") || currentTitle.startsWith("YouTube:");
+    if (!looksLikeUrl) return;
+    if (titleFetchRef.current === videoId) return;
+
+    titleFetchRef.current = videoId;
+    (async () => {
+      try {
+        const response = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!data?.title) return;
+        setResolvedTitle(data.title);
+        await updateDocument(documentId, { title: data.title } as any);
+      } catch (error) {
+        console.warn("Failed to resolve YouTube title:", error);
+      }
+    })();
+  }, [documentId, videoId]);
 
   // Parse URL fragment to get initial timestamp
   useEffect(() => {
@@ -431,7 +457,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${title || videoId}-transcript.txt`;
+    a.download = `${resolvedTitle || title || videoId}-transcript.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -583,14 +609,14 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       {/* Content area with transcript toggle */}
       <div className="flex-1 flex overflow-hidden">
         {/* Video info and transcript */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Video info header */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold text-foreground line-clamp-2 mb-1">
-                  {title}
-                </h2>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Video info header */}
+        <div className="p-4 border-b border-border">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-foreground line-clamp-2 mb-1">
+                {resolvedTitle || title}
+              </h2>
                 {duration > 0 && (
                   <p className="text-sm text-muted-foreground">
                     Duration: {formatDuration(duration)}

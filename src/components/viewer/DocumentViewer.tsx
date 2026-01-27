@@ -354,6 +354,13 @@ export function DocumentViewer({
     }
   }, [MAX_SELECTION_CHARS]);
 
+  const clearTextSelection = useCallback(() => {
+    setSelectedText("");
+    lastSelectionRef.current = "";
+    // Clear the browser's text selection
+    window.getSelection()?.removeAllRanges();
+  }, []);
+
   const persistScrollState = useCallback(
     (
       state: {
@@ -1136,6 +1143,28 @@ export function DocumentViewer({
     };
   }, [updateSelection]);
 
+  // Clear text selection when clicking outside the document content
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't clear if clicking on the floating button, dialog, or within the document content
+      if (
+        target.closest('[data-extract-button="true"]') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('[data-document-content="true"]')
+      ) {
+        return;
+      }
+      // Clear selection when clicking on empty areas
+      if (selectedText && !window.getSelection()?.toString()) {
+        clearTextSelection();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [selectedText, clearTextSelection]);
+
   useEffect(() => {
     onSelectionChange?.(selectedText);
   }, [selectedText, onSelectionChange]);
@@ -1170,12 +1199,15 @@ export function DocumentViewer({
         }
       }
 
-      // Escape to close dialogs or exit fullscreen
+      // Escape to close dialogs, clear selection, or exit fullscreen
       if (e.key === "Escape") {
         if (showSearch) setShowSearch(false);
         if (isExtractDialogOpen) {
           setIsExtractDialogOpen(false);
-          setSelectedText("");
+          clearTextSelection();
+        } else if (selectedText) {
+          // If no dialog is open but text is selected, clear the selection
+          clearTextSelection();
         }
         if (isFullscreen) {
           toggleFullscreen();
@@ -1821,15 +1853,19 @@ export function DocumentViewer({
 
       {/* Floating Action Button for Extract Creation */}
       {selectedText && viewMode === "document" && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-[70] pointer-events-auto">
+        <div 
+          className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-[70] pointer-events-auto animate-in slide-in-from-bottom-4 duration-200"
+          data-extract-button="true"
+        >
           <button
             onClick={openExtractDialog}
-            className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 bg-primary text-primary-foreground rounded-lg shadow-lg hover:opacity-90 transition-opacity min-h-[44px] text-sm md:text-base"
+            className="flex items-center gap-2 px-4 py-3 bg-primary text-primary-foreground rounded-lg shadow-lg hover:opacity-90 hover:scale-105 active:scale-95 transition-all min-h-[48px] text-sm font-medium"
             title="Create extract from selection"
+            aria-label={`Create extract from selected text (${selectedText.length} characters)`}
           >
-            <Lightbulb className="w-5 h-5" />
-            <span className="font-medium hidden sm:inline">Create Extract</span>
-            <span className="font-medium sm:hidden">Extract</span>
+            <Lightbulb className="w-5 h-5" aria-hidden="true" />
+            <span>Create Extract</span>
+            <span className="text-xs opacity-75 ml-1">({selectedText.length})</span>
           </button>
         </div>
       )}
@@ -1842,7 +1878,7 @@ export function DocumentViewer({
         isOpen={isExtractDialogOpen}
         onClose={() => {
           setIsExtractDialogOpen(false);
-          setSelectedText("");
+          clearTextSelection();
         }}
         onCreate={handleExtractCreated}
       />

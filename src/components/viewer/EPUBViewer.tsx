@@ -846,11 +846,11 @@ export function EPUBViewer({
 
   const handleSelectionChange = useCallback((contents: any) => {
     const selection = contents.window.getSelection();
-    const hasSelection = !!selection && selection.toString().trim().length > 0;
+    const selectedText = selection?.toString().trim() || "";
+    const hasSelection = selectedText.length > 0;
     selectionActiveRef.current = hasSelection;
-    if (!hasSelection) {
-      onSelectionChange?.("");
-    }
+    // Always notify parent of selection changes (both selection and clearing)
+    onSelectionChange?.(selectedText);
   }, [onSelectionChange]);
 
   return (

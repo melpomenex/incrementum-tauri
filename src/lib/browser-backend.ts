@@ -16,6 +16,7 @@ import ePub from 'epubjs';
 import { createEmptyCard, fsrs, Rating, State, type Card, type Grade } from 'ts-fsrs';
 import { useSettingsStore } from '../stores/settingsStore';
 import { v4 as uuidv4 } from 'uuid';
+import { getPositionProgress } from '../types/position';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -289,6 +290,31 @@ const commandHandlers: Record<string, CommandHandler> = {
         });
         const doc = await db.updateDocument(id, cleaned);
         return toCamelCase(doc);
+    },
+
+    get_document_position: async (args) => {
+        const id = (args.document_id ?? args.documentId) as string;
+        if (!id) return null;
+        const doc = await db.getDocument(id);
+        if (!doc?.position_json) return null;
+        try {
+            return JSON.parse(doc.position_json) as unknown;
+        } catch (error) {
+            console.warn('[Browser] Failed to parse position_json for document', id, error);
+            return null;
+        }
+    },
+
+    save_document_position: async (args) => {
+        const id = (args.document_id ?? args.documentId) as string;
+        const position = args.position as unknown;
+        if (!id || !position) return null;
+        const progress = getPositionProgress(position as any);
+        await db.updateDocument(id, {
+            position_json: JSON.stringify(position),
+            progress_percent: progress ?? 0,
+        });
+        return null;
     },
 
     update_document_content: async (args) => {
@@ -1043,9 +1069,30 @@ const commandHandlers: Record<string, CommandHandler> = {
 
     import_youtube_video: async (args) => {
         const url = args.url as string;
+        let title = `YouTube: ${url}`;
+        const idMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+            || url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/)
+            || url.match(/youtube\.com\/v\/([a-zA-Z0-9_-]{11})/)
+            || url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/);
+        const videoId = idMatch ? idMatch[1] : null;
+
+        if (videoId) {
+            try {
+                const noembedResponse = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+                if (noembedResponse.ok) {
+                    const data = await noembedResponse.json();
+                    if (data?.title) {
+                        title = data.title;
+                    }
+                }
+            } catch (error) {
+                console.warn('[Browser] Failed to fetch YouTube title:', error);
+            }
+        }
+
         // Create a document with the YouTube URL
         const doc = await db.createDocument({
-            title: `YouTube: ${url}`,
+            title,
             file_path: url,
             file_type: 'youtube',
         });

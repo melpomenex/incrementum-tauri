@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { NewMainLayout, MainContent } from "./components/layout/NewMainLayout";
 import { useAnalyticsStore } from "./stores/analyticsStore";
 import { useDocumentStore } from "./stores/documentStore";
@@ -7,6 +7,9 @@ import * as syncClient from "./lib/sync-client";
 import { LoginModal } from "./components/auth/LoginModal";
 import { WelcomeScreen } from "./components/onboarding/WelcomeScreen";
 import { SignupPrompt } from "./components/onboarding/SignupPrompt";
+import { KeyboardShortcutsHelp } from "./components/common/KeyboardShortcutsHelp";
+import { Breadcrumb } from "./components/common/Breadcrumb";
+import { useToast } from "./components/common/Toast";
 
 // Page components
 import { DocumentsPage } from "./pages/DocumentsPage";
@@ -43,6 +46,10 @@ function App() {
     const hasCompletedOnboarding = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
     return hasCompletedOnboarding ? null : 'welcome';
   });
+
+  // Keyboard shortcuts help state
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const toast = useToast();
 
   const handleLogin = async (email: string, password: string) => {
     await syncClient.login(email, password);
@@ -85,6 +92,28 @@ function App() {
 
     return unsubscribe;
   }, [loadAll, loadDocuments]);
+
+  // Keyboard shortcut to show help
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Show shortcuts help on '?' key (but not when typing in inputs)
+      if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+        e.preventDefault();
+        setShowShortcutsHelp(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Developer helper: expose functions to window for debugging
   useEffect(() => {
@@ -215,6 +244,10 @@ function App() {
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         onAuthenticated={handleAuthenticated}
+      />
+      <KeyboardShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
       />
     </>
   );

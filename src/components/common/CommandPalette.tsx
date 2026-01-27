@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Command as CommandIcon, FileText, Zap, Settings, Plus } from "lucide-react";
+import { Search, Command as CommandIcon, FileText, Zap, Settings, Plus, List, BarChart3, Palette } from "lucide-react";
 
 /**
  * Command definition
@@ -367,23 +367,33 @@ export function getDefaultCommands(): Command[] {
   return [
     createCommand({
       id: "new-document",
-      label: "New Document",
-      description: "Create a new document",
+      label: "Import Document",
+      description: "Import a new document from file",
       icon: <Plus className="w-4 h-4" />,
       category: CommandCategory.Documents,
-      action: () => console.log("New document"),
-      keywords: ["create", "add", "import"],
+      action: () => { window.dispatchEvent(new CustomEvent('import-document')); },
+      keywords: ["create", "add", "import", "file", "pdf", "epub"],
       shortcut: "⌘N",
     }),
     createCommand({
-      id: "new-extract",
-      label: "New Extract",
-      description: "Create a new extract",
-      icon: <Plus className="w-4 h-4" />,
-      category: CommandCategory.Extracts,
-      action: () => console.log("New extract"),
-      keywords: ["create", "add", "highlight"],
-      shortcut: "⌘E",
+      id: "go-documents",
+      label: "Go to Documents",
+      description: "View all documents",
+      icon: <FileText className="w-4 h-4" />,
+      category: CommandCategory.Navigation,
+      action: () => { window.dispatchEvent(new CustomEvent('navigate', { detail: '/documents' })); },
+      keywords: ["documents", "files", "library"],
+      shortcut: "⌘1",
+    }),
+    createCommand({
+      id: "go-queue",
+      label: "Go to Queue",
+      description: "View review queue",
+      icon: <List className="w-4 h-4" />,
+      category: CommandCategory.Navigation,
+      action: () => { window.dispatchEvent(new CustomEvent('navigate', { detail: '/queue' })); },
+      keywords: ["queue", "list", "items"],
+      shortcut: "⌘2",
     }),
     createCommand({
       id: "start-review",
@@ -391,9 +401,19 @@ export function getDefaultCommands(): Command[] {
       description: "Begin flashcard review session",
       icon: <Zap className="w-4 h-4" />,
       category: CommandCategory.Review,
-      action: () => console.log("Start review"),
-      keywords: ["study", "practice", "learn"],
+      action: () => { window.dispatchEvent(new CustomEvent('navigate', { detail: '/review' })); },
+      keywords: ["study", "practice", "learn", "review"],
       shortcut: "⌘R",
+    }),
+    createCommand({
+      id: "go-analytics",
+      label: "Go to Analytics",
+      description: "View statistics and progress",
+      icon: <BarChart3 className="w-4 h-4" />,
+      category: CommandCategory.Navigation,
+      action: () => { window.dispatchEvent(new CustomEvent('navigate', { detail: '/analytics' })); },
+      keywords: ["stats", "analytics", "charts", "progress"],
+      shortcut: "⌘3",
     }),
     createCommand({
       id: "open-settings",
@@ -401,9 +421,28 @@ export function getDefaultCommands(): Command[] {
       description: "Open application settings",
       icon: <Settings className="w-4 h-4" />,
       category: CommandCategory.Settings,
-      action: () => console.log("Settings"),
-      keywords: ["preferences", "config"],
+      action: () => { window.dispatchEvent(new CustomEvent('navigate', { detail: '/settings' })); },
+      keywords: ["preferences", "config", "options"],
       shortcut: "⌘,",
+    }),
+    createCommand({
+      id: "toggle-theme",
+      label: "Toggle Theme",
+      description: "Switch between light and dark mode",
+      icon: <Palette className="w-4 h-4" />,
+      category: CommandCategory.Settings,
+      action: () => { window.dispatchEvent(new CustomEvent('toggle-theme')); },
+      keywords: ["theme", "dark", "light", "mode", "appearance"],
+    }),
+    createCommand({
+      id: "keyboard-shortcuts",
+      label: "Keyboard Shortcuts",
+      description: "View all keyboard shortcuts",
+      icon: <CommandIcon className="w-4 h-4" />,
+      category: CommandCategory.General,
+      action: () => { window.dispatchEvent(new CustomEvent('show-shortcuts-help')); },
+      keywords: ["keyboard", "shortcuts", "hotkeys", "help"],
+      shortcut: "?",
     }),
   ];
 }

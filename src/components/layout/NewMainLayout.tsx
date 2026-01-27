@@ -3,6 +3,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { useAnalyticsStore } from "../../stores/analyticsStore";
 import { SyncStatusIndicator } from "../sync/SyncStatusIndicator";
 import { UserMenu } from "../auth/UserMenu";
+import { Breadcrumb } from "../common/Breadcrumb";
 import {
   Home,
   BookOpen,
@@ -52,7 +53,7 @@ export function NewMainLayout({
   onLoginClick?: () => void;
   onLogout?: () => void;
 }) {
-  const settingsTheme = useSettingsStore((state) => state.settings.theme);
+  const settingsTheme = useSettingsStore((state) => state.settings.appearance?.theme || "system");
   const dashboardStats = useAnalyticsStore((state) => state.dashboardStats);
 
   // Apply theme
@@ -115,38 +116,61 @@ function TopHeaderBar({
   };
 
   return (
-    <header className="h-10 bg-card border-b border-border flex items-center justify-between px-3 flex-shrink-0">
+    <header className="h-12 bg-card border-b border-border flex items-center justify-between px-3 flex-shrink-0">
       {/* Left side - navigation icons */}
-      <div className="flex items-center gap-2">
-        <button className="p-1 hover:bg-muted rounded transition-colors" title="Back">
+      <div className="flex items-center gap-1">
+        <button 
+          className="p-2.5 min-w-[44px] min-h-[44px] hover:bg-muted rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none" 
+          title="Back"
+          aria-label="Go back"
+          onClick={() => window.history.back()}
+        >
           <ChevronLeft className="w-4 h-4 text-foreground-secondary" />
         </button>
-        <button className="p-1 hover:bg-muted rounded transition-colors" title="Forward">
+        <button 
+          className="p-2.5 min-w-[44px] min-h-[44px] hover:bg-muted rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none" 
+          title="Forward"
+          aria-label="Go forward"
+          onClick={() => window.history.forward()}
+        >
           <ChevronRight className="w-4 h-4 text-foreground-secondary" />
         </button>
         <div className="h-4 w-px bg-border mx-1" />
-        <button className="p-1 hover:bg-muted rounded transition-colors" title="Home">
+        <button 
+          className="p-2.5 min-w-[44px] min-h-[44px] hover:bg-muted rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none" 
+          title="Home"
+          aria-label="Go to dashboard"
+          onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: '/dashboard' }))}
+        >
           <Home className="w-4 h-4 text-foreground-secondary" />
         </button>
-        <span className="text-xs text-foreground-secondary ml-2">
-          Incrementum / Dashboard
-        </span>
+        <div className="ml-2 hidden sm:block">
+          <Breadcrumb 
+            onNavigate={(path) => window.dispatchEvent(new CustomEvent('navigate', { detail: path }))}
+          />
+        </div>
       </div>
 
       {/* Right side - actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <SyncStatusIndicator
           isAuthenticated={isAuthenticated}
           onLoginClick={onLoginClick}
         />
         <button
-          className="p-1 hover:bg-muted rounded transition-colors"
+          className="p-2.5 min-w-[44px] min-h-[44px] hover:bg-muted rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           title="Search (Ctrl+K)"
+          aria-label="Open search (Ctrl+K)"
           onClick={() => window.dispatchEvent(new CustomEvent('command-palette-toggle'))}
         >
           <Search className="w-4 h-4 text-foreground-secondary" />
         </button>
-        <button className="p-1 hover:bg-muted rounded transition-colors" title="Notifications">
+        <button 
+          className="p-2.5 min-w-[44px] min-h-[44px] hover:bg-muted rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none" 
+          title="Notifications"
+          aria-label="View notifications"
+          onClick={() => window.dispatchEvent(new CustomEvent('show-notifications'))}
+        >
           <Bell className="w-4 h-4 text-foreground-secondary" />
         </button>
         <div className="h-4 w-px bg-border mx-1" />
@@ -160,7 +184,8 @@ function TopHeaderBar({
           onLoginClick && (
             <button
               onClick={onLoginClick}
-              className="px-3 py-1 text-sm bg-primary-300 text-white rounded hover:opacity-90 transition-opacity"
+              className="px-4 py-2 min-h-[44px] text-sm bg-primary-300 text-white rounded hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              aria-label="Sign in to your account"
             >
               Sign in
             </button>
@@ -186,9 +211,11 @@ function LeftSidebar({ activeItem, setActiveItem, stats }: LeftSidebarProps) {
           <button
             key={item.id}
             onClick={() => setActiveItem(item.id)}
-            className={`w-full px-4 py-3 flex items-center gap-3 transition-colors ${
+            className={`w-full px-4 py-3 min-h-[44px] flex items-center gap-3 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset focus-visible:outline-none ${
               activeItem === item.id ? "sidebar-item-active" : "sidebar-item hover:bg-sidebar-hover"
             }`}
+            aria-current={activeItem === item.id ? "page" : undefined}
+            aria-label={`Navigate to ${item.label}`}
           >
             <item.icon className="w-5 h-5 text-foreground" />
             <span className="text-sm font-medium text-foreground flex-1 text-left">

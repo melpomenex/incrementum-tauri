@@ -30,9 +30,9 @@ function isWebMode(): boolean {
  */
 export async function getDocumentPosition(documentId: string): Promise<DocumentPosition | null> {
   if (isWebMode()) {
-    return await browserInvoke<DocumentPosition | null>('get_document_position', { documentId });
+    return await browserInvoke<DocumentPosition | null>('get_document_position', { document_id: documentId });
   }
-  return await invokeCommand<DocumentPosition | null>('get_document_position', { documentId });
+  return await invokeCommand<DocumentPosition | null>('get_document_position', { document_id: documentId });
 }
 
 /**
@@ -43,10 +43,10 @@ export async function saveDocumentPosition(
   position: DocumentPosition,
 ): Promise<void> {
   if (isWebMode()) {
-    await browserInvoke('save_document_position', { documentId, position });
+    await browserInvoke('save_document_position', { document_id: documentId, position });
     return;
   }
-  await invokeCommand('save_document_position', { documentId, position });
+  await invokeCommand('save_document_position', { document_id: documentId, position });
 }
 
 /**
@@ -54,9 +54,9 @@ export async function saveDocumentPosition(
  */
 export async function getDocumentProgress(documentId: string): Promise<number | null> {
   if (isWebMode()) {
-    return await browserInvoke<number | null>('get_document_progress', { documentId });
+    return await browserInvoke<number | null>('get_document_progress', { document_id: documentId });
   }
-  return await invokeCommand<number | null>('get_document_progress', { documentId });
+  return await invokeCommand<number | null>('get_document_progress', { document_id: documentId });
 }
 
 /**
@@ -68,9 +68,9 @@ export async function createBookmark(
   position: DocumentPosition,
 ): Promise<Bookmark> {
   if (isWebMode()) {
-    return await browserInvoke<Bookmark>('create_bookmark', { documentId, name, position });
+    return await browserInvoke<Bookmark>('create_bookmark', { document_id: documentId, name, position });
   }
-  return await invokeCommand<Bookmark>('create_bookmark', { documentId, name, position });
+  return await invokeCommand<Bookmark>('create_bookmark', { document_id: documentId, name, position });
 }
 
 /**
@@ -78,9 +78,9 @@ export async function createBookmark(
  */
 export async function listBookmarks(documentId: string): Promise<Bookmark[]> {
   if (isWebMode()) {
-    return await browserInvoke<Bookmark[]>('list_bookmarks', { documentId });
+    return await browserInvoke<Bookmark[]>('list_bookmarks', { document_id: documentId });
   }
-  return await invokeCommand<Bookmark[]>('list_bookmarks', { documentId });
+  return await invokeCommand<Bookmark[]>('list_bookmarks', { document_id: documentId });
 }
 
 /**
@@ -88,10 +88,10 @@ export async function listBookmarks(documentId: string): Promise<Bookmark[]> {
  */
 export async function deleteBookmark(bookmarkId: string): Promise<void> {
   if (isWebMode()) {
-    await browserInvoke('delete_bookmark', { bookmarkId });
+    await browserInvoke('delete_bookmark', { bookmark_id: bookmarkId });
     return;
   }
-  await invokeCommand('delete_bookmark', { bookmarkId });
+  await invokeCommand('delete_bookmark', { bookmark_id: bookmarkId });
 }
 
 /**
@@ -103,13 +103,13 @@ export async function startReadingSession(
 ): Promise<ReadingSession> {
   if (isWebMode()) {
     return await browserInvoke<ReadingSession>('start_reading_session', {
-      documentId,
-      progressStart,
+      document_id: documentId,
+      progress_start: progressStart,
     });
   }
   return await invokeCommand<ReadingSession>('start_reading_session', {
-    documentId,
-    progressStart,
+    document_id: documentId,
+    progress_start: progressStart,
   });
 }
 
@@ -118,10 +118,10 @@ export async function startReadingSession(
  */
 export async function endReadingSession(sessionId: string, progressEnd: number): Promise<void> {
   if (isWebMode()) {
-    await browserInvoke('end_reading_session', { sessionId, progressEnd });
+    await browserInvoke('end_reading_session', { session_id: sessionId, progress_end: progressEnd });
     return;
   }
-  await invokeCommand('end_reading_session', { sessionId, progressEnd });
+  await invokeCommand('end_reading_session', { session_id: sessionId, progress_end: progressEnd });
 }
 
 /**
@@ -131,9 +131,9 @@ export async function getActiveSession(
   documentId: string,
 ): Promise<ReadingSession | null> {
   if (isWebMode()) {
-    return await browserInvoke<ReadingSession | null>('get_active_session', { documentId });
+    return await browserInvoke<ReadingSession | null>('get_active_session', { document_id: documentId });
   }
-  return await invokeCommand<ReadingSession | null>('get_active_session', { documentId });
+  return await invokeCommand<ReadingSession | null>('get_active_session', { document_id: documentId });
 }
 
 /**

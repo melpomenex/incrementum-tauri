@@ -5,8 +5,9 @@
  */
 
 import { useState, useEffect } from 'react';
-import { X, FileText, Clock, Tag, FolderOpen, AlertCircle } from 'lucide-react';
+import { X, FileText, Clock, Tag, FolderOpen, AlertCircle, Loader2 } from 'lucide-react';
 import { fetchUrlContent, type FetchedUrlContent } from '../../api/documents';
+import { ImportDialogSkeleton } from '../common/Skeleton';
 import type { Document } from '../../types/document';
 
 interface ImportDialogProps {
@@ -180,11 +181,7 @@ export function ImportDialog({ url, isOpen, onClose, onImport }: ImportDialogPro
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {loading && (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-gray-500">Loading preview...</div>
-            </div>
-          )}
+          {loading && <ImportDialogSkeleton />}
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg flex items-start gap-2">
@@ -339,7 +336,8 @@ export function ImportDialog({ url, isOpen, onClose, onImport }: ImportDialogPro
         <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            className="px-4 py-2.5 min-h-[44px] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+            aria-label="Cancel import"
           >
             Cancel
           </button>
@@ -347,8 +345,10 @@ export function ImportDialog({ url, isOpen, onClose, onImport }: ImportDialogPro
             <button
               onClick={handleImport}
               disabled={!preview || !importOptions.title}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2.5 min-h-[44px] bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none flex items-center gap-2"
+              aria-label="Import document"
             >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
               Import
             </button>
           </div>

@@ -201,6 +201,12 @@ export interface FetchedUrlContent {
   file_path: string;
   file_name: string;
   content_type: string;
+  // Optional properties for rich content previews
+  title?: string;
+  author?: string;
+  text?: string;
+  html?: string;
+  excerpt?: string;
 }
 
 /**

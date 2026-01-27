@@ -3,6 +3,8 @@ import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText
 import { useDocumentStore } from "../../stores/documentStore";
 import { useCollectionStore } from "../../stores/collectionStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
+import { EmptyDocuments, EmptySearch } from "../common/EmptyState";
+import { DocumentCardSkeleton, DocumentGridSkeleton } from "../common/Skeleton";
 import type { Document } from "../../types/document";
 import {
   DocumentSortDirection,
@@ -158,7 +160,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   useEffect(() => {
     const handle = window.setTimeout(() => {
       setDebouncedSearch(searchInput);
-    }, 150);
+    }, 100);
     return () => window.clearTimeout(handle);
   }, [searchInput]);
 
@@ -650,26 +652,24 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
       <div className="flex-1 flex overflow-hidden documents-layout">
         <div className="flex-1 overflow-auto p-4 documents-content">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-muted-foreground">Loading documents...</div>
-            </div>
+            mode === "list" ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <DocumentCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : (
+              <DocumentGridSkeleton count={8} />
+            )
           ) : sortedDocuments.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📄</div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">
-                No documents found
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                {searchInput ? "Try adjusting your search or filters" : "Import your first document to get started"}
-              </p>
-              <button
-                onClick={handleImport}
-                disabled={isImporting}
-                className="px-6 py-3 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isImporting ? "Importing..." : "Import Document"}
-              </button>
-            </div>
+            debouncedSearch ? (
+              <EmptySearch 
+                query={debouncedSearch} 
+                onClear={() => setSearchInput("")} 
+              />
+            ) : (
+              <EmptyDocuments onImport={handleImport} />
+            )
           ) : mode === "list" ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs text-muted-foreground px-3">

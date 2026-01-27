@@ -76,17 +76,20 @@ export function RatingButtons({
               className={`
                 ${rating.color}
                 text-white rounded-lg p-3 md:p-4 transition-all
-                hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+                hover:shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
                 flex flex-col items-center gap-1 md:gap-2
-                min-h-[80px] md:min-h-[100px]
+                min-h-[80px] md:min-h-[100px] min-w-[80px]
                 touch-manipulation
+                focus-visible:ring-4 focus-visible:ring-white/50 focus-visible:outline-none
+                focus-visible:scale-[1.02]
               `}
-              title={rating.description}
+              title={`${rating.label}: ${rating.description}`}
+              aria-label={`Rate as ${rating.label}. ${rating.description}${interval ? `. Next review: ${interval}` : ""}`}
             >
-              <Icon className="w-5 h-5 md:w-6 md:h-6" />
+              <Icon className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
               <span className="font-semibold text-sm md:text-base">{rating.label}</span>
               {interval && (
-                <span className="text-xs opacity-90">{interval}</span>
+                <span className="text-xs opacity-90" aria-label={`Next review in ${interval}`}>{interval}</span>
               )}
             </button>
           );

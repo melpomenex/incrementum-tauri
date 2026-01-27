@@ -191,6 +191,8 @@ export interface Document {
     current_page: number;
     current_scroll_percent?: number;
     current_cfi?: string;
+    position_json?: string;
+    progress_percent?: number;
     category?: string;
     tags: string[];
     date_added: string;

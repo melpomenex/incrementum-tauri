@@ -105,8 +105,29 @@
     animation: tab-enter 220ms ease-out;
   }
 
+  /* Animation utilities for floating action button */
+  @keyframes slide-in-from-bottom {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-in {
+    animation-fill-mode: both;
+  }
+
+  .slide-in-from-bottom-4 {
+    animation: slide-in-from-bottom 200ms ease-out;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .animate-tab-enter {
+    .animate-tab-enter,
+    .slide-in-from-bottom-4 {
       animation: none;
     }
   }

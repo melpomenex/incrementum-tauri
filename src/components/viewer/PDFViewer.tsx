@@ -4,6 +4,9 @@ import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs";
 import { List, ChevronLeft, ChevronRight, Maximize, Minimize } from "lucide-react";
 import { cn } from "../../utils";
 import type { PdfDest, ViewState } from "../../types/readerPosition";
+import type { DocumentPosition } from "../../types/position";
+import { saveDocumentPosition, getDocumentPosition, pagePosition, scrollPosition as createScrollPosition } from "../../api/position";
+import { getDocumentAuto, updateDocumentProgressAuto } from "../../api/documents";
 import "./PDFViewer.css";
 
 // Set default worker for web/PWA
@@ -44,7 +47,7 @@ interface PDFViewerProps {
 type ZoomMode = "custom" | "fit-width" | "fit-page";
 
 export function PDFViewer({
-  documentId: _documentId,
+  documentId,
   fileData,
   pageNumber,
   scale,
@@ -91,6 +94,12 @@ export function PDFViewer({
   // Lazy loading: track which pages should be rendered
   const [renderedPageRange, setRenderedPageRange] = useState<{ start: number; end: number }>({ start: 1, end: 1 });
   const renderedPageRangeRef = useRef({ start: 1, end: 1 });
+
+  // Position persistence refs
+  const docIdRef = useRef<string>("");
+  const lastSavedPositionRef = useRef<DocumentPosition | null>(null);
+  const positionSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isRestoringPositionRef = useRef(false);
 
   // Pan state
   const [isDragging, setIsDragging] = useState(false);
@@ -154,6 +163,205 @@ export function PDFViewer({
     // shouldn't trigger reloading the PDF, only fileData changes should
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileData]);
+
+  // Store documentId in ref for use in callbacks
+  useEffect(() => {
+    docIdRef.current = documentId;
+  }, [documentId]);
+
+  // Save reading position to localStorage and backend
+  const saveReadingPosition = useCallback(async (position: DocumentPosition) => {
+    const docId = docIdRef.current;
+    if (!docId) return;
+
+    // Avoid redundant saves
+    const lastSaved = lastSavedPositionRef.current;
+    if (lastSaved && JSON.stringify(lastSaved) === JSON.stringify(position)) {
+      return;
+    }
+
+    console.log("[PDFViewer] Saving reading position:", { docId, position });
+
+    // Save to localStorage as backup
+    localStorage.setItem(`pdf-position-${docId}`, JSON.stringify(position));
+
+    // Save to backend
+    try {
+      await saveDocumentPosition(docId, position);
+      
+      // Also update document progress if it's a page position
+      if (position.type === 'page') {
+        await updateDocumentProgressAuto(docId, null, position.page, null);
+      }
+      
+      lastSavedPositionRef.current = position;
+    } catch (err) {
+      console.warn("[PDFViewer] Failed to save position to backend:", err);
+    }
+  }, []);
+
+  // Debounced save for scroll events
+  const debouncedSavePosition = useCallback((position: DocumentPosition) => {
+    if (positionSaveTimeoutRef.current) {
+      clearTimeout(positionSaveTimeoutRef.current);
+    }
+    positionSaveTimeoutRef.current = setTimeout(() => {
+      saveReadingPosition(position);
+    }, 500);
+  }, [saveReadingPosition]);
+
+  // Load reading position from backend or localStorage
+  const loadReadingPosition = useCallback(async (): Promise<DocumentPosition | null> => {
+    const docId = docIdRef.current;
+    if (!docId) return null;
+
+    // Try backend first
+    try {
+      const remotePosition = await getDocumentPosition(docId);
+      if (remotePosition) {
+        console.log("[PDFViewer] Loaded position from backend:", remotePosition);
+        return remotePosition;
+      }
+    } catch (err) {
+      console.warn("[PDFViewer] Failed to load position from backend:", err);
+    }
+
+    // Fall back to localStorage
+    const localData = localStorage.getItem(`pdf-position-${docId}`);
+    if (localData) {
+      try {
+        const position = JSON.parse(localData) as DocumentPosition;
+        console.log("[PDFViewer] Loaded position from localStorage:", position);
+        return position;
+      } catch (e) {
+        console.warn("[PDFViewer] Failed to parse localStorage position:", e);
+      }
+    }
+
+    // Try legacy format (just page number stored in document)
+    try {
+      const doc = await getDocumentAuto(docId);
+      if (doc?.current_page && doc.current_page > 1) {
+        console.log("[PDFViewer] Using legacy current_page from document:", doc.current_page);
+        return pagePosition(doc.current_page);
+      }
+    } catch (err) {
+      console.warn("[PDFViewer] Failed to load document data:", err);
+    }
+
+    return null;
+  }, []);
+
+  // Restore position when PDF loads (fallback when no explicit restoreState)
+  useEffect(() => {
+    if (!pdf || numPages === 0) return;
+    if (restoreState) return;
+
+    const restorePosition = async () => {
+      isRestoringPositionRef.current = true;
+
+      const position = await loadReadingPosition();
+      if (!position) {
+        isRestoringPositionRef.current = false;
+        return;
+      }
+
+      console.log("[PDFViewer] Restoring position:", position);
+
+      const attemptRestore = (attempt: number) => {
+        const container = scrollContainerRef.current;
+        if (!container) {
+          isRestoringPositionRef.current = false;
+          return;
+        }
+
+        let targetPage = 1;
+        let targetScrollTop = 0;
+        let ready = true;
+
+        if (position.type === 'page') {
+          targetPage = Math.max(1, Math.min(position.page, numPages));
+          const pageIndex = targetPage - 1;
+          const pageEl = pageContainerRefs.current[pageIndex];
+          if (!pageEl || pageEl.offsetHeight === 0) {
+            ready = false;
+          } else if (position.offset !== undefined && position.offset > 0) {
+            targetScrollTop = pageEl.offsetTop + (pageEl.offsetHeight * position.offset);
+          } else {
+            targetScrollTop = Math.max(0, pageEl.offsetTop - 16);
+          }
+        } else if (position.type === 'scroll') {
+          const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+          if (maxScroll <= 0) {
+            ready = false;
+          } else {
+            targetScrollTop = (position.percent / 100) * maxScroll;
+          }
+
+          if (ready) {
+            for (let i = 0; i < pageContainerRefs.current.length; i++) {
+              const pageEl = pageContainerRefs.current[i];
+              if (!pageEl || pageEl.offsetHeight === 0) {
+                ready = false;
+                break;
+              }
+              if (pageEl.offsetTop - 24 <= targetScrollTop) {
+                targetPage = i + 1;
+              } else {
+                break;
+              }
+            }
+          }
+        }
+
+        if (!ready) {
+          if (attempt < 15) {
+            setTimeout(() => attemptRestore(attempt + 1), 200);
+          } else {
+            isRestoringPositionRef.current = false;
+          }
+          return;
+        }
+
+        restoredPageRef.current = targetPage;
+        restorationWindowRef.current = Date.now() + 2000;
+
+        if (targetPage !== pageNumber) {
+          onPageChange?.(targetPage);
+        }
+
+        setTimeout(() => {
+          const activeContainer = scrollContainerRef.current;
+          if (activeContainer) {
+            isProgrammaticScrollRef.current = true;
+            activeContainer.scrollTop = targetScrollTop;
+            console.log("[PDFViewer] Scrolled to position:", { targetPage, targetScrollTop });
+
+            setTimeout(() => {
+              isProgrammaticScrollRef.current = false;
+              isRestoringPositionRef.current = false;
+            }, 300);
+          } else {
+            isRestoringPositionRef.current = false;
+          }
+        }, 100);
+      };
+
+      attemptRestore(0);
+    };
+
+    const timeout = setTimeout(restorePosition, 500);
+    return () => clearTimeout(timeout);
+  }, [pdf, numPages, pageNumber, onPageChange, loadReadingPosition, restoreState]);
+
+  // Cleanup position save timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (positionSaveTimeoutRef.current) {
+        clearTimeout(positionSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -714,6 +922,23 @@ export function PDFViewer({
         scale: pageScaleRefs.current[pageIndex] ?? scale,
         dest,
       });
+
+      // Save position on scroll (debounced)
+      if (!isRestoringPositionRef.current) {
+        const pageEl = pageContainerRefs.current[pageIndex];
+        let position: DocumentPosition;
+        
+        if (pageEl && scrollTop >= pageEl.offsetTop) {
+          // Calculate offset within current page (0-1)
+          const offset = (scrollTop - pageEl.offsetTop) / pageEl.offsetHeight;
+          position = pagePosition(currentPage, Math.min(1, Math.max(0, offset)));
+        } else {
+          // Use scroll percentage as fallback
+          position = createScrollPosition(scrollPercent);
+        }
+        
+        debouncedSavePosition(position);
+      }
     });
   };
 
@@ -883,8 +1108,8 @@ export function PDFViewer({
                         ref={(el) => {
                           textLayerRefs.current[index] = el;
                         }}
-                        className="absolute top-0 left-0 overflow-hidden"
-                        style={{ transformOrigin: "0 0" }}
+                        className="textLayer absolute top-0 left-0 overflow-hidden"
+                        style={{ transformOrigin: "0 0", zIndex: 10 }}
                       />
                     </div>
                   );

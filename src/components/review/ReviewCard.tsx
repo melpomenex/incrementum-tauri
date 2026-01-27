@@ -21,6 +21,19 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
     }
   };
 
+  const getItemTypeLabel = (itemType: string) => {
+    switch (itemType) {
+      case "cloze":
+        return "Cloze Deletion";
+      case "qa":
+        return "Question & Answer";
+      case "flashcard":
+        return "Flashcard";
+      default:
+        return "Learning Item";
+    }
+  };
+
   const renderQuestion = () => {
     if (card.item_type === "cloze" && card.cloze_text) {
       // For cloze cards, hide the clozed portion
@@ -75,16 +88,16 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-2 md:px-0">
+    <div className="w-full max-w-2xl mx-auto px-2 md:px-0" role="article" aria-label={`${getItemTypeLabel(card.item_type)} card`}>
       {/* Card Type Badge */}
       <div className="flex items-center gap-2 mb-3 md:mb-4">
-        <span className="text-xl md:text-2xl">{getItemIcon(card.item_type)}</span>
+        <span className="text-xl md:text-2xl" aria-hidden="true">{getItemIcon(card.item_type)}</span>
         <span className="text-xs md:text-sm uppercase tracking-wide text-foreground/80 font-medium">
-          {card.item_type}
+          {getItemTypeLabel(card.item_type)}
         </span>
         {card.tags.length > 0 && (
           <>
-            <span className="text-foreground/60">•</span>
+            <span className="text-foreground/60" aria-hidden="true">•</span>
             {card.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
@@ -141,9 +154,12 @@ export function ReviewCard({ card, showAnswer, onShowAnswer }: ReviewCardProps) 
         <div className="mt-6 flex justify-center">
           <button
             onClick={onShowAnswer}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-lg transition-all hover:scale-105 active:scale-95 font-medium text-lg shadow-md"
+            className="px-8 py-3 min-h-[52px] bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-lg transition-all hover:scale-105 active:scale-95 font-medium text-lg shadow-md focus-visible:ring-4 focus-visible:ring-blue-500/30 focus-visible:outline-none"
+            aria-label="Show answer"
+            autoFocus
           >
             Show Answer
+            <span className="sr-only">Press space to show</span>
           </button>
         </div>
       )}

@@ -89,19 +89,29 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
               Your data will be stored locally in your browser. Sign up anytime to sync across devices.
             </p>
           </div>
+
+          {/* Keyboard shortcut hint */}
+          <div className="bg-zinc-800/50 rounded-xl p-4">
+            <p className="text-zinc-400 text-sm flex items-center gap-2">
+              <span className="px-2 py-1 bg-zinc-700 rounded text-zinc-300 text-xs">Ctrl/⌘ + K</span>
+              <span>Open the command palette anytime to navigate quickly</span>
+            </p>
+          </div>
         </div>
 
         {/* Footer */}
         <div className="p-6 border-t border-zinc-800 flex justify-between items-center">
           <button
             onClick={onComplete}
-            className="text-sm text-zinc-400 hover:text-white transition-colors"
+            className="text-sm text-zinc-400 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none rounded px-2 py-1"
+            aria-label="Skip onboarding and start using the app"
           >
-            Maybe later
+            Skip tour
           </button>
           <button
             onClick={onComplete}
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors"
+            className="px-6 py-2.5 min-h-[44px] bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+            aria-label="Get started with Incrementum"
           >
             Get Started
           </button>

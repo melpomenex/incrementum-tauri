@@ -9,6 +9,8 @@ import { ReviewComplete } from "./ReviewComplete";
 import { ReviewTransparencyPanel } from "./ReviewTransparencyPanel";
 import { QueueNavigationControls } from "../queue/QueueNavigationControls";
 import { ReviewRating } from "../../api/review";
+import { ReviewFeedback } from "./ReviewFeedback";
+import { ReviewCardSkeleton } from "../common/Skeleton";
 
 interface ReviewSessionProps {
   onExit: () => void;
@@ -41,10 +43,28 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
   const isDocumentItem = (item: ReviewSessionItem | null): item is ReviewDocumentItem =>
     !!item && (item as ReviewDocumentItem).itemType === "document";
 
+  // Feedback state
+  const [feedback, setFeedback] = useState<{
+    type: "streak" | "milestone" | "complete" | "mastered" | null;
+    value?: number;
+  }>({ type: null });
+
   const handleRating = async (rating: ReviewRating) => {
     const beforeId = currentCard?.id;
+    
+    // Check for milestones before submitting
+    const currentStreak = streak;
+    const willComplete = currentIndex >= queue.length - 1;
+    
     await submitRating(rating);
     if (!beforeId) return;
+
+    // Show feedback for milestones
+    if (willComplete) {
+      setFeedback({ type: "complete" });
+    } else if (currentStreak?.current_streak && currentStreak.current_streak > 0 && currentStreak.current_streak % 10 === 0) {
+      setFeedback({ type: "streak", value: currentStreak.current_streak });
+    }
 
     const afterId = useReviewStore.getState().currentCard?.id;
     if (afterId === beforeId) {
@@ -105,11 +125,8 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="text-4xl mb-4">🔄</div>
-          <div className="text-muted-foreground">Loading review queue...</div>
-        </div>
+      <div className="flex items-center justify-center h-full p-8">
+        <ReviewCardSkeleton />
       </div>
     );
   }
@@ -341,6 +358,13 @@ export function ReviewSession({ onExit }: ReviewSessionProps) {
           </div>
         </div>
       </div>
+
+      {/* Feedback Overlay */}
+      <ReviewFeedback
+        type={feedback.type}
+        value={feedback.value}
+        onClose={() => setFeedback({ type: null })}
+      />
     </div>
   );
 }
