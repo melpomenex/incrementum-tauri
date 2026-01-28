@@ -246,21 +246,40 @@ function TabPaneView({
     const width = rect.width;
     const height = rect.height;
 
-    // Calculate relative position for drop indicator
-    const edgeThreshold = Math.min(100, width * 0.2, height * 0.2);
+    // Calculate distances to each edge
+    const edgeThreshold = Math.min(80, width * 0.15, height * 0.15);
+    
+    const distLeft = x;
+    const distRight = width - x;
+    const distTop = y;
+    const distBottom = height - y;
     
     let position: DropIndicator["position"];
     
-    if (x < edgeThreshold) {
-      position = "left";
-    } else if (x > width - edgeThreshold) {
-      position = "right";
-    } else if (y < edgeThreshold) {
-      position = "top";
-    } else if (y > height - edgeThreshold) {
-      position = "bottom";
-    } else {
+    // Check if we're in an edge zone and which edge is closest
+    const inLeftZone = distLeft < edgeThreshold;
+    const inRightZone = distRight < edgeThreshold;
+    const inTopZone = distTop < edgeThreshold;
+    const inBottomZone = distBottom < edgeThreshold;
+    
+    // Find the closest edge
+    const minDist = Math.min(
+      inLeftZone ? distLeft : Infinity,
+      inRightZone ? distRight : Infinity,
+      inTopZone ? distTop : Infinity,
+      inBottomZone ? distBottom : Infinity
+    );
+    
+    if (minDist === Infinity) {
       position = "center";
+    } else if (minDist === distLeft) {
+      position = "left";
+    } else if (minDist === distRight) {
+      position = "right";
+    } else if (minDist === distTop) {
+      position = "top";
+    } else {
+      position = "bottom";
     }
 
     setDropIndicator({ paneId: pane.id, position });

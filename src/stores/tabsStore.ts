@@ -191,6 +191,11 @@ function updatePaneInTree(root: Pane, paneId: string, updater: (pane: Pane) => P
 
 // Helper to remove pane from tree
 function removePaneFromTree(root: Pane, paneId: string): Pane | null {
+  // If root is the pane being removed, return null to remove it
+  if (root.id === paneId) {
+    return null;
+  }
+  
   if (root.type === "split") {
     const newChildren = root.children
       .map((child) => removePaneFromTree(child, paneId))
@@ -372,9 +377,14 @@ export const useTabsStore = create<TabsState>((set, get) => ({
         newActiveTabId = newTabIds[newIndex] || null;
       }
 
-      // If pane is empty, remove it (will be handled by split collapse)
+      // Check if this is the last tab in the only pane
+      const isLastTabInOnlyPane = newTabIds.length === 0 && 
+        state.rootPane.type === "tabs" && 
+        state.rootPane.id === pane.id;
+
+      // If pane is empty and it's not the only pane, remove it
       let newRootPane = state.rootPane;
-      if (newTabIds.length === 0) {
+      if (newTabIds.length === 0 && !isLastTabInOnlyPane) {
         newRootPane = removePaneFromTree(state.rootPane, pane.id) || createTabPane();
       } else {
         newRootPane = updatePaneInTree(state.rootPane, pane.id, (p) => ({
