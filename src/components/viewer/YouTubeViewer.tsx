@@ -635,13 +635,14 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
   return (
     <div key={playerKey} className="flex flex-col h-full bg-background">
-      {/* Video Player Container */}
-      <div className="relative bg-black" style={{ paddingBottom: "56.25%" }}>
+      {/* Video Player Container - 16:9 aspect ratio */}
+      <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%", height: 0 }}>
         {/* YouTube iframe - don't render in Tauri as it causes crashes */}
         {useIframeFallback && !isTauri() ? (
           <iframe
             title={title || "YouTube video"}
             className="absolute inset-0 w-full h-full"
+            style={{ width: '100%', height: '100%', border: 'none' }}
             src={getYouTubeEmbedURL(videoId, startTimeRef.current)}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
