@@ -6,6 +6,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { getDeviceInfo } from "../../lib/pwa";
 import { getDocumentAuto, updateDocumentProgressAuto } from "../../api/documents";
 import { saveDocumentPosition, cfiPosition } from "../../api/position";
+import { ChevronDown, ChevronUp, Menu, Settings } from "lucide-react";
 
 interface EPUBViewerProps {
   fileData: Uint8Array;
@@ -933,16 +934,26 @@ export function EPUBViewer({
 
       {isMobile && (
         <>
-          {/* Mobile chrome */}
+          {/* Tap area to toggle chrome - covers the reader area */}
           <div
             className={cn(
-              "absolute left-0 right-0 top-0 z-40 transition-all",
-              chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+              "absolute inset-x-0 top-[80px] bottom-[80px] z-30",
+              chromeVisible ? "pointer-events-none" : "pointer-events-auto"
+            )}
+            onClick={() => setChromeVisible(!chromeVisible)}
+            aria-hidden="true"
+          />
+
+          {/* Mobile chrome - Top Bar */}
+          <div
+            className={cn(
+              "absolute left-0 right-0 top-0 z-40 transition-all duration-300",
+              chromeVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full pointer-events-none"
             )}
           >
             <div className="mx-3 mt-3 rounded-2xl bg-background/95 backdrop-blur border border-border shadow-lg">
               <div className="flex items-center justify-between px-4 py-3">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-foreground truncate">{fileName}</div>
                   <div className="text-xs text-muted-foreground truncate">
                     {currentChapter || "Reading"}
@@ -965,15 +976,25 @@ export function EPUBViewer({
                   >
                     Aa
                   </button>
+                  <button
+                    type="button"
+                    data-chrome-control="true"
+                    onClick={() => setChromeVisible(false)}
+                    className="p-1.5 rounded-full border border-border bg-card text-foreground"
+                    aria-label="Hide toolbar"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
+          {/* Mobile chrome - Bottom Bar */}
           <div
             className={cn(
-              "absolute left-0 right-0 bottom-0 z-40 transition-all",
-              chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+              "absolute left-0 right-0 bottom-0 z-40 transition-all duration-300",
+              chromeVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
             )}
           >
             <div className="mx-3 mb-3 rounded-2xl bg-background/95 backdrop-blur border border-border shadow-lg">
@@ -997,6 +1018,15 @@ export function EPUBViewer({
                     >
                       Next
                     </button>
+                    <button
+                      type="button"
+                      data-chrome-control="true"
+                      onClick={() => setChromeVisible(false)}
+                      className="p-1.5 rounded-full border border-border bg-card text-foreground"
+                      aria-label="Hide toolbar"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
                 <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -1008,6 +1038,52 @@ export function EPUBViewer({
               </div>
             </div>
           </div>
+
+          {/* Floating Expand Buttons (when chrome is hidden) */}
+          {!chromeVisible && (
+            <>
+              {/* Top-left: Show toolbar button */}
+              <button
+                type="button"
+                onClick={() => setChromeVisible(true)}
+                className="absolute top-4 left-4 z-40 p-2.5 rounded-full bg-background/95 backdrop-blur border border-border shadow-lg active:scale-95 transition-all"
+                aria-label="Show toolbar"
+              >
+                <ChevronDown className="w-5 h-5 text-foreground" />
+              </button>
+
+              {/* Top-right: TOC quick access */}
+              <button
+                type="button"
+                onClick={() => setShowTocDrawer(true)}
+                className="absolute top-4 right-16 z-40 p-2.5 rounded-full bg-background/95 backdrop-blur border border-border shadow-lg active:scale-95 transition-all"
+                aria-label="Open table of contents"
+              >
+                <Menu className="w-5 h-5 text-foreground" />
+              </button>
+
+              {/* Top-right: Settings quick access */}
+              <button
+                type="button"
+                onClick={() => setShowSettingsSheet(true)}
+                className="absolute top-4 right-4 z-40 p-2.5 rounded-full bg-background/95 backdrop-blur border border-border shadow-lg active:scale-95 transition-all"
+                aria-label="Open settings"
+              >
+                <Settings className="w-5 h-5 text-foreground" />
+              </button>
+
+              {/* Bottom center: Show toolbar & progress */}
+              <button
+                type="button"
+                onClick={() => setChromeVisible(true)}
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-background/95 backdrop-blur border border-border shadow-lg active:scale-95 transition-all flex items-center gap-2"
+                aria-label="Show toolbar"
+              >
+                <ChevronUp className="w-4 h-4 text-foreground" />
+                <span className="text-xs font-medium text-foreground">{progressPercent}%</span>
+              </button>
+            </>
+          )}
 
           {/* Mobile TOC drawer */}
           {showTocDrawer && (
