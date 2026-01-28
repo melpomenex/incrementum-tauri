@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, FileText, List, Brain, Lightbulb, Search, X, Maximize, Minimize, Share2, FileCode, Loader2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useDocumentStore, useTabsStore, useQueueStore } from "../../stores";
+import { isTauri, isPWA } from "../../lib/tauri";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { PDFViewer } from "./PDFViewer";
 import { MarkdownViewer } from "./MarkdownViewer";
@@ -181,6 +182,28 @@ export function DocumentViewer({
   const scrollStorageKey = currentDocument?.id
     ? `document-scroll-position:${currentDocument.id}`
     : undefined;
+
+  // Listen for fullscreen changes (for PWA/browser environment)
+  useEffect(() => {
+    if (isTauri()) return;
+
+    const handleFullscreenChange = () => {
+      const fullscreenElement = document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).msFullscreenElement;
+      setIsFullscreen(!!fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   const resolveViewStateKey = useCallback(
     (docId?: string | null) =>
@@ -1360,6 +1383,28 @@ export function DocumentViewer({
 
   const toggleFullscreen = async () => {
     try {
+      // PWA/Browser environment - use standard Fullscreen API
+      if (!isTauri()) {
+        if (isFullscreen) {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if ((document as any).webkitExitFullscreen) {
+            await (document as any).webkitExitFullscreen();
+          }
+        } else {
+          const docEl = document.documentElement;
+          if (docEl.requestFullscreen) {
+            await docEl.requestFullscreen();
+          } else if ((docEl as any).webkitRequestFullscreen) {
+            await (docEl as any).webkitRequestFullscreen();
+          } else if ((docEl as any).msRequestFullscreen) {
+            await (docEl as any).msRequestFullscreen();
+          }
+        }
+        return;
+      }
+
+      // Tauri desktop environment
       const appWindow = getCurrentWindow();
       if (isFullscreen) {
         await appWindow.setFullscreen(false);
@@ -1959,6 +2004,20 @@ export function DocumentViewer({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Mobile Floating Fullscreen Button (when not in fullscreen) */}
+      {!isFullscreen && !isTauri() && (
+        <button
+          onClick={toggleFullscreen}
+          className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] right-4 z-40 md:hidden"
+          title="Enter Fullscreen"
+          aria-label="Enter fullscreen mode"
+        >
+          <div className="flex items-center justify-center w-12 h-12 bg-card/95 backdrop-blur-sm border border-border rounded-full shadow-lg hover:bg-card active:scale-95 transition-all">
+            <Maximize className="w-5 h-5 text-foreground" />
+          </div>
+        </button>
       )}
     </div>
   );

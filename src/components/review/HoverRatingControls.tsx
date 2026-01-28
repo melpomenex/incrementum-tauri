@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "../../utils";
 import { submitReview, previewReviewIntervals, type ReviewRating, type PreviewIntervals, RATING_LABELS, formatInterval } from "../../api/review";
+import { getDeviceInfo } from "../../lib/pwa";
 
 export interface HoverRatingControlsProps {
   itemId?: string | null;
@@ -46,6 +47,10 @@ export function HoverRatingControls({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [previewIntervals, setPreviewIntervals] = useState<PreviewIntervals | null>(initialPreviewIntervals);
   const [hoverZoneActive, setHoverZoneActive] = useState(false);
+  
+  // Detect mobile for padding adjustment
+  const deviceInfo = getDeviceInfo();
+  const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
 
   // Load preview intervals when itemId changes
   useEffect(() => {
@@ -117,11 +122,13 @@ export function HoverRatingControls({
           "transition-all duration-200 ease-out pointer-events-auto",
           (isVisible || forceVisible || hoverZoneActive)
             ? "opacity-100 translate-y-0"
-            : "opacity-0 translate-y-4"
+            : "opacity-0 translate-y-4",
+          // Add padding for mobile bottom nav (approximately 70px + safe area)
+          isMobile && "pb-[calc(70px+env(safe-area-inset-bottom,0px))]"
         )}
         style={{ zIndex: 50 }}
       >
-        <div className="max-w-4xl mx-auto p-4">
+        <div className={cn("max-w-4xl mx-auto p-4", isMobile && "pb-2")}>
           <div className="flex items-center justify-center gap-3">
             {(Object.keys(RATING_LABELS) as Array<keyof typeof RATING_LABELS>).map((ratingKey) => {
               const rating = parseInt(ratingKey) as ReviewRating;
