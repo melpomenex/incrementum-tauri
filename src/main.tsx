@@ -14,6 +14,7 @@ import { MobileLayoutWrapper } from "./components/mobile/MobileLayoutWrapper";
 // Layout
 import { MainLayout } from "./components/layout/MainLayout";
 import { DevPerformanceMonitor } from "./components/common/PerformanceMonitor";
+import { Analytics } from "@vercel/analytics/react";
 
 // Auth callback route
 import AuthCallback from "./routes/auth-callback";
@@ -150,6 +151,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             </Routes>
           </Suspense>
           <DevPerformanceMonitor />
+          <Analytics />
         </HashRouter>
       </ThemeProvider>
     </QueryClientProvider>
