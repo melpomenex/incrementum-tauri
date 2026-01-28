@@ -92,6 +92,56 @@ export function extractYouTubeID(url: string): string | null {
 }
 
 /**
+ * Extract timestamp from YouTube URL (e.g., ?t=933 or ?t=15m30s)
+ * Returns timestamp in seconds, or null if not present
+ */
+export function extractYouTubeTimestamp(url: string): number | null {
+  try {
+    const urlObj = new URL(url);
+    const tParam = urlObj.searchParams.get('t');
+    if (!tParam) return null;
+
+    // Parse time in various formats:
+    // - Pure seconds: 933
+    // - HH:MM:SS or MM:SS: 1:23:45 or 15:30
+    // - YouTube format: 15m30s
+
+    // Check for YouTube format (e.g., 15m30s, 1h23m45s)
+    const ytMatch = tParam.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+    if (ytMatch) {
+      const hours = parseInt(ytMatch[1] || '0');
+      const minutes = parseInt(ytMatch[2] || '0');
+      const seconds = parseInt(ytMatch[3] || '0');
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+
+    // Check for HH:MM:SS or MM:SS format
+    if (tParam.includes(':')) {
+      const parts = tParam.split(':');
+      if (parts.length === 3) {
+        // HH:MM:SS
+        const [h, m, s] = parts.map(Number);
+        return h * 3600 + m * 60 + s;
+      } else if (parts.length === 2) {
+        // MM:SS
+        const [m, s] = parts.map(Number);
+        return m * 60 + s;
+      }
+    }
+
+    // Pure seconds
+    const seconds = parseInt(tParam);
+    if (!isNaN(seconds)) {
+      return seconds;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extract playlist ID from YouTube URL
  */
 export function extractPlaylistID(url: string): string | null {

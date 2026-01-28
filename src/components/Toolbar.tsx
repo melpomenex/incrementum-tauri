@@ -91,7 +91,17 @@ export function Toolbar() {
 
   // Import File button
   const handleImportFile = async () => {
-    await openFilePickerAndImport();
+    const imported = await openFilePickerAndImport();
+    if (imported.length > 0) {
+      addTab({
+        title: imported[0].title,
+        icon: "📄",
+        type: "document-viewer",
+        content: DocumentViewer,
+        closable: true,
+        data: { documentId: imported[0].id },
+      });
+    }
   };
 
   // Import URL button
@@ -101,8 +111,17 @@ export function Toolbar() {
       console.log("Import URL:", url);
       try {
         const { importFromUrl } = useDocumentStore.getState();
-        await importFromUrl(url);
+        const doc = await importFromUrl(url);
         console.log("URL import completed successfully");
+        // Open the imported document
+        addTab({
+          title: doc.title,
+          icon: "📄",
+          type: "document-viewer",
+          content: DocumentViewer,
+          closable: true,
+          data: { documentId: doc.id },
+        });
       } catch (error) {
         console.error("URL import failed:", error);
         alert(`Failed to import URL: ${error instanceof Error ? error.message : 'Unknown error'}`);

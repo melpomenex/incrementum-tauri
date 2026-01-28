@@ -27,6 +27,8 @@ export function Documents() {
       if (imported.length > 0) {
         // Documents are already added to state by the store
         console.log(`Imported ${imported.length} document(s)`);
+        // Open the first imported document
+        navigate(`/documents/${imported[0].id}`);
       }
     } catch (error) {
       console.error("Failed to import:", error);
@@ -36,19 +38,27 @@ export function Documents() {
   const handleImportFromPicker = async (source: ImportSource, data: any) => {
     console.log('[Documents] Import from picker:', source, data);
     try {
+      let importedDoc = null;
       if (source === 'url') {
         console.log('[Documents] Calling importFromUrl with:', data.url);
-        await importFromUrl(data.url);
+        importedDoc = await importFromUrl(data.url);
         console.log('[Documents] importFromUrl completed');
-        setShowImportPicker(false);
       } else if (source === 'arxiv') {
         console.log('[Documents] Calling importFromArxiv with:', data.url);
-        await importFromArxiv(data.url);
+        importedDoc = await importFromArxiv(data.url);
         console.log('[Documents] importFromArxiv completed');
-        setShowImportPicker(false);
       } else if (source === 'local') {
-        await importFromFiles(data.filePaths);
-        setShowImportPicker(false);
+        const imported = await importFromFiles(data.filePaths);
+        if (imported.length > 0) {
+          importedDoc = imported[0];
+        }
+      }
+
+      setShowImportPicker(false);
+
+      // Open the imported document
+      if (importedDoc) {
+        navigate(`/documents/${importedDoc.id}`);
       }
     } catch (error) {
       console.error("[Documents] Import error:", error);
@@ -85,14 +95,18 @@ export function Documents() {
 
     if (filePaths.length > 0) {
       try {
-        await importFromFiles(filePaths);
+        const imported = await importFromFiles(filePaths);
+        // Open the first imported document
+        if (imported.length > 0) {
+          navigate(`/documents/${imported[0].id}`);
+        }
       } catch (error) {
         console.error("Failed to import dropped files:", error);
       }
     } else {
       console.warn("Drag and drop import: Unable to get file paths. This feature requires Tauri to be running in native mode.");
     }
-  }, [importFromFiles]);
+  }, [importFromFiles, navigate]);
 
   return (
     <>

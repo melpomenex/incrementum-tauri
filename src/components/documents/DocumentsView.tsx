@@ -23,8 +23,8 @@ import {
   parseDocumentSearch,
   sortDocuments,
 } from "../../utils/documentsView";
-import { importYouTubeVideo, resolveDocumentCover } from "../../api/documents";
-import { getYouTubeThumbnail } from "../../api/youtube";
+import { importYouTubeVideo, resolveDocumentCover, updateDocument as updateDocumentApi } from "../../api/documents";
+import { getYouTubeThumbnail, extractYouTubeTimestamp } from "../../api/youtube";
 import { getDeviceInfo } from "../../lib/pwa";
 import { isTauri } from "../../lib/tauri";
 
@@ -253,11 +253,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
 
   const handleImport = useCallback(async () => {
     try {
-      await openFilePickerAndImport();
+      const importedDocs = await openFilePickerAndImport();
+      if (onOpenDocument && importedDocs.length > 0) {
+        onOpenDocument(importedDocs[0]);
+      }
     } catch (err) {
       console.error("Failed to import documents:", err);
     }
-  }, [openFilePickerAndImport]);
+  }, [openFilePickerAndImport, onOpenDocument]);
 
   const handleDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -285,12 +288,15 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
 
       if (filePaths.length === 0) return;
       try {
-        await importFromFiles(filePaths);
+        const importedDocs = await importFromFiles(filePaths);
+        if (onOpenDocument && importedDocs.length > 0) {
+          onOpenDocument(importedDocs[0]);
+        }
       } catch (err) {
         console.error("Failed to import dropped files:", err);
       }
     },
-    [importFromFiles]
+    [importFromFiles, onOpenDocument]
   );
 
   const handleYouTubeImport = async () => {
@@ -302,6 +308,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     setYoutubeError(null);
     try {
       const document = await importYouTubeVideo(youtubeUrl.trim());
+
+      // Extract timestamp from URL if present (e.g., ?t=933)
+      const timestamp = extractYouTubeTimestamp(youtubeUrl.trim());
+      if (timestamp !== null && timestamp > 0) {
+        // Save the timestamp as the initial video position
+        await updateDocumentApi(document.id, { currentPage: timestamp } as any);
+      }
+
       await loadDocuments();
       setShowYouTubeImport(false);
       setYoutubeUrl("");
@@ -1112,9 +1126,16 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card border border-border rounded-lg w-full max-w-4xl max-h-[90vh] overflow-auto">
             <AnnaArchiveSearch
-              onImportComplete={(path) => {
+              onImportComplete={async (path) => {
                 // After download, trigger document import from the downloaded path
-                loadDocuments();
+                try {
+                  const imported = await importFromFiles([path]);
+                  if (onOpenDocument && imported.length > 0) {
+                    onOpenDocument(imported[0]);
+                  }
+                } catch (error) {
+                  console.error("Failed to import downloaded book:", error);
+                }
                 setShowAnnaArchiveSearch(false);
               }}
               onClose={() => setShowAnnaArchiveSearch(false)}
