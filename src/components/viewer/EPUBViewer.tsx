@@ -934,15 +934,29 @@ export function EPUBViewer({
 
       {isMobile && (
         <>
-          {/* Tap area to toggle chrome - covers the reader area */}
-          <div
-            className={cn(
-              "absolute inset-x-0 top-[80px] bottom-[80px] z-30",
-              chromeVisible ? "pointer-events-none" : "pointer-events-auto"
-            )}
-            onClick={() => setChromeVisible(!chromeVisible)}
-            aria-hidden="true"
-          />
+          {/* Tap area to toggle chrome - small trigger zones at edges, not full coverage */}
+          {chromeVisible ? (
+            // When visible, just a small tap area to hide (top bar area already handles this)
+            <div
+              className="absolute inset-x-0 bottom-0 h-20 z-30 pointer-events-auto"
+              onClick={() => setChromeVisible(false)}
+              aria-hidden="true"
+            />
+          ) : (
+            // When hidden, small edge triggers to show
+            <>
+              <div
+                className="absolute inset-x-0 top-0 h-16 z-30 pointer-events-auto"
+                onClick={() => setChromeVisible(true)}
+                aria-hidden="true"
+              />
+              <div
+                className="absolute inset-x-0 bottom-0 h-16 z-30 pointer-events-auto"
+                onClick={() => setChromeVisible(true)}
+                aria-hidden="true"
+              />
+            </>
+          )}
 
           {/* Mobile chrome - Top Bar */}
           <div
