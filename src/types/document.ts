@@ -13,6 +13,7 @@ export interface Document {
   currentScrollPercent?: number;
   currentCfi?: string;
   currentViewState?: ViewState | string;
+  positionJson?: string;
   category?: string;
   tags: string[];
   dateAdded: string;

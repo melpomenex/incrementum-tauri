@@ -134,6 +134,38 @@ function toCamelCase(obj: any): any {
     return obj;
 }
 
+/**
+ * Get DocumentPosition from a document object
+ * Tries positionJson first, then falls back to legacy position fields
+ */
+function getPositionFromDocument(doc: db.Document): DocumentPosition | null {
+    if (!doc) return null;
+    
+    // Try position_json first (new unified storage)
+    if (doc.position_json) {
+        try {
+            return JSON.parse(doc.position_json) as DocumentPosition;
+        } catch (error) {
+            console.warn('[Browser] Failed to parse position_json:', error);
+        }
+    }
+    
+    // Fall back to legacy position fields
+    if (doc.current_page && doc.current_page > 1) {
+        return { type: 'page', page: doc.current_page };
+    }
+    
+    if (doc.current_scroll_percent && doc.current_scroll_percent > 0) {
+        return { type: 'scroll', percent: doc.current_scroll_percent };
+    }
+    
+    if (doc.current_cfi) {
+        return { type: 'cfi', cfi: doc.current_cfi };
+    }
+    
+    return null;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function getFsrsParameters() {
@@ -281,12 +313,46 @@ const commandHandlers: Record<string, CommandHandler> = {
 
     update_document_progress: async (args) => {
         const id = args.id as string;
+        const currentPage = args.current_page as number | null | undefined;
+        const scrollPercent = args.current_scroll_percent as number | null | undefined;
+        const currentCfi = args.current_cfi as string | null | undefined;
+        const currentViewState = args.current_view_state as string | null | undefined;
+        
         const updates: Partial<db.Document> = {
-            current_page: args.current_page as number | null | undefined,
-            current_scroll_percent: args.current_scroll_percent as number | null | undefined,
-            current_cfi: args.current_cfi as string | null | undefined,
+            current_page: currentPage,
+            current_scroll_percent: scrollPercent,
+            current_cfi: currentCfi,
             sync_version: Date.now(),
         };
+        
+        // Also update position_json to keep unified position in sync
+        // Try to get existing position first
+        const existingDoc = await db.getDocument(id);
+        let position: DocumentPosition | null = null;
+        
+        if (existingDoc?.position_json) {
+            try {
+                position = JSON.parse(existingDoc.position_json);
+            } catch {
+                position = null;
+            }
+        }
+        
+        // Create new unified position based on what's being updated
+        if (currentPage !== undefined && currentPage !== null) {
+            position = { type: 'page', page: currentPage };
+        } else if (scrollPercent !== undefined && scrollPercent !== null) {
+            position = { type: 'scroll', percent: scrollPercent };
+        } else if (currentCfi !== undefined && currentCfi !== null) {
+            position = { type: 'cfi', cfi: currentCfi };
+        }
+        
+        if (position) {
+            const progress = getPositionProgress(position);
+            updates.position_json = JSON.stringify(position);
+            updates.progress_percent = progress ?? existingDoc?.progress_percent ?? 0;
+        }
+        
         const cleaned: any = {};
         Object.entries(updates).forEach(([key, value]) => {
             if (value !== undefined) {
@@ -628,6 +694,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 id: doc.id,
                 document_id: doc.id,
                 document_title: doc.title || 'Untitled',
+                document_file_type: doc.file_type,
                 item_type: 'document',
                 priority_rating: doc.priority_rating,
                 priority_slider: doc.priority_slider,
@@ -646,6 +713,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 id: ext.id,
                 document_id: ext.document_id,
                 document_title: doc?.title || 'Unknown',
+                document_file_type: doc?.file_type,
                 extract_id: ext.id,
                 item_type: 'extract',
                 priority: 50,
@@ -663,6 +731,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 id: item.id,
                 document_id: item.document_id || '',
                 document_title: doc?.title || 'Unknown',
+                document_file_type: doc?.file_type,
                 extract_id: item.extract_id,
                 learning_item_id: item.id,
                 question: item.question,
@@ -690,6 +759,7 @@ const commandHandlers: Record<string, CommandHandler> = {
             id: doc.id,
             document_id: doc.id,
             document_title: doc.title || 'Untitled',
+            document_file_type: doc.file_type,
             item_type: 'document',
             priority_rating: doc.priority_rating,
             priority_slider: doc.priority_slider,
@@ -716,6 +786,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 id: doc.id,
                 document_id: doc.id,
                 document_title: doc.title || 'Untitled',
+                document_file_type: doc.file_type,
                 item_type: 'document',
                 priority_rating: doc.priority_rating,
                 priority_slider: doc.priority_slider,
@@ -734,6 +805,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 id: ext.id,
                 document_id: ext.document_id,
                 document_title: doc?.title || 'Unknown',
+                document_file_type: doc?.file_type,
                 extract_id: ext.id,
                 item_type: 'extract',
                 priority: 50,
@@ -751,6 +823,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 id: item.id,
                 document_id: item.document_id || '',
                 document_title: doc?.title || 'Unknown',
+                document_file_type: doc?.file_type,
                 extract_id: item.extract_id,
                 learning_item_id: item.id,
                 question: item.question,

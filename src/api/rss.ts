@@ -389,15 +389,73 @@ export function unsubscribeFromFeed(feedId: string): void {
  * Get all subscribed feeds
  */
 export function getSubscribedFeeds(): Feed[] {
-  const data = localStorage.getItem("rss_feeds");
-  return data ? JSON.parse(data) : [];
+  try {
+    const data = localStorage.getItem("rss_feeds");
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error("Failed to parse RSS feeds from storage", e);
+    return [];
+  }
 }
 
 /**
- * Save feeds to localStorage
+ * Save feeds to localStorage with fallback pruning strategies
  */
 function saveFeeds(feeds: Feed[]): void {
-  localStorage.setItem("rss_feeds", JSON.stringify(feeds));
+  try {
+    localStorage.setItem("rss_feeds", JSON.stringify(feeds));
+  } catch (e) {
+    // Check for quota exceeded error
+    if (e instanceof DOMException && (
+        e.name === 'QuotaExceededError' || 
+        e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+        e.code === 22)) {
+      
+      console.warn("[RSS] Storage quota exceeded. Attempting to prune old data...");
+      
+      // Strategy 1: Limit to 50 items per feed (most recent)
+      let prunedFeeds = feeds.map(feed => ({
+        ...feed,
+        items: feed.items.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime()).slice(0, 50)
+      }));
+      
+      try {
+        localStorage.setItem("rss_feeds", JSON.stringify(prunedFeeds));
+        console.log("[RSS] Saved with 50 items limit.");
+        return;
+      } catch (e2) {
+        // Strategy 2: Remove content from read items (keep description)
+        console.warn("[RSS] Still too large. Removing content from read items...");
+        prunedFeeds = prunedFeeds.map(feed => ({
+          ...feed,
+          items: feed.items.map(item => item.read ? { ...item, content: "" } : item)
+        }));
+        
+        try {
+          localStorage.setItem("rss_feeds", JSON.stringify(prunedFeeds));
+          console.log("[RSS] Saved with read items content removed.");
+          return;
+        } catch (e3) {
+           // Strategy 3: Remove content from ALL items (keep description only)
+           console.warn("[RSS] Still too large. Removing content from all items...");
+           prunedFeeds = prunedFeeds.map(feed => ({
+             ...feed,
+             items: feed.items.map(item => ({ ...item, content: "" }))
+           }));
+           
+           try {
+             localStorage.setItem("rss_feeds", JSON.stringify(prunedFeeds));
+             console.log("[RSS] Saved with all content removed.");
+             return;
+           } catch (e4) {
+             console.error("[RSS] Critical: Unable to save feeds even after pruning.", e4);
+             throw e; // Throw original error to let caller know
+           }
+        }
+      }
+    }
+    throw e; // Re-throw other errors
+  }
 }
 
 /**
@@ -937,6 +995,12 @@ export interface RssUserPreference {
   show_feed_icon?: boolean | null;
   sort_by?: string | null;
   sort_order?: string | null;
+  // Reader preferences
+  font_family?: string | null;
+  font_size?: number | null;
+  line_height?: number | null;
+  content_width?: number | null;
+  text_align?: string | null;
   date_created: string;
   date_modified: string;
 }
@@ -958,6 +1022,12 @@ export interface RssUserPreferenceUpdate {
   show_feed_icon?: boolean | null;
   sort_by?: string | null;
   sort_order?: string | null;
+  // Reader preferences
+  font_family?: string | null;
+  font_size?: number | null;
+  line_height?: number | null;
+  content_width?: number | null;
+  text_align?: string | null;
 }
 
 /**

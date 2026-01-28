@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Check,
   Sliders,
+  BookOpen,
 } from "lucide-react";
 import { useToast } from "../common/Toast";
 
@@ -101,6 +102,12 @@ export function RSSCustomizationPanel({
       show_feed_icon: true,
       sort_by: "date",
       sort_order: "desc",
+      // Reader defaults
+      font_family: '"Iowan Old Style", "Charter", "Source Serif 4", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif',
+      font_size: 16,
+      line_height: 1.6,
+      content_width: 65,
+      text_align: "left",
     };
     setPreferences(defaults);
     setHasChanges(true);
@@ -185,6 +192,12 @@ export function RSSCustomizationPanel({
               label="Sorting"
               onClick={() => setActiveTab("sorting")}
             />
+            <TabButton
+              active={activeTab === "reader"}
+              icon={BookOpen}
+              label="Reader"
+              onClick={() => setActiveTab("reader")}
+            />
           </div>
 
           {/* Content */}
@@ -193,6 +206,7 @@ export function RSSCustomizationPanel({
             {activeTab === "display" && <DisplayTab preferences={preferences} updatePreference={updatePreference} />}
             {activeTab === "layout" && <LayoutTab preferences={preferences} updatePreference={updatePreference} />}
             {activeTab === "sorting" && <SortingTab preferences={preferences} updatePreference={updatePreference} />}
+            {activeTab === "reader" && <ReaderTab preferences={preferences} updatePreference={updatePreference} />}
           </div>
         </div>
       </div>
@@ -513,6 +527,113 @@ function SortingTab({
               updatePreference("sort_order", "desc");
             }}
           />
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+// ============================================================================
+// Reader Preferences Tab
+// ============================================================================
+
+function ReaderTab({
+  preferences,
+  updatePreference,
+}: {
+  preferences: RSSUserPreferenceUpdate;
+  updatePreference: <K extends keyof RSSUserPreferenceUpdate>(
+    key: K,
+    value: RSSUserPreferenceUpdate[K]
+  ) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <Section
+        title="Typography"
+        description="Customize the font and text appearance"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Font Family</label>
+            <div className="grid grid-cols-1 gap-2">
+              {[
+                { value: '"Iowan Old Style", "Charter", "Source Serif 4", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif', label: "Serif (Default)", family: "serif" },
+                { value: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', label: "Sans Serif", family: "sans-serif" },
+                { value: '"Menlo", "Consolas", "Monaco", "Liberation Mono", "Lucida Console", monospace', label: "Monospace", family: "monospace" },
+              ].map((font) => (
+                <button
+                  key={font.value}
+                  onClick={() => updatePreference("font_family", font.value)}
+                  className={`flex items-center justify-between p-3 border rounded-lg text-left transition-colors ${
+                    preferences.font_family === font.value
+                      ? "bg-primary/10 border-primary/50 ring-1 ring-primary/20"
+                      : "border-border hover:bg-muted"
+                  }`}
+                >
+                  <span style={{ fontFamily: font.value }} className="text-base">
+                    {font.label}
+                  </span>
+                  {preferences.font_family === font.value && (
+                    <Check className="w-4 h-4 text-primary" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <RangeField
+            label="Font Size"
+            value={preferences.font_size ?? 16}
+            onChange={(value) => updatePreference("font_size", value)}
+            min={12}
+            max={32}
+            step={1}
+            suffix="px"
+          />
+
+          <RangeField
+            label="Line Height"
+            value={Math.round((preferences.line_height ?? 1.6) * 10) / 10}
+            onChange={(value) => updatePreference("line_height", value)}
+            min={1.0}
+            max={2.5}
+            step={0.1}
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="Layout"
+        description="Adjust reading width and alignment"
+      >
+        <RangeField
+          label="Max Width"
+          value={preferences.content_width ?? 65}
+          onChange={(value) => updatePreference("content_width", value)}
+          min={40}
+          max={100}
+          step={5}
+          suffix="ch"
+        />
+        
+        <div className="pt-2">
+          <label className="block text-sm font-medium text-foreground mb-2">Text Alignment</label>
+          <div className="flex bg-muted rounded-lg p-1">
+            {["left", "justify"].map((align) => (
+              <button
+                key={align}
+                onClick={() => updatePreference("text_align", align)}
+                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-all ${
+                  (preferences.text_align || "left") === align
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {align.charAt(0).toUpperCase() + align.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </Section>
     </div>

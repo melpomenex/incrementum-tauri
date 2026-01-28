@@ -7,8 +7,8 @@ interface DocumentViewerProps {
 
 export function MarkdownViewer({ document, content }: DocumentViewerProps) {
   return (
-    <div className="markdown-viewer prose prose-sm max-w-none dark:prose-invert mobile-reading-prose">
-      <h1 className="text-2xl font-bold mb-4 mobile-reading-title">{document.title}</h1>
+    <div className="markdown-viewer prose prose-sm max-w-none dark:prose-invert reading-prose">
+      <h1 className="reading-title">{document.title}</h1>
       {content ? (
         <div className="whitespace-pre-wrap">{content}</div>
       ) : (

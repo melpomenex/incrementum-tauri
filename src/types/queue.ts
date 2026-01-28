@@ -3,6 +3,7 @@ export interface QueueItem {
   id: string;
   documentId: string;
   documentTitle: string;
+  documentFileType?: string;
   extractId?: string;
   learningItemId?: string;
   question?: string;

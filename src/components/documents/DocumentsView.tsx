@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText, Filter } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useCollectionStore } from "../../stores/collectionStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
@@ -77,6 +77,7 @@ type SavedView = {
   sortDirection: DocumentSortDirection;
   mode: DocumentViewMode;
   showNextAction: boolean;
+  fileTypeFilter: string;
 };
 
 const defaultSortByKey: Record<DocumentSortKey, DocumentSortDirection> = {
@@ -123,6 +124,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   const [sortKey, setSortKey] = useState<DocumentSortKey>("priority");
   const [sortDirection, setSortDirection] = useState<DocumentSortDirection>("desc");
   const [showNextAction, setShowNextAction] = useState(true);
+  const [selectedFileType, setSelectedFileType] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const deviceInfo = getDeviceInfo();
@@ -177,14 +179,26 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   }, [savedViews]);
 
   const searchTokens = useMemo(() => parseDocumentSearch(debouncedSearch), [debouncedSearch]);
+  
+  // Get unique file types for filter dropdown
+  const availableFileTypes = useMemo(() => {
+    const types = new Set(documents.map((doc) => doc.fileType));
+    return Array.from(types).sort();
+  }, [documents]);
+  
   const filteredDocuments = useMemo(() => {
-    const base = documents.filter((doc) => matchesDocumentSearch(doc, searchTokens));
-    if (!activeCollectionId) return base;
-    return base.filter((doc) => {
-      const assigned = documentAssignments[doc.id];
-      return assigned ? assigned === activeCollectionId : true;
-    });
-  }, [documents, searchTokens, activeCollectionId, documentAssignments]);
+    let base = documents.filter((doc) => matchesDocumentSearch(doc, searchTokens));
+    if (activeCollectionId) {
+      base = base.filter((doc) => {
+        const assigned = documentAssignments[doc.id];
+        return assigned ? assigned === activeCollectionId : true;
+      });
+    }
+    if (selectedFileType !== "all") {
+      base = base.filter((doc) => doc.fileType === selectedFileType);
+    }
+    return base;
+  }, [documents, searchTokens, activeCollectionId, documentAssignments, selectedFileType]);
 
   const sortedDocuments = useMemo(() => {
     return sortDocuments(filteredDocuments, sortKey, sortDirection);
@@ -450,6 +464,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
       sortDirection,
       mode,
       showNextAction,
+      fileTypeFilter: selectedFileType,
     };
     setSavedViews((prev) => [...prev, view]);
     setActiveViewId(view.id);
@@ -458,6 +473,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   const handleApplyView = (viewId: string) => {
     if (!viewId) {
       setActiveViewId(null);
+      setSelectedFileType("all");
       return;
     }
     const view = savedViews.find((item) => item.id === viewId);
@@ -468,6 +484,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
     setSortDirection(view.sortDirection);
     setMode(view.mode);
     setShowNextAction(view.showNextAction);
+    setSelectedFileType(view.fileTypeFilter ?? "all");
     setActiveViewId(view.id);
   };
 
@@ -558,6 +575,22 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
               placeholder="Search documents or use tag:History extracts=0"
               className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={selectedFileType}
+              onChange={(event) => setSelectedFileType(event.target.value)}
+              className="px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground"
+            >
+              <option value="all">All Types</option>
+              {availableFileTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex items-center gap-2">

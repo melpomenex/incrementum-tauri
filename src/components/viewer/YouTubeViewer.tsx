@@ -12,6 +12,7 @@ import { getYouTubeEmbedURL, getYouTubeWatchURL, formatDuration } from "../../ap
 import { getDocumentAuto, updateDocument, updateDocumentProgressAuto } from "../../api/documents";
 import { generateShareUrl, generateYouTubeShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
 import { saveDocumentPosition, timePosition } from "../../api/position";
+import { isTauri } from "../../lib/tauri";
 
 interface YouTubeViewerProps {
   videoId: string;
@@ -56,7 +57,8 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [startTime, setStartTime] = useState(0);
   const [positionLoaded, setPositionLoaded] = useState(false);
-  const [useIframeFallback, setUseIframeFallback] = useState(false);
+  // Default to iframe fallback in Tauri to avoid WebView crashes with YouTube API
+  const [useIframeFallback, setUseIframeFallback] = useState(() => isTauri());
   const [resolvedTitle, setResolvedTitle] = useState<string | undefined>(title);
   const titleFetchRef = useRef<string | null>(null);
 
@@ -225,82 +227,152 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       // Only load if videoId changed
       if (videoId !== lastVideoIdRef.current) {
         if (typeof playerRef.current.loadVideoById === 'function') {
-          playerRef.current.loadVideoById(videoId, startTimeRef.current);
-          lastVideoIdRef.current = videoId;
+          try {
+            playerRef.current.loadVideoById(videoId, startTimeRef.current);
+            lastVideoIdRef.current = videoId;
+          } catch (error) {
+            console.error('[YouTubeViewer] Failed to load video by ID:', error);
+            setUseIframeFallback(true);
+          }
         }
       }
       return;
     }
 
-    playerRef.current = new window.YT.Player(containerRef.current, {
-      videoId,
-      host: 'https://www.youtube.com',
-      playerVars: {
-        autoplay: 0,
-        controls: 1,
-        rel: 0,
-        modestbranding: 1,
-        start: startTimeRef.current,
-        origin: window.location.origin,
-      },
-      events: {
-        onReady: (event: any) => {
-          setIsReady(true);
-          const playerDuration = event.target.getDuration() || 0;
-          setDuration(playerDuration);
-          onLoadRef.current?.({ duration: playerDuration, title: titleRef.current || "" });
+    try {
+      // Check if container is still valid
+      if (!containerRef.current) {
+        console.warn('[YouTubeViewer] Container ref is no longer valid');
+        return;
+      }
 
-          // Seek to saved position if we have one
-          if (startTimeRef.current > 0) {
-            event.target.seekTo(startTimeRef.current, true);
-            console.log(`Seeked to saved position: ${startTimeRef.current}s`);
-          }
-
-          // Start time tracking
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          intervalRef.current = setInterval(() => {
-            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-              const time = playerRef.current.getCurrentTime();
-              setCurrentTime(time);
-            }
-          }, 500);
-
-          // Start auto-save interval (use ref to check playing state)
-          if (autoSaveIntervalRef.current) clearInterval(autoSaveIntervalRef.current);
-          autoSaveIntervalRef.current = setInterval(() => {
-            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlayingRef.current) {
-              const time = playerRef.current.getCurrentTime();
-              saveCurrentPosition(time);
-            }
-          }, AUTO_SAVE_INTERVAL);
+      playerRef.current = new window.YT.Player(containerRef.current, {
+        videoId,
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          rel: 0,
+          modestbranding: 1,
+          start: startTimeRef.current,
+          origin: typeof window !== 'undefined' ? window.location.origin : undefined,
         },
-        onStateChange: (event: any) => {
-          const playerState = event.target.getPlayerState();
-          const wasPlaying = isPlayingRef.current;
-          const isNowPlaying = playerState === window.YT.PlayerState.PLAYING;
-          isPlayingRef.current = isNowPlaying;
-          setIsPlaying(isNowPlaying);
+        events: {
+          onReady: (event: any) => {
+            try {
+              setIsReady(true);
+              const playerDuration = event.target?.getDuration() || 0;
+              setDuration(playerDuration);
+              onLoadRef.current?.({ duration: playerDuration, title: titleRef.current || "" });
 
-          // Save position when pausing
-          if (wasPlaying && playerState === window.YT.PlayerState.PAUSED) {
-            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-              saveCurrentPosition(playerRef.current.getCurrentTime());
+              // Seek to saved position if we have one
+              if (startTimeRef.current > 0 && event.target?.seekTo) {
+                event.target.seekTo(startTimeRef.current, true);
+                console.log(`Seeked to saved position: ${startTimeRef.current}s`);
+              }
+
+              // Start time tracking
+              if (intervalRef.current) clearInterval(intervalRef.current);
+              intervalRef.current = setInterval(() => {
+                try {
+                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+                    const time = playerRef.current.getCurrentTime();
+                    setCurrentTime(time);
+                  }
+                } catch (e) {
+                  // Player might have been destroyed
+                }
+              }, 500);
+
+              // Start auto-save interval (use ref to check playing state)
+              if (autoSaveIntervalRef.current) clearInterval(autoSaveIntervalRef.current);
+              autoSaveIntervalRef.current = setInterval(() => {
+                try {
+                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlayingRef.current) {
+                    const time = playerRef.current.getCurrentTime();
+                    saveCurrentPosition(time);
+                  }
+                } catch (e) {
+                  // Player might have been destroyed
+                }
+              }, AUTO_SAVE_INTERVAL);
+            } catch (error) {
+              console.error('[YouTubeViewer] Error in onReady handler:', error);
             }
-          }
+          },
+          onStateChange: (event: any) => {
+            try {
+              const playerState = event.target?.getPlayerState();
+              const wasPlaying = isPlayingRef.current;
+              const isNowPlaying = playerState === window.YT.PlayerState.PLAYING;
+              isPlayingRef.current = isNowPlaying;
+              setIsPlaying(isNowPlaying);
+
+              // Save position when pausing
+              if (wasPlaying && playerState === window.YT.PlayerState.PAUSED) {
+                if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+                  saveCurrentPosition(playerRef.current.getCurrentTime());
+                }
+              }
+            } catch (error) {
+              console.error('[YouTubeViewer] Error in onStateChange handler:', error);
+            }
+          },
+          onError: (event: any) => {
+            console.error("[YouTubeViewer] Player error:", event.data);
+            // Fallback to iframe on error
+            if (event.data === 2 || event.data === 5 || event.data === 100 || event.data === 101 || event.data === 150) {
+              console.log('[YouTubeViewer] Switching to iframe fallback due to player error');
+              setUseIframeFallback(true);
+            }
+          },
         },
-        onError: (event: any) => {
-          console.error("YouTube player error:", event.data);
-        },
-      },
-    });
-    lastVideoIdRef.current = videoId;
+      });
+      lastVideoIdRef.current = videoId;
+    } catch (error) {
+      console.error('[YouTubeViewer] Failed to initialize player:', error);
+      // Fallback to iframe
+      setUseIframeFallback(true);
+    }
   }, [positionLoaded, saveCurrentPosition, useIframeFallback, videoId]);
 
-  // Load YouTube IFrame API
+  // Load YouTube IFrame API (skip if using iframe fallback, especially in Tauri)
   useEffect(() => {
+    // Don't load YouTube API in Tauri or when using iframe fallback - it causes crashes
+    if (useIframeFallback) {
+      console.log('[YouTubeViewer] Skipping YouTube API load (using iframe fallback)');
+      // Clean up any existing player on unmount
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        if (autoSaveIntervalRef.current) {
+          clearInterval(autoSaveIntervalRef.current);
+          autoSaveIntervalRef.current = null;
+        }
+        if (seekDebounceRef.current) {
+          clearTimeout(seekDebounceRef.current);
+          seekDebounceRef.current = null;
+        }
+      };
+    }
+
     if (window.YT && window.YT.Player) {
       initializePlayer();
-      return;
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        if (autoSaveIntervalRef.current) {
+          clearInterval(autoSaveIntervalRef.current);
+          autoSaveIntervalRef.current = null;
+        }
+        if (seekDebounceRef.current) {
+          clearTimeout(seekDebounceRef.current);
+          seekDebounceRef.current = null;
+        }
+      };
     }
 
     // Check if script is already present
@@ -309,28 +381,47 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     const shouldFallback = () => {
       if (didFallback) return;
       didFallback = true;
+      console.log('[YouTubeViewer] Falling back to iframe mode');
       setUseIframeFallback(true);
     };
 
     if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
-      const tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      tag.onerror = () => shouldFallback();
-      const firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      try {
+        const tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        tag.async = true;
+        tag.onerror = () => {
+          console.error('[YouTubeViewer] Failed to load YouTube API script');
+          shouldFallback();
+        };
+        tag.onload = () => {
+          console.log('[YouTubeViewer] YouTube API script loaded');
+        };
+        const firstScriptTag = document.getElementsByTagName("script")[0];
+        if (firstScriptTag?.parentNode) {
+          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        } else {
+          document.head.appendChild(tag);
+        }
+      } catch (error) {
+        console.error('[YouTubeViewer] Error loading YouTube API:', error);
+        shouldFallback();
+      }
     }
 
     const previousOnReady = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
+      console.log('[YouTubeViewer] YouTube API ready');
       if (previousOnReady) previousOnReady();
       initializePlayer();
     };
 
     timeoutId = window.setTimeout(() => {
       if (!window.YT || !window.YT.Player) {
+        console.warn('[YouTubeViewer] YouTube API failed to load within timeout');
         shouldFallback();
       }
-    }, 4000);
+    }, 5000);
 
     return () => {
       if (timeoutId !== null) {
@@ -349,19 +440,27 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         seekDebounceRef.current = null;
       }
       // Save position before unmount (use ref to avoid dependency)
-      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && documentIdRef.current) {
-        const time = playerRef.current.getCurrentTime();
-        saveCurrentPosition(time);
+      try {
+        if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && documentIdRef.current) {
+          const time = playerRef.current.getCurrentTime();
+          saveCurrentPosition(time);
+        }
+      } catch (e) {
+        // Ignore errors on unmount
       }
       // We don't destroy the player on unmount if we want to reuse it,
       // but React strict mode might cause double mounting.
       // Safer to destroy.
-      if (playerRef.current && typeof playerRef.current.destroy === 'function') {
-        playerRef.current.destroy();
-        playerRef.current = null;
+      try {
+        if (playerRef.current && typeof playerRef.current.destroy === 'function') {
+          playerRef.current.destroy();
+          playerRef.current = null;
+        }
+      } catch (e) {
+        // Ignore errors on destroy
       }
     };
-  }, [initializePlayer, saveCurrentPosition, positionLoaded]);
+  }, [initializePlayer, saveCurrentPosition, positionLoaded, useIframeFallback]);
 
   // Seek to time
   const handleSeek = useCallback((time: number) => {
@@ -486,15 +585,19 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     <div className="flex flex-col h-full bg-background">
       {/* Video Player Container */}
       <div className="relative bg-black" style={{ paddingBottom: "56.25%" }}>
-        {/* YouTube iframe */}
-        {useIframeFallback ? (
+        {/* YouTube iframe - don't render in Tauri as it causes crashes */}
+        {useIframeFallback && !isTauri() ? (
           <iframe
             title={title || "YouTube video"}
             className="absolute inset-0 w-full h-full"
             src={getYouTubeEmbedURL(videoId, startTimeRef.current)}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
           />
+        ) : useIframeFallback && isTauri() ? (
+          // Placeholder div for Tauri - actual content is shown in overlay
+          <div className="absolute inset-0 w-full h-full bg-black" />
         ) : (
           <div
             ref={containerRef}
@@ -509,6 +612,39 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
             <div className="text-center">
               <Youtube className="w-12 h-12 text-red-500 mx-auto mb-3 animate-pulse" />
               <p className="text-white">Loading player...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Tauri browser open overlay - YouTube embeds crash Tauri WebView */}
+        {useIframeFallback && isTauri() && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+            <div className="text-center p-8 max-w-lg">
+              <img
+                src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
+                alt={title || "YouTube video thumbnail"}
+                className="w-full rounded-lg shadow-2xl mb-6"
+                onError={(e) => {
+                  // Fallback to lower quality thumbnail
+                  (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                }}
+              />
+              <Youtube className="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <h3 className="text-white text-lg font-semibold mb-2">
+                {resolvedTitle || title || "YouTube Video"}
+              </h3>
+              <p className="text-gray-300 mb-6 text-sm">
+                YouTube embeds are not compatible with Tauri's WebView. Please open the video in your browser.
+              </p>
+              <a
+                href={getYouTubeWatchURL(videoId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              >
+                <ExternalLink className="w-5 h-5" />
+                Open in Browser
+              </a>
             </div>
           </div>
         )}

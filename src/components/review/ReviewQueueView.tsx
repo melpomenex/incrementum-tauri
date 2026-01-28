@@ -105,6 +105,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   const [showRawJson, setShowRawJson] = useState(false);
   const [isCustomizeModalOpen, setCustomizeModalOpen] = useState(false);
   const [sessionCustomization, setSessionCustomization] = useState<SessionCustomization>(DEFAULT_CUSTOMIZATION);
+  const [selectedFileType, setSelectedFileType] = useState<string>("all");
   const searchRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
@@ -149,15 +150,27 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
     return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
   }
 
+  // Get unique file types for filter dropdown
+  const availableFileTypes = useMemo(() => {
+    const types = new Set(items.map((item) => item.documentFileType).filter(Boolean));
+    return Array.from(types).sort();
+  }, [items]);
+
   const visibleItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    const queueItems = items.filter((item) => {
+    let queueItems = items.filter((item) => {
       if (queueMode === "review") {
         return item.itemType === "learning-item";
       }
       // Reading mode: only show imported documents (books/articles/RSS), not extracts or learning items
       return item.itemType === "document";
     });
+    
+    // Apply file type filter
+    if (selectedFileType !== "all") {
+      queueItems = queueItems.filter((item) => item.documentFileType === selectedFileType);
+    }
+    
     const searchedItems = normalizedQuery
       ? queueItems.filter((item) => {
         const hint = getLearningHint(item) ?? "";
@@ -169,7 +182,7 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
       })
       : queueItems;
     return [...searchedItems].sort((a, b) => getPriorityScore(b, preset) - getPriorityScore(a, preset));
-  }, [items, queueMode, preset, searchQuery]);
+  }, [items, queueMode, preset, searchQuery, selectedFileType]);
 
   const selectableItems = useMemo(
     () => visibleItems.filter((item) => item.itemType === "learning-item"),
@@ -483,6 +496,23 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
               </button>
             </div>
           )}
+          
+          {/* File Type Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={selectedFileType}
+              onChange={(event) => setSelectedFileType(event.target.value)}
+              className="px-3 py-2 bg-background border border-border rounded-md text-sm"
+            >
+              <option value="all">All Types</option>
+              {availableFileTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
           <select
             value={preset}
             onChange={(event) => setPreset(event.target.value as PriorityPreset)}

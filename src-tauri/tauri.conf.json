@@ -25,11 +25,14 @@
         "decorations": true,
         "alwaysOnTop": false,
         "skipTaskbar": false,
-        "devtools": true
+        "devtools": true,
+        "webview": {
+          "allowScripts": true
+        }
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' https: wss:; connect-src 'self' https: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https: blob:; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self';"
     }
   },
   "bundle": {

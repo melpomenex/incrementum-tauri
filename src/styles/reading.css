@@ -1,0 +1,126 @@
+/**
+ * Reading Experience Styles
+ * 
+ * Shared styles for long-form reading across desktop and mobile.
+ * Variables can be overridden by user preferences.
+ */
+
+:root {
+  /* Default reading preferences */
+  --reading-font-family: "Iowan Old Style", "Charter", "Source Serif 4", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --reading-font-size: 18px; /* Slightly larger default for desktop */
+  --reading-line-height: 1.6;
+  --reading-max-width: 65ch; /* Optimal line length (~65 characters) */
+  --reading-text-align: left;
+  
+  /* Derived/Fixed values */
+  --reading-title-size: 2em;
+  --reading-title-line-height: 1.2;
+  --reading-meta-size: 0.85em;
+  --reading-padding-x: 2rem;
+  --reading-padding-y: 2rem;
+}
+
+/* Mobile overrides */
+@media (max-width: 768px) {
+  :root {
+    --reading-font-size: 16px;
+    --reading-max-width: 100%;
+    --reading-padding-x: 1rem;
+    --reading-padding-y: 1.25rem;
+  }
+}
+
+.reading-surface {
+  font-family: var(--reading-font-family);
+  font-size: var(--reading-font-size);
+  line-height: var(--reading-line-height);
+  max-width: var(--reading-max-width);
+  text-align: var(--reading-text-align);
+  margin-left: auto;
+  margin-right: auto;
+  padding: var(--reading-padding-y) var(--reading-padding-x);
+  color: var(--color-foreground);
+  transition: all 0.2s ease-in-out;
+}
+
+/* Typography elements */
+.reading-surface h1, 
+.reading-title {
+  font-family: var(--reading-font-family);
+  font-size: var(--reading-title-size);
+  line-height: var(--reading-title-line-height);
+  font-weight: 700;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.015em;
+}
+
+.reading-meta {
+  font-family: var(--font-sans, system-ui, sans-serif); /* Meta always sans */
+  font-size: var(--reading-meta-size);
+  color: var(--color-muted-foreground);
+  margin-bottom: 2em;
+}
+
+/* Content prose styles */
+.reading-prose {
+  width: 100%;
+}
+
+.reading-prose p {
+  margin-bottom: 1.5em;
+  margin-top: 0;
+}
+
+.reading-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1.5em 0;
+}
+
+.reading-prose blockquote {
+  border-left: 4px solid var(--color-primary-500);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-right: 0;
+  font-style: italic;
+  color: var(--color-muted-foreground);
+}
+
+.reading-prose pre {
+  background: var(--color-muted);
+  padding: 1em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.reading-prose code {
+  background: var(--color-muted);
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.reading-prose ul, 
+.reading-prose ol {
+  margin-bottom: 1.5em;
+  padding-left: 1.5em;
+}
+
+.reading-prose li {
+  margin-bottom: 0.5em;
+}
+
+.reading-prose a {
+  color: var(--color-primary-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.reading-prose a:hover {
+  color: var(--color-primary-700);
+}

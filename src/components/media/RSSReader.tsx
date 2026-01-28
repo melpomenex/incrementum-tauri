@@ -399,6 +399,17 @@ export function RSSReader() {
     }
   };
 
+  const readingStyles = useMemo(() => {
+    if (!preferences) return {};
+    return {
+      "--reading-font-family": preferences.font_family,
+      "--reading-font-size": preferences.font_size ? `${preferences.font_size}px` : undefined,
+      "--reading-line-height": preferences.line_height,
+      "--reading-max-width": preferences.content_width ? `${preferences.content_width}ch` : undefined,
+      "--reading-text-align": preferences.text_align,
+    } as React.CSSProperties;
+  }, [preferences]);
+
   return (
     <div className="h-full w-full bg-background">
       <div className="h-full w-full flex flex-col lg:flex-row overflow-hidden rounded-xl border border-border/70 bg-card/60 shadow-[0_0_0_1px_rgba(15,23,42,0.04)]">
@@ -748,14 +759,14 @@ export function RSSReader() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  <div className="px-8 py-6 mobile-reading-surface">
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4 mobile-reading-meta">
+                  <div className="reading-surface" style={readingStyles}>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4 reading-meta">
                       <span>{formatFeedDate(selectedItem.pubDate)}</span>
                       {selectedItem.author && <span>by {selectedItem.author}</span>}
                     </div>
                     <div
-                      className="prose prose-sm max-w-none text-foreground dark:prose-invert mobile-reading-prose"
-                      dangerouslySetInnerHTML={{ __html: selectedItem.content }}
+                      className="prose prose-sm max-w-none text-foreground dark:prose-invert reading-prose"
+                      dangerouslySetInnerHTML={{ __html: selectedItem.content || selectedItem.description || "" }}
                     />
                   </div>
                 </div>

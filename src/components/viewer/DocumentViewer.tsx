@@ -378,6 +378,7 @@ export function DocumentViewer({
       const storageKey = override?.storageKey ?? scrollStorageKey;
       if (!storageKey) return;
       const docId = override?.documentId ?? currentDocument?.id;
+      const docType = currentDocument?.fileType as DocumentType;
       const updatedAt = override?.updatedAt ?? Date.now();
       const payload = {
         pageNumber: state.pageNumber,
@@ -416,19 +417,21 @@ export function DocumentViewer({
       }
 
       if (docId) {
-        // Save using the legacy method
+        // Get unified position first - this is the primary position storage
+        const unifiedPosition = getUnifiedPositionForDocument(docType, state);
+        
+        // Save using the legacy method (includes positionJson via viewState)
         updateDocumentProgressAuto(docId, state.pageNumber, state.scrollPercent, null, viewState ?? undefined)
           .catch((error) => console.warn("Failed to save document progress:", error));
 
-        // Also save unified position
-        const unifiedPosition = getUnifiedPositionForDocument(currentDocument?.file_type as DocumentType, state);
+        // Also save unified position via the position API (primary source)
         if (unifiedPosition) {
           saveDocumentPosition(docId, unifiedPosition)
             .catch((error) => console.warn("Failed to save unified position:", error));
         }
       }
     },
-    [currentDocument?.id, resolveViewStateKey, scale, scrollStorageKey, viewMode, zoomMode]
+    [currentDocument?.id, currentDocument?.fileType, resolveViewStateKey, scale, scrollStorageKey, viewMode, zoomMode]
   );
 
   const handleScrollPositionChange = useCallback(
@@ -850,16 +853,58 @@ export function DocumentViewer({
         ? new Date(currentDocument.dateModified).getTime()
         : 0;
       const localUpdatedAt = legacyParsed?.updatedAt ?? 0;
-      const hasRemoteProgress = typeof currentDocument?.currentScrollPercent === "number";
+      
+      // Check for positionJson (unified position storage) first
+      const positionJson = (currentDocument as any)?.positionJson ?? (currentDocument as any)?.position_json;
+      let parsedPosition: { type: string; page?: number; percent?: number; cfi?: string; offset?: number } | null = null;
+      if (positionJson) {
+        try {
+          parsedPosition = typeof positionJson === 'string' ? JSON.parse(positionJson) : positionJson;
+        } catch {
+          parsedPosition = null;
+        }
+      }
+      
+      const hasRemoteProgress = typeof currentDocument?.currentScrollPercent === "number" || parsedPosition !== null;
 
       if ((hasRemoteProgress && remoteUpdatedAt > localUpdatedAt) || !legacyParsed) {
-        legacyParsed = hasRemoteProgress
-          ? {
-            scrollPercent: currentDocument.currentScrollPercent,
-            pageNumber: currentDocument.currentPage ?? undefined,
-            updatedAt: remoteUpdatedAt || Date.now(),
+        // Use positionJson if available, otherwise fall back to legacy fields
+        if (parsedPosition) {
+          let pageNumber = 1;
+          let scrollPercent: number | null = null;
+          
+          switch (parsedPosition.type) {
+            case 'page':
+              pageNumber = parsedPosition.page ?? 1;
+              // Estimate scroll percent from page number if total pages is known
+              if (currentDocument?.totalPages && currentDocument.totalPages > 0) {
+                scrollPercent = ((pageNumber - 1) / currentDocument.totalPages) * 100;
+              }
+              break;
+            case 'scroll':
+              scrollPercent = parsedPosition.percent ?? 0;
+              break;
+            case 'cfi':
+              // For EPUB CFI, we can't easily convert to page number
+              // Keep scrollPercent from legacy fields if available
+              scrollPercent = currentDocument?.currentScrollPercent ?? 0;
+              break;
           }
-          : null;
+          
+          legacyParsed = {
+            scrollPercent: scrollPercent ?? undefined,
+            pageNumber: pageNumber,
+            updatedAt: remoteUpdatedAt || Date.now(),
+          };
+        } else {
+          legacyParsed = hasRemoteProgress
+            ? {
+              scrollPercent: currentDocument.currentScrollPercent,
+              pageNumber: currentDocument.currentPage ?? undefined,
+              updatedAt: remoteUpdatedAt || Date.now(),
+            }
+            : null;
+        }
       }
 
       if (legacyParsed) {
@@ -1799,14 +1844,14 @@ export function DocumentViewer({
             />
           </div>
         ) : docType === "markdown" ? (
-          <div className="p-8 bg-background min-h-full mobile-reading-surface">
+          <div className="reading-surface min-h-full">
             <MarkdownViewer document={currentDocument} content={currentDocument.content} />
           </div>
         ) : docType === "html" ? (
-          <div className="p-8 bg-background min-h-[500px] mobile-reading-surface">
-            <h1 className="text-2xl font-bold mb-4 mobile-reading-title">{currentDocument.title}</h1>
+          <div className="reading-surface min-h-[500px]">
+            <h1 className="reading-title">{currentDocument.title}</h1>
             <div
-              className="prose prose-sm max-w-none dark:prose-invert mobile-reading-prose"
+              className="prose prose-sm max-w-none dark:prose-invert reading-prose"
               dangerouslySetInnerHTML={{ __html: currentDocument.content || "" }}
             />
           </div>
