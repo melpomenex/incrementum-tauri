@@ -6,7 +6,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Youtube, Clock, ExternalLink, Share2 } from "lucide-react";
 import { useToast } from "../common/Toast";
-import { YouTubeCookieUpload } from "../settings/YouTubeCookieUpload";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
 import { getYouTubeEmbedURL, getYouTubeWatchURL, formatDuration } from "../../api/youtube";
@@ -36,7 +35,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const playerRef = useRef<any>(null);
   const toast = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
-  const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastVideoIdRef = useRef<string | null>(null);
@@ -47,8 +45,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const titleRef = useRef(title);
   const startTimeRef = useRef(0);
   const isPlayingRef = useRef(false);
-  const isMountedRef = useRef(true);
-  const playerInitializingRef = useRef(false);
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -219,13 +215,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const initializePlayer = useCallback(() => {
     if (useIframeFallback) return;
     if (!containerRef.current) return;
-    if (!isMountedRef.current) return;
-    
-    // Prevent double initialization (React Strict Mode)
-    if (playerInitializingRef.current) {
-      console.log('[YouTubeViewer] Player already initializing, skipping...');
-      return;
-    }
 
     // Wait for position to be loaded before initializing
     if (!positionLoaded) {
@@ -249,8 +238,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       }
       return;
     }
-    
-    playerInitializingRef.current = true;
 
     try {
       // Check if container is still valid
@@ -259,18 +246,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         return;
       }
 
-      // Create a dedicated div for the player to avoid React DOM conflicts
-      // Clear any existing content first
-      while (containerRef.current.firstChild) {
-        containerRef.current.removeChild(containerRef.current.firstChild);
-      }
-      
-      const playerDiv = document.createElement('div');
-      playerDiv.id = `youtube-player-inner-${videoId}-${Date.now()}`;
-      containerRef.current.appendChild(playerDiv);
-      playerContainerRef.current = playerDiv;
-
-      playerRef.current = new window.YT.Player(playerDiv, {
+      playerRef.current = new window.YT.Player(containerRef.current, {
         videoId,
         playerVars: {
           autoplay: 0,
@@ -282,9 +258,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         },
         events: {
           onReady: (event: any) => {
-            playerInitializingRef.current = false;
-            if (!isMountedRef.current) return;
-            
             try {
               setIsReady(true);
               const playerDuration = event.target?.getDuration() || 0;
@@ -301,7 +274,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
               if (intervalRef.current) clearInterval(intervalRef.current);
               intervalRef.current = setInterval(() => {
                 try {
-                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isMountedRef.current) {
+                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
                     const time = playerRef.current.getCurrentTime();
                     setCurrentTime(time);
                   }
@@ -314,7 +287,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
               if (autoSaveIntervalRef.current) clearInterval(autoSaveIntervalRef.current);
               autoSaveIntervalRef.current = setInterval(() => {
                 try {
-                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlayingRef.current && isMountedRef.current) {
+                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlayingRef.current) {
                     const time = playerRef.current.getCurrentTime();
                     saveCurrentPosition(time);
                   }
@@ -327,8 +300,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
             }
           },
           onStateChange: (event: any) => {
-            if (!isMountedRef.current) return;
-            
             try {
               const playerState = event.target?.getPlayerState();
               const wasPlaying = isPlayingRef.current;
@@ -347,7 +318,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
             }
           },
           onError: (event: any) => {
-            playerInitializingRef.current = false;
             console.error("[YouTubeViewer] Player error:", event.data);
             // Fallback to iframe on error
             if (event.data === 2 || event.data === 5 || event.data === 100 || event.data === 101 || event.data === 150) {
@@ -367,14 +337,11 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
 
   // Load YouTube IFrame API (skip if using iframe fallback, especially in Tauri)
   useEffect(() => {
-    isMountedRef.current = true;
-    
     // Don't load YouTube API in Tauri or when using iframe fallback - it causes crashes
     if (useIframeFallback) {
       console.log('[YouTubeViewer] Skipping YouTube API load (using iframe fallback)');
       // Clean up any existing player on unmount
       return () => {
-        isMountedRef.current = false;
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
@@ -393,7 +360,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     if (window.YT && window.YT.Player) {
       initializePlayer();
       return () => {
-        isMountedRef.current = false;
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
@@ -458,9 +424,6 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
     }, 5000);
 
     return () => {
-      isMountedRef.current = false;
-      playerInitializingRef.current = false;
-      
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId);
       }
@@ -490,22 +453,11 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       // Safer to destroy.
       try {
         if (playerRef.current && typeof playerRef.current.destroy === 'function') {
-          // Destroy the player but don't null it yet - let the cleanup happen
           playerRef.current.destroy();
+          playerRef.current = null;
         }
       } catch (e) {
         // Ignore errors on destroy
-      }
-      playerRef.current = null;
-      
-      // Clean up the player div we created
-      if (playerContainerRef.current && playerContainerRef.current.parentNode) {
-        try {
-          playerContainerRef.current.parentNode.removeChild(playerContainerRef.current);
-        } catch (e) {
-          // Already removed or not in DOM
-        }
-        playerContainerRef.current = null;
       }
     };
   }, [initializePlayer, saveCurrentPosition, positionLoaded, useIframeFallback]);
@@ -628,21 +580,16 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   };
 
   const showOverlay = !useIframeFallback && !isReady;
-  
-  // Use a key to force remount when videoId or fallback mode changes
-  // This prevents React DOM reconciliation issues with the YouTube API
-  const playerKey = `${videoId}-${useIframeFallback ? 'iframe' : 'api'}`;
 
   return (
-    <div key={playerKey} className="flex flex-col h-full bg-background">
-      {/* Video Player Container - 16:9 aspect ratio */}
-      <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%", height: 0 }}>
+    <div className="flex flex-col h-full bg-background">
+      {/* Video Player Container */}
+      <div className="relative bg-black" style={{ paddingBottom: "56.25%" }}>
         {/* YouTube iframe - don't render in Tauri as it causes crashes */}
         {useIframeFallback && !isTauri() ? (
           <iframe
             title={title || "YouTube video"}
             className="absolute inset-0 w-full h-full"
-            style={{ width: '100%', height: '100%', border: 'none' }}
             src={getYouTubeEmbedURL(videoId, startTimeRef.current)}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
@@ -655,6 +602,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
           <div
             ref={containerRef}
             className="absolute inset-0 w-full h-full"
+            id={`youtube-player-${videoId}`}
           />
         )}
 
@@ -853,7 +801,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                     <p className="mb-2">No transcript available for this video</p>
                     
                     {transcriptError ? (
-                      <div className="mt-4 space-y-3">
+                      <div className="mt-4 space-y-2">
                         {transcriptError.includes('does not have captions') ? (
                           <p className="text-sm text-muted-foreground">
                             This video doesn&apos;t have captions or subtitles enabled by the creator.
@@ -866,17 +814,11 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                           <p className="text-sm text-muted-foreground">
                             YouTube requires additional consent for this video. Transcripts cannot be fetched.
                           </p>
-                        ) : transcriptError.includes('auth') || transcriptError.includes('expired') || transcriptError.includes('bot detection') || transcriptError.includes('blocking transcript') || transcriptError.includes('Sign in to confirm') || transcriptError.includes('automated') ? (
-                          <div className="space-y-3">
-                            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                              <p className="text-xs text-amber-600 mb-1">
-                                <strong>YouTube Authentication Needed</strong>
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                YouTube is blocking transcript requests. Upload your YouTube cookies below to fix this.
-                              </p>
-                            </div>
-                            <YouTubeCookieUpload onCookiesUpdated={loadTranscript} />
+                        ) : transcriptError.includes('bot detection') || transcriptError.includes('blocking transcript') || transcriptError.includes('Sign in to confirm') ? (
+                          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                            <p className="text-xs text-amber-600">
+                              <strong>Bot Detection:</strong> YouTube is requiring sign-in for this video. To fix this, open YouTube in your browser first, or export your browser cookies for yt-dlp.
+                            </p>
                           </div>
                         ) : transcriptError.includes('CORS') || transcriptError.includes('local development') ? (
                           <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
@@ -885,12 +827,9 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                             </p>
                           </div>
                         ) : (
-                          <>
-                            <p className="text-xs text-muted-foreground">
-                              Error: {transcriptError}
-                            </p>
-                            <YouTubeCookieUpload onCookiesUpdated={loadTranscript} />
-                          </>
+                          <p className="text-xs text-muted-foreground">
+                            Error: {transcriptError}
+                          </p>
                         )}
                       </div>
                     ) : (

@@ -2,11 +2,7 @@
  * Browser-based YouTube transcript fetching
  * Uses CORS proxies to access YouTube's transcript data
  * Falls back to Vercel API endpoint when deployed on Vercel
- * 
- * Now supports user-provided cookies for authentication
  */
-
-import { getCookiesForApi, YouTubeCookie } from '../lib/youtubeCookies';
 
 export interface TranscriptSegment {
   text: string;
@@ -217,30 +213,13 @@ function parseTranscriptXml(xmlText: string): TranscriptSegment[] {
 
 /**
  * Try to fetch transcript from API endpoint
- * Includes user-provided cookies if available
  */
 async function fetchFromApi(videoId: string, language?: string): Promise<TranscriptResponse | null> {
   try {
     const params = new URLSearchParams({ videoId });
     if (language) params.append('language', language);
 
-    // Get user-provided cookies from IndexedDB
-    const cookies = await getCookiesForApi();
-    const hasCookies = cookies.length > 0;
-    
-    if (hasCookies) {
-      console.log(`[YouTubeTranscript] Including ${cookies.length} cookies in request`);
-    }
-
-    const response = await fetch(`/api/youtube/transcript?${params.toString()}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        cookies: cookies.length > 0 ? cookies : undefined,
-      }),
-    });
+    const response = await fetch(`/api/youtube/transcript?${params.toString()}`);
     
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
@@ -253,14 +232,7 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
     if (!response.ok || !data.success) {
       // Handle specific error codes
       if (data.code === 'YOUTUBE_BOT_DETECTED') {
-        const msg = data.auth?.clientCookies 
-          ? 'YouTube is still blocking requests. Your cookies may have expired - try uploading fresh ones.'
-          : 'YouTube is blocking transcript requests due to bot detection. Try uploading your YouTube cookies in settings.';
-        throw new Error(msg);
-      }
-      if (data.code === 'YOUTUBE_AUTH_ERROR') {
-        const msg = data.auth?.message || 'YouTube authentication failed. Your cookies may have expired.';
-        throw new Error(msg);
+        throw new Error('YouTube is blocking transcript requests due to bot detection. This is a temporary limitation.');
       }
       if (data.code === 'YOUTUBE_CONSENT_REQUIRED') {
         throw new Error('YouTube requires consent. Please try a different video.');
