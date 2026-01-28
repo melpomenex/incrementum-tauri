@@ -5,17 +5,23 @@ import { TabContextMenu } from "./TabContextMenu";
 interface TabBarProps {
   tabs: Tab[];
   activeTabId: string | null;
+  paneId?: string;
   onTabClick: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
   onTabMove?: (fromIndex: number, toIndex: number) => void;
+  onDragStart?: (tabId: string) => void;
+  onDragEnd?: () => void;
 }
 
 export function TabBar({
   tabs,
   activeTabId,
+  paneId,
   onTabClick,
   onTabClose,
   onTabMove,
+  onDragStart,
+  onDragEnd,
 }: TabBarProps) {
   const [contextMenu, setContextMenu] = useState<{
     tabId: string;
@@ -23,7 +29,9 @@ export function TabBar({
     y: number;
   } | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const dragCounter = useRef(0);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -38,14 +46,12 @@ export function TabBar({
     if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // Convert vertical scroll to horizontal scroll
       if (e.deltaY !== 0) {
         e.preventDefault();
         container.scrollLeft += e.deltaY;
       }
     };
 
-    // Add event listener with passive: false to allow preventDefault
     container.addEventListener("wheel", handleWheel, { passive: false });
 
     return () => {
@@ -53,33 +59,86 @@ export function TabBar({
     };
   }, []);
 
-  const handleContextMenu = (
-    e: React.MouseEvent,
-    tabId: string
-  ) => {
+  const handleContextMenu = (e: React.MouseEvent, tabId: string) => {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ tabId, x: e.clientX, y: e.clientY });
   };
 
-  const handleDragStart = (index: number) => {
+  const handleDragStart = (index: number, tabId: string, e: React.DragEvent) => {
     setDraggedIndex(index);
+    
+    // Set drag image
+    const tabElement = e.currentTarget as HTMLElement;
+    const rect = tabElement.getBoundingClientRect();
+    
+    // Create a ghost image
+    const ghost = tabElement.cloneNode(true) as HTMLElement;
+    ghost.style.position = "fixed";
+    ghost.style.top = "-1000px";
+    ghost.style.left = "-1000px";
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.opacity = "0.8";
+    ghost.style.transform = "scale(1.05)";
+    document.body.appendChild(ghost);
+    
+    e.dataTransfer.setDragImage(ghost, rect.width / 2, 20);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify({ 
+      tabId, 
+      sourcePaneId: paneId,
+      sourceIndex: index 
+    }));
+    
+    // Clean up ghost after drag starts
+    setTimeout(() => document.body.removeChild(ghost), 0);
+    
+    onDragStart?.(tabId);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    if (draggedIndex === null || draggedIndex === index) {
+      setDragOverIndex(null);
+      return;
+    }
+    
+    setDragOverIndex(index);
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setDragOverIndex(null);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current++;
   };
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    
     if (draggedIndex !== null && draggedIndex !== dropIndex && onTabMove) {
       onTabMove(draggedIndex, dropIndex);
     }
+    
     setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   const handleDragEnd = () => {
     setDraggedIndex(null);
+    setDragOverIndex(null);
+    onDragEnd?.();
   };
 
   const scrollLeft = () => {
@@ -115,19 +174,21 @@ export function TabBar({
           {tabs.map((tab, index) => {
             const isActive = tab.id === activeTabId;
             const isDragging = draggedIndex === index;
+            const isDragOver = dragOverIndex === index;
 
             return (
               <div
                 key={tab.id}
                 draggable={tab.closable}
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={handleDragOver}
+                onDragStart={(e) => handleDragStart(index, tab.id, e)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, index)}
                 onDragEnd={handleDragEnd}
                 onContextMenu={(e) => handleContextMenu(e, tab.id)}
                 onClick={() => onTabClick(tab.id)}
                 onAuxClick={(e) => {
-                  // Middle-click (button 1) to close tab
                   if (e.button === 1 && tab.closable) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -139,7 +200,8 @@ export function TabBar({
                   border-r border-border border-t-2
                   transition-colors select-none min-w-fit
                   min-h-[36px] md:min-h-[44px]
-                  ${isDragging ? "opacity-50" : ""}
+                  ${isDragging ? "opacity-30" : ""}
+                  ${isDragOver ? "bg-primary/10" : ""}
                   ${
                     isActive
                       ? "bg-background border-t-primary text-foreground"
@@ -149,6 +211,14 @@ export function TabBar({
                 `}
                 style={{ cursor: tab.closable ? "grab" : "default" }}
               >
+                {/* Drag indicator line */}
+                {isDragOver && draggedIndex !== null && draggedIndex > index && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-primary z-10" />
+                )}
+                {isDragOver && draggedIndex !== null && draggedIndex < index && (
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-primary z-10" />
+                )}
+
                 {/* Tab icon */}
                 <span className="text-xs md:text-sm">{tab.icon}</span>
 
@@ -178,6 +248,28 @@ export function TabBar({
               </div>
             );
           })}
+          
+          {/* Empty drop zone at the end */}
+          {tabs.length > 0 && (
+            <div
+              className="flex-1 min-w-[50px] h-full"
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (draggedIndex !== null) {
+                  setDragOverIndex(tabs.length);
+                }
+              }}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggedIndex !== null && onTabMove) {
+                  onTabMove(draggedIndex, tabs.length);
+                }
+                setDragOverIndex(null);
+                setDraggedIndex(null);
+              }}
+            />
+          )}
         </div>
 
         {/* Right scroll button */}

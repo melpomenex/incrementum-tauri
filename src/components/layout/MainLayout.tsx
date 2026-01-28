@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { useTabsStore } from "../../stores";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTabsStore, createTabPane } from "../../stores";
 import { useDocumentStore } from "../../stores";
 import { useGlobalShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { useShortcut } from "../common/KeyboardShortcuts";
@@ -13,9 +13,9 @@ import { MobileLayoutWrapper } from "../mobile/MobileLayoutWrapper";
 
 export function MainLayout() {
   const tabs = useTabsStore((state) => state.tabs);
+  const rootPane = useTabsStore((state) => state.rootPane);
   const addTab = useTabsStore((state) => state.addTab);
   const loadTabs = useTabsStore((state) => state.loadTabs);
-  const activeTabId = useTabsStore((state) => state.activeTabId);
   const setActiveTab = useTabsStore((state) => state.setActiveTab);
   const updateTab = useTabsStore((state) => state.updateTab);
   const closeTab = useTabsStore((state) => state.closeTab);
@@ -24,6 +24,26 @@ export function MainLayout() {
   const initializedRef = useRef(false);
   const [vimiumEnabled] = useVimiumEnabled();
   const documentsLoadedRef = useRef(false);
+  const [activePaneTabId, setActivePaneTabId] = useState<string | null>(null);
+  
+  // Find the first tab pane and its active tab for keyboard navigation
+  useEffect(() => {
+    const findFirstTabPane = (pane: typeof rootPane): typeof rootPane | null => {
+      if (pane.type === "tabs") return pane;
+      if (pane.type === "split") {
+        for (const child of pane.children) {
+          const found = findFirstTabPane(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    
+    const firstPane = findFirstTabPane(rootPane);
+    if (firstPane && firstPane.type === "tabs") {
+      setActivePaneTabId(firstPane.activeTabId);
+    }
+  }, [rootPane]);
 
   // Setup keyboard shortcuts
   useGlobalShortcuts();
@@ -44,26 +64,29 @@ export function MainLayout() {
 
     // If no tabs exist, create default tabs
     if (tabs.length === 0) {
-      // Add Dashboard tab (non-closable)
-      addTab({
-        title: "Dashboard",
-        icon: "📊",
-        type: "dashboard",
-        content: DashboardTab,
-        closable: false,
-      });
-
-      // Add Queue tab (closable)
-      addTab({
-        title: "Queue",
-        icon: "📚",
-        type: "queue",
-        content: QueueTab,
-        closable: true,
-      });
-    } else {
-      // Load saved tabs from localStorage if any
+      // Load saved tabs first to check if there's a persisted layout
       loadTabs();
+      
+      // If still no tabs after loading, create defaults
+      if (useTabsStore.getState().tabs.length === 0) {
+        // Add Dashboard tab (non-closable)
+        addTab({
+          title: "Dashboard",
+          icon: "📊",
+          type: "dashboard",
+          content: DashboardTab,
+          closable: false,
+        });
+
+        // Add Queue tab (closable)
+        addTab({
+          title: "Queue",
+          icon: "📚",
+          type: "queue",
+          content: QueueTab,
+          closable: true,
+        });
+      }
     }
   }, []);
 
@@ -200,7 +223,7 @@ export function MainLayout() {
       name: "close-tab",
       description: "Close the active tab",
       action: () => {
-        if (activeTabId) closeTab(activeTabId);
+        if (activePaneTabId) closeTab(activePaneTabId);
       },
       aliases: ["close"],
     },
@@ -216,10 +239,17 @@ export function MainLayout() {
       name: "next-tab",
       description: "Switch to the next tab",
       action: () => {
-        if (tabs.length === 0 || !activeTabId) return;
-        const index = tabs.findIndex((tab) => tab.id === activeTabId);
-        const next = tabs[(index + 1) % tabs.length];
-        if (next) setActiveTab(next.id);
+        // Find first tab pane and cycle through its tabs
+        const paneIds = useTabsStore.getState().getTabPaneIds();
+        if (paneIds.length === 0) return;
+        const firstPane = useTabsStore.getState().findPaneById(paneIds[0]);
+        if (firstPane && firstPane.type === "tabs") {
+          const currentIndex = firstPane.tabIds.findIndex((id) => id === firstPane.activeTabId);
+          const nextIndex = (currentIndex + 1) % firstPane.tabIds.length;
+          if (firstPane.tabIds[nextIndex]) {
+            setActiveTab(firstPane.id, firstPane.tabIds[nextIndex]);
+          }
+        }
       },
     },
     {
@@ -227,14 +257,21 @@ export function MainLayout() {
       name: "prev-tab",
       description: "Switch to the previous tab",
       action: () => {
-        if (tabs.length === 0 || !activeTabId) return;
-        const index = tabs.findIndex((tab) => tab.id === activeTabId);
-        const prev = tabs[(index - 1 + tabs.length) % tabs.length];
-        if (prev) setActiveTab(prev.id);
+        // Find first tab pane and cycle through its tabs
+        const paneIds = useTabsStore.getState().getTabPaneIds();
+        if (paneIds.length === 0) return;
+        const firstPane = useTabsStore.getState().findPaneById(paneIds[0]);
+        if (firstPane && firstPane.type === "tabs") {
+          const currentIndex = firstPane.tabIds.findIndex((id) => id === firstPane.activeTabId);
+          const prevIndex = currentIndex <= 0 ? firstPane.tabIds.length - 1 : currentIndex - 1;
+          if (firstPane.tabIds[prevIndex]) {
+            setActiveTab(firstPane.id, firstPane.tabIds[prevIndex]);
+          }
+        }
       },
       aliases: ["previous-tab"],
     },
-  ]), [addTab, openWebUrl, activeTabId, closeTab, reopenLastClosedTab, tabs, setActiveTab]);
+  ]), [addTab, openWebUrl, activePaneTabId, closeTab, reopenLastClosedTab, setActiveTab]);
 
   const vimiumActions = useMemo(() => ({
     goBack: () => window.history.back(),
@@ -242,30 +279,54 @@ export function MainLayout() {
     reload: () => window.location.reload(),
     openUrl: openWebUrl,
     nextTab: () => {
-      if (tabs.length === 0 || !activeTabId) return;
-      const index = tabs.findIndex((tab) => tab.id === activeTabId);
-      if (index === -1) return;
-      const next = tabs[(index + 1) % tabs.length];
-      if (next) setActiveTab(next.id);
+      // Find first tab pane and cycle through its tabs
+      const paneIds = useTabsStore.getState().getTabPaneIds();
+      if (paneIds.length === 0) return;
+      const firstPane = useTabsStore.getState().findPaneById(paneIds[0]);
+      if (firstPane && firstPane.type === "tabs") {
+        const currentIndex = firstPane.tabIds.findIndex((id) => id === firstPane.activeTabId);
+        const nextIndex = (currentIndex + 1) % firstPane.tabIds.length;
+        if (firstPane.tabIds[nextIndex]) {
+          setActiveTab(firstPane.id, firstPane.tabIds[nextIndex]);
+        }
+      }
     },
     previousTab: () => {
-      if (tabs.length === 0 || !activeTabId) return;
-      const index = tabs.findIndex((tab) => tab.id === activeTabId);
-      if (index === -1) return;
-      const prev = tabs[(index - 1 + tabs.length) % tabs.length];
-      if (prev) setActiveTab(prev.id);
+      // Find first tab pane and cycle through its tabs
+      const paneIds = useTabsStore.getState().getTabPaneIds();
+      if (paneIds.length === 0) return;
+      const firstPane = useTabsStore.getState().findPaneById(paneIds[0]);
+      if (firstPane && firstPane.type === "tabs") {
+        const currentIndex = firstPane.tabIds.findIndex((id) => id === firstPane.activeTabId);
+        const prevIndex = currentIndex <= 0 ? firstPane.tabIds.length - 1 : currentIndex - 1;
+        if (firstPane.tabIds[prevIndex]) {
+          setActiveTab(firstPane.id, firstPane.tabIds[prevIndex]);
+        }
+      }
     },
     firstTab: () => {
-      if (tabs.length > 0) setActiveTab(tabs[0].id);
+      // Find first tab pane and select its first tab
+      const paneIds = useTabsStore.getState().getTabPaneIds();
+      if (paneIds.length === 0) return;
+      const firstPane = useTabsStore.getState().findPaneById(paneIds[0]);
+      if (firstPane && firstPane.type === "tabs" && firstPane.tabIds.length > 0) {
+        setActiveTab(firstPane.id, firstPane.tabIds[0]);
+      }
     },
     lastTab: () => {
-      if (tabs.length > 0) setActiveTab(tabs[tabs.length - 1].id);
+      // Find first tab pane and select its last tab
+      const paneIds = useTabsStore.getState().getTabPaneIds();
+      if (paneIds.length === 0) return;
+      const firstPane = useTabsStore.getState().findPaneById(paneIds[0]);
+      if (firstPane && firstPane.type === "tabs" && firstPane.tabIds.length > 0) {
+        setActiveTab(firstPane.id, firstPane.tabIds[firstPane.tabIds.length - 1]);
+      }
     },
     closeTab: () => {
-      if (activeTabId) closeTab(activeTabId);
+      if (activePaneTabId) closeTab(activePaneTabId);
     },
     restoreTab: () => reopenLastClosedTab(),
-  }), [tabs, activeTabId, setActiveTab, closeTab, reopenLastClosedTab]);
+  }), [activePaneTabId, closeTab, reopenLastClosedTab, setActiveTab]);
 
   return (
     <MobileLayoutWrapper>

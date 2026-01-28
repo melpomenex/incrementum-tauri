@@ -128,7 +128,24 @@ export function MobileNavigation({
   unreadCount = 0,
   hidden = false,
 }: MobileNavigationProps) {
-  const { tabs, activeTabId, addTab, setActiveTab } = useTabsStore();
+  const { tabs, rootPane, addTab, setActiveTab } = useTabsStore();
+  
+  // Get active tab ID from the first tab pane
+  const activeTabId = useMemo(() => {
+    const findFirstTabPane = (pane: typeof rootPane): { type: "tabs"; id: string; tabIds: string[]; activeTabId: string | null } | null => {
+      if (pane.type === "tabs") return pane;
+      if (pane.type === "split") {
+        for (const child of pane.children) {
+          const found = findFirstTabPane(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const firstPane = findFirstTabPane(rootPane);
+    return firstPane?.activeTabId ?? null;
+  }, [rootPane]);
+  
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? null,
     [tabs, activeTabId]
@@ -137,7 +154,21 @@ export function MobileNavigation({
   const openTab = (item: NavItem) => {
     const existing = tabs.find((tab) => tab.type === item.tabType);
     if (existing) {
-      setActiveTab(existing.id);
+      // Find the pane containing this tab and activate it
+      const findPaneContainingTab = (pane: typeof rootPane): { type: "tabs"; id: string; tabIds: string[]; activeTabId: string | null } | null => {
+        if (pane.type === "tabs" && pane.tabIds.includes(existing.id)) return pane;
+        if (pane.type === "split") {
+          for (const child of pane.children) {
+            const found = findPaneContainingTab(child);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      const pane = findPaneContainingTab(rootPane);
+      if (pane) {
+        setActiveTab(pane.id, existing.id);
+      }
       return;
     }
 

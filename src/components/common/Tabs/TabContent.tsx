@@ -51,7 +51,6 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
           for (const webview of webviews) {
             if (webview.label === "web-browser") {
               console.log("Hiding web-browser webview due to tab switch");
-              // First move off-screen to immediately hide, then close
               try {
                 await webview.setPosition(new LogicalPosition(-10000, -10000));
                 await webview.setSize(new LogicalSize(1, 1));
@@ -76,7 +75,6 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
         }
       };
 
-      // Execute immediately
       void hideWebview();
     }
   }, [activeTab?.type]);

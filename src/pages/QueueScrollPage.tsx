@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import type { TabPane } from "../stores/tabsStore";
 import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2, Lightbulb, MessageSquare, Code } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueueStore } from "../stores/queueStore";
@@ -56,8 +57,24 @@ interface ScrollItem {
 export function QueueScrollPage() {
   const { filteredItems: allQueueItems, loadQueue } = useQueueStore();
   const { documents, loadDocuments, addDocument, updateDocument } = useDocumentStore();
-  const { tabs, activeTabId, closeTab, updateTab } = useTabsStore();
+  const { tabs, rootPane, closeTab, updateTab } = useTabsStore();
   const { settings, updateSettingsCategory } = useSettingsStore();
+  
+  // Get active tab ID from the first tab pane
+  const activeTabId = useMemo(() => {
+    const findFirstTabPane = (pane: typeof rootPane): TabPane | null => {
+      if (pane.type === "tabs") return pane;
+      if (pane.type === "split") {
+        for (const child of pane.children) {
+          const found = findFirstTabPane(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const firstPane = findFirstTabPane(rootPane);
+    return firstPane?.activeTabId ?? null;
+  }, [rootPane]);
   const toast = useToast();
   const contextWindowTokens = settings.ai.maxTokens;
   const aiModel = settings.ai.model;

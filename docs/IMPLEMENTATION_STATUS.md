@@ -204,18 +204,6 @@ Performance optimizations and final polish.
 
 ---
 
-## Active Development
-
-### Current Sprint Focus
-
-| Priority | Feature | Owner | Target |
-|----------|---------|-------|--------|
-| P0 | Scroll mode reading | Team | Week 1 |
-| P0 | Document grid covers | Team | Week 1 |
-| P1 | Cloud sync architecture | Team | Week 2 |
-| P1 | Extension improvements | Team | Week 2 |
-| P2 | Heatmap analytics | Team | Week 3 |
-
 ### OpenSpec Changes
 
 Active change proposals in `openspec/changes/`:
