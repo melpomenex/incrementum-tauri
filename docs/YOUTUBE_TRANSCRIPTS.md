@@ -51,6 +51,27 @@ Run the Tauri app locally for full functionality:
 npm run tauri:dev
 ```
 
+## Authentication (Recommended)
+
+To avoid bot detection and ensure reliable transcript fetching, **users can upload their own YouTube cookies** directly in the app:
+
+**See [YouTube Cookies Setup Guide](./YOUTUBE_COOKIES_SETUP.md) for detailed instructions.**
+
+### Quick Summary
+1. Install the "Get cookies.txt" browser extension
+2. Go to YouTube and make sure you're logged in
+3. Click the extension to export cookies
+4. When viewing a YouTube video in the app, click "Add YouTube Cookies"
+5. Paste and save
+
+Cookies are stored **locally in your browser** (IndexedDB) and are only used for transcript fetching.
+
+### Why This Helps
+- Makes requests appear legitimate to YouTube
+- Avoids bot detection blocks
+- Allows fetching transcripts from videos that require sign-in
+- Each user uses their own account (better for privacy)
+
 ## Troubleshooting
 
 ### "No transcript available" in local development
@@ -69,7 +90,17 @@ Not all YouTube videos have transcripts. The video must have:
 If deployed to Vercel and transcripts fail:
 1. Check Vercel Functions logs in the dashboard
 2. Ensure the video has captions
-3. YouTube may be rate-limiting the serverless functions
+3. Check if YouTube is requiring sign-in (bot detection)
+4. **Set up cookie authentication** (see above)
+
+### "Bot Detection" or "Sign in to confirm" errors
+YouTube is blocking automated requests. Solutions:
+1. **Best:** Set up [cookie authentication](./YOUTUBE_COOKIES_SETUP.md)
+2. **Alternative:** The errors may resolve after some time as YouTube rotates blocks
+3. Some videos consistently require sign-in - these may not be accessible
+
+### "Cookies may be expired or invalid" error
+Your exported cookies have expired. **Solution:** Export fresh cookies from your browser and update the environment variable.
 
 ## Technical Implementation
 

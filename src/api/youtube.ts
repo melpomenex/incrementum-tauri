@@ -329,15 +329,19 @@ export function getYouTubeWatchURL(videoId: string): string {
  * Get YouTube embed URL
  */
 export function getYouTubeEmbedURL(videoId: string, startTime?: number): string {
-  // Use Invidious (open-source YouTube frontend) for embeds - much more stable in Tauri's WebView
-  // Invidious provides a simpler embed player without the complex JavaScript that crashes WebView
-  // Using a reliable public instance
-  const url = `https://invidious.privacydev.net/embed/${videoId}`;
+  // Use YouTube's native embed URL
+  const url = `https://www.youtube.com/embed/${videoId}`;
   const params = new URLSearchParams();
+  
+  // Add parameters for cleaner embed
+  params.set('rel', '0'); // Don't show related videos
+  params.set('modestbranding', '1'); // Minimal YouTube branding
+  
   if (startTime) {
     params.set('start', String(Math.floor(startTime)));
   }
-  return params.toString() ? `${url}?${params.toString()}` : url;
+  
+  return `${url}?${params.toString()}`;
 }
 
 /**
