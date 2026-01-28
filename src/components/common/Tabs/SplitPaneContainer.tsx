@@ -130,8 +130,8 @@ function SplitView({
       const newSizes = [...startSizesRef.current];
       const idx = resizeIndexRef.current;
       
-      newSizes[idx] = Math.max(10, Math.min(90, newSizes[idx] + delta));
-      newSizes[idx + 1] = Math.max(10, Math.min(90, 100 - newSizes[idx]));
+      newSizes[idx] = Math.max(15, Math.min(85, newSizes[idx] + delta));
+      newSizes[idx + 1] = Math.max(15, Math.min(85, 100 - newSizes[idx]));
       
       // Normalize to 100%
       const total = newSizes.reduce((a, b) => a + b, 0);
@@ -168,7 +168,7 @@ function SplitView({
           className="flex flex-col overflow-hidden"
           style={{ 
             flex: `0 0 ${pane.sizes[index]}%`,
-            minWidth: isHorizontal ? "100px" : undefined,
+            minWidth: isHorizontal ? "150px" : undefined,
             minHeight: !isHorizontal ? "100px" : undefined,
           }}
         >

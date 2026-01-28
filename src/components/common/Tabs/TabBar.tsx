@@ -30,8 +30,26 @@ export function TabBar({
   } | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
+
+  // Detect narrow container
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        setIsNarrow(width < 300);
+      }
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -68,11 +86,9 @@ export function TabBar({
   const handleDragStart = (index: number, tabId: string, e: React.DragEvent) => {
     setDraggedIndex(index);
     
-    // Set drag image
     const tabElement = e.currentTarget as HTMLElement;
     const rect = tabElement.getBoundingClientRect();
     
-    // Create a ghost image
     const ghost = tabElement.cloneNode(true) as HTMLElement;
     ghost.style.position = "fixed";
     ghost.style.top = "-1000px";
@@ -90,7 +106,6 @@ export function TabBar({
       sourceIndex: index 
     }));
     
-    // Clean up ghost after drag starts
     setTimeout(() => document.body.removeChild(ghost), 0);
     
     onDragStart?.(tabId);
@@ -155,14 +170,18 @@ export function TabBar({
 
   return (
     <>
-      <div className="flex items-center bg-card border-b border-border">
-        {/* Left scroll button */}
+      <div ref={containerRef} className="flex items-center bg-card border-b border-border">
+        {/* Left scroll button - compact in narrow mode */}
         <button
           onClick={scrollLeft}
-          className="p-1 md:p-2 hover:bg-muted transition-colors border-r border-border min-w-[36px] md:min-w-[44px] min-h-[36px] md:min-h-[44px] flex items-center justify-center"
+          className={`
+            hover:bg-muted transition-colors border-r border-border 
+            flex items-center justify-center flex-shrink-0
+            ${isNarrow ? "min-w-[24px] w-6 p-0.5 min-h-[28px]" : "min-w-[36px] md:min-w-[44px] p-1 md:p-2 min-h-[36px] md:min-h-[44px]"}
+          `}
           aria-label="Scroll tabs left"
         >
-          ◀
+          <span className={isNarrow ? "text-[10px]" : ""}>◀</span>
         </button>
 
         {/* Tab scroll container */}
@@ -196,10 +215,13 @@ export function TabBar({
                   }
                 }}
                 className={`
-                  relative flex items-center gap-1 md:gap-2 px-2 md:px-3 lg:px-4 py-1.5 md:py-2 cursor-pointer
+                  relative flex items-center cursor-pointer
                   border-r border-border border-t-2
-                  transition-colors select-none min-w-fit
-                  min-h-[36px] md:min-h-[44px]
+                  transition-colors select-none flex-shrink-0
+                  ${isNarrow 
+                    ? "gap-0.5 px-1.5 py-1 min-h-[28px] max-w-[80px]" 
+                    : "gap-1 md:gap-2 px-2 md:px-3 lg:px-4 py-1.5 md:py-2 min-h-[36px] md:min-h-[44px]"
+                  }
                   ${isDragging ? "opacity-30" : ""}
                   ${isDragOver ? "bg-primary/10" : ""}
                   ${
@@ -210,6 +232,7 @@ export function TabBar({
                   ${tab.closable ? "group" : ""}
                 `}
                 style={{ cursor: tab.closable ? "grab" : "default" }}
+                title={tab.title}
               >
                 {/* Drag indicator line */}
                 {isDragOver && draggedIndex !== null && draggedIndex > index && (
@@ -219,27 +242,41 @@ export function TabBar({
                   <div className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-primary z-10" />
                 )}
 
-                {/* Tab icon */}
-                <span className="text-xs md:text-sm">{tab.icon}</span>
+                {/* Tab icon - always show */}
+                <span className={isNarrow ? "text-xs" : "text-xs md:text-sm flex-shrink-0"}>
+                  {tab.icon}
+                </span>
 
-                {/* Tab title */}
-                <span className="text-xs md:text-sm font-medium whitespace-nowrap">
+                {/* Tab title - truncate with ellipsis, hide if very narrow */}
+                <span 
+                  className={`
+                    font-medium overflow-hidden text-ellipsis
+                    ${isNarrow 
+                      ? "text-[10px] leading-tight max-w-[40px] hidden @[100px]:inline" 
+                      : "text-xs md:text-sm whitespace-nowrap max-w-[100px] md:max-w-[150px] lg:max-w-[200px]"
+                    }
+                  `}
+                >
                   {tab.title}
                 </span>
 
-                {/* Close button */}
+                {/* Close button - compact in narrow mode */}
                 {tab.closable && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onTabClose(tab.id);
                     }}
-                    className="
-                      ml-0.5 md:ml-1 w-6 h-6 md:w-5 md:h-5 flex items-center justify-center
+                    className={`
+                      flex items-center justify-center flex-shrink-0
                       rounded-sm hover:bg-destructive hover:text-destructive-foreground
                       opacity-100 md:opacity-0 md:group-hover:opacity-100
-                      transition-opacity text-xs md:text-sm
-                    "
+                      transition-opacity
+                      ${isNarrow 
+                        ? "ml-0 w-4 h-4 text-[10px]" 
+                        : "ml-0.5 md:ml-1 w-6 h-6 md:w-5 md:h-5 text-xs md:text-sm"
+                      }
+                    `}
                     aria-label={`Close ${tab.title}`}
                   >
                     ×
@@ -252,7 +289,7 @@ export function TabBar({
           {/* Empty drop zone at the end */}
           {tabs.length > 0 && (
             <div
-              className="flex-1 min-w-[50px] h-full"
+              className="flex-1 min-w-[30px] h-full"
               onDragOver={(e) => {
                 e.preventDefault();
                 if (draggedIndex !== null) {
@@ -272,13 +309,17 @@ export function TabBar({
           )}
         </div>
 
-        {/* Right scroll button */}
+        {/* Right scroll button - compact in narrow mode */}
         <button
           onClick={scrollRight}
-          className="p-1 md:p-2 hover:bg-muted transition-colors border-l border-border min-w-[36px] md:min-w-[44px] min-h-[36px] md:min-h-[44px] flex items-center justify-center"
+          className={`
+            hover:bg-muted transition-colors border-l border-border 
+            flex items-center justify-center flex-shrink-0
+            ${isNarrow ? "min-w-[24px] w-6 p-0.5 min-h-[28px]" : "min-w-[36px] md:min-w-[44px] p-1 md:p-2 min-h-[36px] md:min-h-[44px]"}
+          `}
           aria-label="Scroll tabs right"
         >
-          ▶
+          <span className={isNarrow ? "text-[10px]" : ""}>▶</span>
         </button>
       </div>
 
