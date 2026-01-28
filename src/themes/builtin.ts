@@ -1601,6 +1601,113 @@ export const highContrastDarkTheme: Theme = {
   },
 };
 
+// Lemon Slice Theme - Fresh citrus burst
+export const lemonSliceTheme: Theme = {
+  id: 'lemon-slice',
+  name: 'Lemon Slice',
+  variant: 'light',
+  description: 'Zesty citrus freshness with vibrant lemon hues',
+  colors: {
+    // Base lemon cream background - like lemon meringue
+    background: '#FFFBEB',
+    onBackground: '#451A03',
+    surface: '#FFFFFF',
+    onSurface: '#451A03',
+    surfaceVariant: '#FEF3C7',
+    
+    // Bright lemon yellow primary
+    primary: '#F59E0B',
+    onPrimary: '#FFFFFF',
+    primaryContainer: '#FDE68A',
+    onPrimaryContainer: '#78350F',
+    
+    // Lime green secondary for contrast
+    secondary: '#84CC16',
+    onSecondary: '#FFFFFF',
+    outline: '#FCD34D',
+    outlineVariant: '#FDE68A',
+    
+    // Fresh error/warning colors
+    error: '#EF4444',
+    onError: '#FFFFFF',
+    errorContainer: '#FECACA',
+    onErrorContainer: '#7F1D1D',
+    success: '#22C55E',
+    warning: '#F97316',
+    
+    // Component colors - lemony toolbar/sidebar
+    toolbar: '#FEF9C3',
+    sidebar: '#FEF3C7',
+    card: '#FFFFFF',
+    input: '#FFFFFF',
+    border: '#FCD34D',
+    text: '#451A03',
+    textSecondary: '#92400E',
+    link: '#D97706',
+  },
+  typography: {
+    fontFamily: '"Quicksand", "Nunito", "Segoe UI", "Helvetica Neue", sans-serif',
+    fontSize: {
+      xs: '0.75rem',
+      sm: '0.875rem',
+      md: '1rem',
+      lg: '1.125rem',
+      xl: '1.25rem',
+      '2xl': '1.5rem',
+      '3xl': '1.875rem',
+    },
+    fontWeight: {
+      normal: 400,
+      medium: 500,
+      semibold: 600,
+      bold: 700,
+    },
+    lineHeight: {
+      tight: 1.25,
+      normal: 1.6,
+      relaxed: 1.8,
+    },
+  },
+  spacing: {
+    xs: '0.25rem',
+    sm: '0.5rem',
+    md: '1rem',
+    lg: '1.5rem',
+    xl: '2rem',
+    '2xl': '3rem',
+    '3xl': '4rem',
+  },
+  radius: {
+    none: '0',
+    sm: '0.5rem',
+    md: '0.75rem',
+    lg: '1rem',
+    xl: '1.25rem',
+    '2xl': '1.5rem',
+    full: '9999px',
+  },
+  shadows: {
+    sm: '0 2px 4px 0 rgb(251 191 36 / 0.1)',
+    md: '0 4px 12px -2px rgb(251 191 36 / 0.15)',
+    lg: '0 12px 24px -4px rgb(251 191 36 / 0.2)',
+    xl: '0 24px 48px -8px rgb(251 191 36 / 0.25)',
+  },
+  customCSS: `
+    /* Lemon Slice custom styles */
+    .sidebar-section {
+      background: linear-gradient(180deg, #FEF3C7 0%, #FEF9C3 100%);
+    }
+    .stats-number {
+      color: #D97706;
+      font-weight: 700;
+    }
+    .tab-button-active {
+      background: linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%);
+      color: white;
+    }
+  `,
+};
+
 // Export all built-in themes
 export const builtInThemes: Theme[] = [
   modernDarkTheme,
@@ -1622,4 +1729,5 @@ export const builtInThemes: Theme[] = [
   cartographerTheme,
   highContrastLightTheme,
   highContrastDarkTheme,
+  lemonSliceTheme,
 ];
