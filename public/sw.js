@@ -114,6 +114,13 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
+  // Skip cross-origin requests (e.g., YouTube, external APIs)
+  // Only handle requests to the same origin
+  if (url.origin !== self.location.origin) {
+    // Let the browser handle external requests normally
+    return;
+  }
+
   // Handle API requests with special strategy
   if (url.pathname.startsWith('/api')) {
     event.respondWith(handleApiRequest(request));

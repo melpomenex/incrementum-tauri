@@ -34,11 +34,23 @@ function extractVideoId(url: string): string | null {
  * Extract caption tracks from video page HTML
  */
 function extractCaptionTracks(html: string): Array<{ baseUrl: string; name: string; languageCode: string }> | null {
+  // Check if it's a login page or age restriction first
+  if (html.includes('Sign in to confirm') || html.includes('before you continue') || html.includes('consent.youtube.com')) {
+    throw new Error('YouTube requires sign-in or consent. Cannot fetch transcript.');
+  }
+  if (html.includes('age-restricted') || html.includes('content warning')) {
+    throw new Error('Video is age-restricted. Cannot fetch transcript.');
+  }
+  if (html.includes('bot detection') || html.includes('unusual traffic')) {
+    throw new Error('YOUTUBE_BOT_DETECTED: YouTube has detected automated access.');
+  }
+  
   // Try multiple patterns to find player response
   const patterns = [
     /ytInitialPlayerResponse\s*=\s*({.+?});/,
     /var\s+ytInitialPlayerResponse\s*=\s*({.+?});/,
     /window\["ytInitialPlayerResponse"\]\s*=\s*({.+?});/,
+    /window\.ytInitialPlayerResponse\s*=\s*({.+?});/,
   ];
 
   let playerResponseStr: string | null = null;
@@ -51,17 +63,25 @@ function extractCaptionTracks(html: string): Array<{ baseUrl: string; name: stri
     }
   }
 
+  // Try to find in script tags with JSON (using [\s\S] instead of dotAll flag for compatibility)
   if (!playerResponseStr) {
-    // Check if it's a login page or age restriction
-    if (html.includes('Sign in') || html.includes('before you continue')) {
-      throw new Error('YouTube requires sign-in or consent. Cannot fetch transcript.');
+    const scriptPattern = /<script[^>]*>[\s\S]*?var\s+ytInitialPlayerResponse\s*=\s*({.+?});[\s\S]*?<\/script>/;
+    const scriptMatch = html.match(scriptPattern);
+    if (scriptMatch) {
+      playerResponseStr = scriptMatch[1];
     }
-    if (html.includes('age-restricted') || html.includes('content warning')) {
-      throw new Error('Video is age-restricted. Cannot fetch transcript.');
-    }
-    // Log a snippet of the HTML for debugging
-    const snippet = html.substring(0, 500).replace(/\s+/g, ' ');
+  }
+
+  if (!playerResponseStr) {
+    // Log a snippet of the HTML for debugging (check if it's even a YouTube page)
+    const snippet = html.substring(0, 800).replace(/\s+/g, ' ');
     console.error('Could not find player response. HTML snippet:', snippet);
+    
+    // Check if we got a valid YouTube page at all
+    if (!html.includes('youtube') && !html.includes('ytInitial')) {
+      throw new Error('Invalid response from YouTube (possible redirect or block)');
+    }
+    
     throw new Error('Could not find player response data');
   }
 
@@ -95,7 +115,7 @@ function extractCaptionTracks(html: string): Array<{ baseUrl: string; name: stri
       languageCode: track.languageCode || 'en',
     }));
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith('YouTube error')) {
+    if (e instanceof Error && (e.message.startsWith('YouTube error') || e.message.startsWith('YOUTUBE_BOT_DETECTED'))) {
       throw e;
     }
     console.error('Failed to parse player response:', e);
@@ -136,38 +156,54 @@ function parseTranscriptXml(xmlText: string): TranscriptSegment[] {
 
 /**
  * Try to fetch transcript using innertube API (more reliable)
+ * Updated with newer client version and visitor data
  */
 async function fetchTranscriptViaInnertube(videoId: string): Promise<{ segments: TranscriptSegment[]; language: string } | null> {
   try {
-    // First, get the player's JS to extract the innertube API key
+    // First, get a visitor data token from YouTube's homepage
+    const visitorData = await getVisitorData();
+    
     const playerUrl = `https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8`;
     
     const response = await fetch(playerUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'X-YouTube-Client-Name': '1',
-        'X-YouTube-Client-Version': '2.20240101.00.00',
+        'X-YouTube-Client-Version': '2.20250122.04.00',
+        'Origin': 'https://www.youtube.com',
+        'Referer': 'https://www.youtube.com/',
       },
       body: JSON.stringify({
         videoId,
         context: {
           client: {
             clientName: 'WEB',
-            clientVersion: '2.20240101.00.00',
+            clientVersion: '2.20250122.04.00',
             gl: 'US',
             hl: 'en',
+            visitorData: visitorData || undefined,
           },
         },
       }),
     });
 
     if (!response.ok) {
+      console.log('Innertube API returned non-ok status:', response.status);
       return null;
     }
 
     const data = await response.json();
+    
+    // Check for playability errors
+    const playabilityStatus = data?.playabilityStatus;
+    if (playabilityStatus?.status === 'LOGIN_REQUIRED' || 
+        playabilityStatus?.status === 'ERROR') {
+      console.log('Innertube API playability error:', playabilityStatus);
+      return null;
+    }
+    
     const captionTracks = data?.captions?.captionTracks;
 
     if (!captionTracks || captionTracks.length === 0) {
@@ -175,7 +211,11 @@ async function fetchTranscriptViaInnertube(videoId: string): Promise<{ segments:
     }
 
     const track = captionTracks[0];
-    const transcriptResponse = await fetch(track.baseUrl);
+    const transcriptResponse = await fetch(track.baseUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      },
+    });
     
     if (!transcriptResponse.ok) {
       return null;
@@ -190,6 +230,45 @@ async function fetchTranscriptViaInnertube(videoId: string): Promise<{ segments:
     };
   } catch (error) {
     console.error('Innertube API failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Get visitor data from YouTube homepage
+ */
+async function getVisitorData(): Promise<string | null> {
+  try {
+    const response = await fetch('https://www.youtube.com', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      },
+    });
+    
+    const html = await response.text();
+    
+    // Try to extract visitor data from the page
+    const visitorMatch = html.match(/"visitorData":"([^"]+)"/);
+    if (visitorMatch) {
+      return visitorMatch[1];
+    }
+    
+    // Alternative patterns
+    const ytcfgMatch = html.match(/ytcfg\.set\s*\(\s*({.+?})\s*\)/);
+    if (ytcfgMatch) {
+      try {
+        const ytcfg = JSON.parse(ytcfgMatch[1]);
+        return ytcfg.VISITOR_DATA || null;
+      } catch {
+        // Ignore parse errors
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('Failed to get visitor data:', error);
     return null;
   }
 }

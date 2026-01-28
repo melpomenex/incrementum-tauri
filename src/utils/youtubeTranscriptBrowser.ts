@@ -18,10 +18,14 @@ interface TranscriptResponse {
 
 // CORS proxies to try (in order)
 // Note: These are public CORS proxies that may have rate limits or reliability issues
-const CORS_PROXIES = [
-  'https://api.allorigins.win/get?url=',  // Returns JSON with contents in .contents field
-  'https://api.codetabs.com/v1/proxy?quest=',
+// Many of these have been blocked or have strict rate limits
+const CORS_PROXIES: string[] = [
+  // Most public CORS proxies are now blocked by YouTube or have rate limits
+  // The app should primarily rely on the API endpoint for transcript fetching
 ];
+
+// Flag to disable CORS proxy fallback (recommended for production)
+const DISABLE_CORS_PROXY = true;
 
 // Third-party transcript APIs as last resort
 const TRANSCRIPT_APIS = [
@@ -30,7 +34,7 @@ const TRANSCRIPT_APIS = [
 ];
 
 /**
- * Check if running on Vercel
+ * Check if running on Vercel or production domain
  */
 function isVercel(): boolean {
   if (typeof window === 'undefined') return false;
@@ -38,6 +42,7 @@ function isVercel(): boolean {
   const hostname = window.location.hostname;
   return (
     hostname.includes('vercel.app') ||
+    hostname.includes('readsync.org') ||
     hostname.includes('incrementum') ||
     // Check for env vars that indicate Vercel deployment
     // @ts-expect-error - Vite env var
