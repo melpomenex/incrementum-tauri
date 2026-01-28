@@ -317,19 +317,19 @@ const commandHandlers: Record<string, CommandHandler> = {
         const scrollPercent = args.current_scroll_percent as number | null | undefined;
         const currentCfi = args.current_cfi as string | null | undefined;
         const currentViewState = args.current_view_state as string | null | undefined;
-        
+
         const updates: Partial<db.Document> = {
             current_page: currentPage,
             current_scroll_percent: scrollPercent,
             current_cfi: currentCfi,
             sync_version: Date.now(),
         };
-        
+
         // Also update position_json to keep unified position in sync
         // Try to get existing position first
         const existingDoc = await db.getDocument(id);
         let position: DocumentPosition | null = null;
-        
+
         if (existingDoc?.position_json) {
             try {
                 position = JSON.parse(existingDoc.position_json);
@@ -337,7 +337,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                 position = null;
             }
         }
-        
+
         // Create new unified position based on what's being updated
         if (currentPage !== undefined && currentPage !== null) {
             position = { type: 'page', page: currentPage };
@@ -346,13 +346,19 @@ const commandHandlers: Record<string, CommandHandler> = {
         } else if (currentCfi !== undefined && currentCfi !== null) {
             position = { type: 'cfi', cfi: currentCfi };
         }
-        
+
         if (position) {
-            const progress = getPositionProgress(position);
+            let progress = getPositionProgress(position);
+
+            // For page-based positions, calculate progress if we have total pages
+            if (progress === null && position.type === 'page' && existingDoc?.total_pages) {
+                progress = ((position.page - 1) / existingDoc.total_pages) * 100;
+            }
+
             updates.position_json = JSON.stringify(position);
             updates.progress_percent = progress ?? existingDoc?.progress_percent ?? 0;
         }
-        
+
         const cleaned: any = {};
         Object.entries(updates).forEach(([key, value]) => {
             if (value !== undefined) {

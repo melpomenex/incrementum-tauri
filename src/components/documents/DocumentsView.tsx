@@ -960,10 +960,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                 </div>
 
                 <div>
-                  <div className="text-xs text-muted-foreground mb-2">Progress</div>
-                  <ProgressBar doc={activeDocument} />
-                  <div className="text-xs text-muted-foreground mt-2">
-                    {activeDocument.extractCount} extracts • {activeDocument.learningItemCount} cards
+                  <div className="text-xs text-muted-foreground mb-2">Reading Progress</div>
+                  <DocumentProgressIndicator doc={activeDocument} />
+                  <div className="mt-3">
+                    <div className="text-xs text-muted-foreground mb-2">Learning Progress</div>
+                    <ProgressBar doc={activeDocument} />
+                    <div className="text-xs text-muted-foreground mt-2">
+                      {activeDocument.extractCount} extracts • {activeDocument.learningItemCount} cards
+                    </div>
                   </div>
                 </div>
 
@@ -1179,6 +1183,98 @@ function ProgressBar({ doc }: { doc: Document }) {
       <span className="text-[11px] text-muted-foreground">
         {extracts} / {cards}
       </span>
+    </div>
+  );
+}
+
+function DocumentProgressIndicator({ doc }: { doc: Document }) {
+  const progressPercent = doc.progressPercent ?? 0;
+  const currentPage = doc.currentPage ?? 1;
+  const totalPages = doc.totalPages ?? 0;
+
+  // Try to get position from positionJson if available
+  let positionText = "";
+  let hasPosition = false;
+
+  if ((doc as any).positionJson) {
+    try {
+      const positionJson = (doc as any).positionJson;
+      const position = typeof positionJson === 'string' ? JSON.parse(positionJson) : positionJson;
+      if (position) {
+        hasPosition = true;
+        switch (position.type) {
+          case 'page':
+            positionText = `Page ${position.page}`;
+            break;
+          case 'scroll':
+            positionText = `${Math.round(position.percent)}% through document`;
+            break;
+          case 'cfi':
+            positionText = `EPUB location saved`;
+            break;
+          case 'time':
+            const minutes = Math.floor(position.seconds / 60);
+            const seconds = Math.floor(position.seconds % 60);
+            positionText = `Video: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+            break;
+          default:
+            positionText = "Position saved";
+        }
+      }
+    } catch (e) {
+      // Failed to parse position, fall back to legacy fields
+    }
+  }
+
+  // Legacy fallback if no positionJson found
+  if (!hasPosition) {
+    if (totalPages > 0) {
+      positionText = `Page ${currentPage} of ${totalPages}`;
+    } else if (progressPercent > 0) {
+      positionText = `${Math.round(progressPercent)}% through document`;
+    } else {
+      positionText = "Not started";
+    }
+  }
+
+  // Get the display progress percent
+  const displayProgress = progressPercent > 0
+    ? progressPercent
+    : (totalPages > 0 ? ((currentPage - 1) / totalPages) * 100 : 0);
+
+  return (
+    <div className="space-y-2">
+      {/* Progress bar with percentage */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-500 transition-all duration-300"
+            style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
+          />
+        </div>
+        <span className="text-xs font-medium text-foreground min-w-[40px] text-right">
+          {Math.round(displayProgress)}%
+        </span>
+      </div>
+
+      {/* Position text */}
+      <div className="text-xs text-muted-foreground">
+        {positionText}
+      </div>
+
+      {/* Additional status indicators */}
+      <div className="flex items-center gap-2 mt-2">
+        {displayProgress > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 text-[10px] font-medium">
+            Reading
+          </span>
+        )}
+        {doc.dateLastReviewed && (
+          <span className="text-[10px] text-muted-foreground">
+            Last reviewed {formatRelativeTime(doc.dateLastReviewed)}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

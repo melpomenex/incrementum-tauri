@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { X, Tag as TagIcon, FolderOpen, Lightbulb, Bold, Italic, Code, List, Layers, Eye } from "lucide-react";
+import { X, Tag as TagIcon, FolderOpen, Lightbulb, Bold, Italic, Code, List, Layers, Eye, BookOpen } from "lucide-react";
 import { createExtract, CreateExtractInput, Extract } from "../../api/extracts";
 import { generateLearningItemsFromExtract } from "../../api/learning-items";
 import { ClozeCreatorPopup } from "./ClozeCreatorPopup";
 import { QACreatorPopup } from "./QACreatorPopup";
 import { useToast } from "../common/Toast";
+import { useDocumentStore } from "../../stores/documentStore";
 
 interface CreateExtractDialogProps {
   documentId: string;
@@ -68,6 +69,10 @@ export function CreateExtractDialog({
   const [creationMode, setCreationMode] = useState<"edit" | "cloze" | "qa">("edit");
   const [savedExtractId, setSavedExtractId] = useState<string | null>(null);
   const toast = useToast();
+  const { documents } = useDocumentStore();
+
+  // Get the current document for context display
+  const currentDocument = documents.find((d) => d.id === documentId);
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -234,6 +239,29 @@ export function CreateExtractDialog({
             <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
+
+        {/* Document Context */}
+        {currentDocument && (
+          <div className="px-4 py-2 bg-muted/30 border-b border-border flex items-center gap-3">
+            <BookOpen className="w-4 h-4 text-muted-foreground" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-foreground truncate">{currentDocument.title}</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-muted-foreground">
+                  {pageNumber > 0 ? `Page ${pageNumber}` : 'Selected text'}
+                </span>
+                {currentDocument.progressPercent !== undefined && currentDocument.progressPercent > 0 && (
+                  <>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-xs text-muted-foreground">
+                      {Math.round(currentDocument.progressPercent)}% complete
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">

@@ -14,6 +14,7 @@ export interface Document {
   currentCfi?: string;
   currentViewState?: ViewState | string;
   positionJson?: string;
+  progressPercent?: number;
   category?: string;
   tags: string[];
   dateAdded: string;

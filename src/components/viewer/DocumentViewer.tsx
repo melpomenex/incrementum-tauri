@@ -1546,6 +1546,18 @@ export function DocumentViewer({
           <span className="hidden sm:inline text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
             {docType.toUpperCase()}
           </span>
+          {/* Compact progress indicator */}
+          {currentDocument.progressPercent !== undefined && currentDocument.progressPercent > 0 && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-blue-500/10 text-blue-600 px-2 py-1 rounded">
+              <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${currentDocument.progressPercent}%` }}
+                />
+              </div>
+              {Math.round(currentDocument.progressPercent)}%
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
