@@ -10,7 +10,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?logo=tauri)]()
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)]()
 
-[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
+[Features](#-features) • [Demo](https://readsync.org) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
 </div>
 
