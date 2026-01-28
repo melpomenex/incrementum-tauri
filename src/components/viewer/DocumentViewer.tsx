@@ -129,7 +129,12 @@ export function DocumentViewer({
   onExtractCreated,
 }: DocumentViewerProps) {
   const toast = useToast();
-  const { documents, setCurrentDocument, currentDocument } = useDocumentStore();
+  const { documents, setCurrentDocument, currentDocument: globalCurrentDocument } = useDocumentStore();
+  
+  // Use local document lookup by documentId prop instead of global currentDocument
+  // This allows multiple DocumentViewers to show different documents in split panes
+  const localDocument = documents.find((d) => d.id === documentId);
+  const currentDocument = localDocument || globalCurrentDocument;
   const { closeTab, tabs, updateTab } = useTabsStore();
   const { items: queueItems, loadQueue } = useQueueStore();
   const { settings } = useSettingsStore();
