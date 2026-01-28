@@ -339,6 +339,7 @@ function TabPaneView({
   return (
     <div
       ref={containerRef}
+      data-tab-pane={pane.id}
       className={`
         flex flex-col h-full w-full overflow-hidden
         ${isDraggingOver ? "ring-2 ring-primary/30" : ""}

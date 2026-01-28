@@ -31,6 +31,48 @@ export function Tabs() {
     setDraggedTabSourcePaneId(null);
   }, []);
 
+  // Prevent file drop glitches when dragging tabs
+  useEffect(() => {
+    if (!draggedTabId) return;
+
+    // When dragging tabs, prevent default file drop behavior on document
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = "none";
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      // Only prevent default if it's not handled by our tab system
+      // Check if the drop target is inside a tab pane
+      const target = e.target as HTMLElement;
+      const isTabDrop = target.closest("[data-tab-pane]");
+      if (!isTabDrop) {
+        e.preventDefault();
+      }
+    };
+
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    // Add listeners to document to catch all drag events outside tab areas
+    document.addEventListener("dragover", handleDragOver, true);
+    document.addEventListener("drop", handleDrop, true);
+    document.addEventListener("dragenter", handleDragEnter, true);
+    document.addEventListener("dragleave", handleDragLeave, true);
+
+    return () => {
+      document.removeEventListener("dragover", handleDragOver, true);
+      document.removeEventListener("drop", handleDrop, true);
+      document.removeEventListener("dragenter", handleDragEnter, true);
+      document.removeEventListener("dragleave", handleDragLeave, true);
+    };
+  }, [draggedTabId]);
+
   // Handle keyboard shortcuts for tab navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
