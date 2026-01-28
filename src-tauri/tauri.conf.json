@@ -25,10 +25,7 @@
         "decorations": true,
         "alwaysOnTop": false,
         "skipTaskbar": false,
-        "devtools": true,
-        "webview": {
-          "allowScripts": true
-        }
+        "devtools": true
       }
     ],
     "security": {
