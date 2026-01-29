@@ -1,6 +1,6 @@
 //! Document scheduler implementation.
 //!
-//! This module provides document scheduling using the fsrs-rs FSRS-5 algorithm.
+//! This module provides document scheduling using the fsrs-rs FSRS-6 algorithm.
 
 use crate::error::Result;
 use crate::models::ReviewRating;
@@ -44,7 +44,7 @@ pub struct DocumentScheduleResult {
     pub scheduling_reason: String,
 }
 
-/// Document scheduler using FSRS-5 algorithm
+/// Document scheduler using FSRS-6 algorithm
 pub struct DocumentScheduler {
     params: DocumentSchedulerParams,
     fsrs: FSRS,
@@ -123,7 +123,7 @@ impl DocumentScheduler {
             difficulty: next_state.memory.difficulty as f64,
             interval_days,
             scheduling_reason: format!(
-                "FSRS-5 (fsrs-rs) - Rating: {:?}, Stability: {:.2}, Difficulty: {:.2}",
+                "FSRS-6 (fsrs-rs) - Rating: {:?}, Stability: {:.2}, Difficulty: {:.2}",
                 rating,
                 next_state.memory.stability,
                 next_state.memory.difficulty

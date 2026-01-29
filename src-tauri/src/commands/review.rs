@@ -198,7 +198,7 @@ pub async fn apply_fsrs_review(
         }
     });
 
-    // Calculate next states using FSRS 5.2
+    // Calculate next states using FSRS 6
     let next_states = fsrs.next_states(current_memory_state, DESIRED_RETENTION, elapsed_days)?;
 
     // Select the next state based on rating
@@ -209,7 +209,7 @@ pub async fn apply_fsrs_review(
         ReviewRating::Easy => &next_states.easy,
     };
 
-    // Use the exact interval from FSRS 5.2 (fractional days supported)
+    // Use the exact interval from FSRS 6 (fractional days supported)
     let mut new_interval = next_state.interval as f64;
     if !new_interval.is_finite() || new_interval <= 0.0 {
         new_interval = match review_rating {
@@ -240,7 +240,7 @@ pub async fn apply_fsrs_review(
         item.ease_factor = 2.5;
     }
 
-    // Update state based on review rating and interval (FSRS 5.2 alignment)
+    // Update state based on review rating and interval (FSRS 6 alignment)
     // Items stay in Learning/Relearning until they "graduate" with longer intervals
     item.state = match review_rating {
         ReviewRating::Again => {

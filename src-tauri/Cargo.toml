@@ -82,7 +82,7 @@ roxmltree = "0.20"
 md5 = "0.7"
 
 # Spaced Repetition
-fsrs = "5"
+fsrs = "5.2"
 
 # Environment variables
 dotenvy = "0.15"

@@ -1,7 +1,7 @@
 //! Scheduling algorithms implementation
 //!
 //! This module provides different spaced repetition algorithms:
-//! - FSRS-5 (Free Spaced Repetition Scheduler)
+//! - FSRS-6 (Free Spaced Repetition Scheduler)
 //! - SM-2, SM-5, SM-8, SM-15 (SuperMemo algorithms)
 //! - Queue selector with weighted randomization
 //! - Document scheduler for incremental reading
@@ -258,7 +258,7 @@ pub fn compare_algorithms(items: &[LearningItem]) -> AlgorithmComparison {
     let avg_retention = 0.85; // Placeholder
 
     AlgorithmComparison {
-        algorithm: "FSRS-5".to_string(),
+        algorithm: "FSRS-6".to_string(),
         avg_retention,
         total_reviews,
         avg_interval,

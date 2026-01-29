@@ -303,7 +303,7 @@ pub async fn get_algorithm_params(
         .unwrap_or((None, None));
 
     Ok(AlgorithmParams {
-        algorithm: "FSRS-5".to_string(),
+        algorithm: "FSRS-6".to_string(),
         stability,
         difficulty,
         ease_factor: Some(item.ease_factor),

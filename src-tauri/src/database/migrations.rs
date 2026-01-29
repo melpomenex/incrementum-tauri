@@ -386,7 +386,7 @@ pub const MIGRATIONS: &[Migration] = &[
         "#,
     ),
 
-    // Migration 010: Convert interval to REAL for FSRS 5.2 fractional day support
+    // Migration 010: Convert interval to REAL for FSRS 6 fractional day support
     Migration::new(
         "010_convert_interval_to_real",
         r#"
