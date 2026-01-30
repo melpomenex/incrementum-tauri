@@ -27,6 +27,7 @@ pub mod reading_goals;
 pub mod search;
 pub mod collections;
 pub mod video;
+pub mod youtube_playlist;
 
 // Re-export error types for use in commands
 pub use crate::error::Result;
@@ -54,6 +55,7 @@ pub use reading_goals::*;
 pub use search::*;
 pub use collections::*;
 pub use video::*;
+pub use youtube_playlist::*;
 
 // Cloud commands
 pub use cloud::oauth::*;

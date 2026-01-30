@@ -22,6 +22,12 @@ import {
     checkTranscriptAvailable,
     getAvailableLanguages,
 } from '../utils/youtubeTranscriptBrowser';
+import {
+    fetchPlaylistInfo,
+    importPlaylistVideos,
+    isYouTubeApiEnabled,
+    extractPlaylistId,
+} from './youtubeDataApi';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -1284,6 +1290,160 @@ const commandHandlers: Record<string, CommandHandler> = {
         };
     },
 
+    // YouTube Playlist commands (browser implementation using YouTube Data API)
+    get_playlist_subscriptions: async () => {
+        // In browser mode, we don't persist subscriptions - one-time imports only
+        return [];
+    },
+
+    get_playlist_subscription: async (args) => {
+        const subscriptionId = args.subscriptionId as string;
+        // Return a mock subscription since we don't persist them in browser mode
+        return {
+            subscription: {
+                id: subscriptionId,
+                playlist_id: subscriptionId,
+                playlist_url: `https://www.youtube.com/playlist?list=${subscriptionId}`,
+                title: null,
+                channel_name: null,
+                channel_id: null,
+                description: null,
+                thumbnail_url: null,
+                total_videos: null,
+                is_active: false,
+                auto_import_new: false,
+                queue_intersperse_interval: 5,
+                priority_rating: 5,
+                last_refreshed_at: null,
+                refresh_interval_hours: 24,
+                created_at: new Date().toISOString(),
+                modified_at: new Date().toISOString(),
+            },
+            videos: [],
+        };
+    },
+
+    subscribe_to_playlist: async (args) => {
+        const playlistUrl = args.playlistUrl as string;
+        
+        if (!isYouTubeApiEnabled()) {
+            throw new Error('YouTube API key not configured. Please add your YouTube Data API key in Settings > Integrations to import playlists.');
+        }
+
+        const playlistId = extractPlaylistId(playlistUrl);
+        if (!playlistId) {
+            throw new Error('Invalid YouTube playlist URL');
+        }
+
+        // Fetch playlist info from YouTube Data API
+        const playlistInfo = await fetchPlaylistInfo(playlistId);
+
+        // Import all videos from the playlist
+        const videosToImport = await importPlaylistVideos(playlistInfo, true);
+        
+        // Create documents for each video
+        const importedDocs = [];
+        for (const video of videosToImport) {
+            try {
+                const doc = await db.createDocument({
+                    title: video.title,
+                    file_path: video.url,
+                    file_type: 'youtube',
+                });
+                importedDocs.push(doc);
+            } catch (error) {
+                console.warn(`[Browser] Failed to import video ${video.videoId}:`, error);
+            }
+        }
+
+        return {
+            id: playlistId,
+            playlist_id: playlistId,
+            playlist_url: playlistUrl,
+            title: playlistInfo.title,
+            channel_name: playlistInfo.channelTitle,
+            channel_id: playlistInfo.channelId,
+            description: playlistInfo.description,
+            thumbnail_url: playlistInfo.thumbnail,
+            total_videos: importedDocs.length,
+            is_active: true,
+            auto_import_new: false,
+            queue_intersperse_interval: 5,
+            priority_rating: 5,
+            last_refreshed_at: new Date().toISOString(),
+            refresh_interval_hours: 24,
+            created_at: new Date().toISOString(),
+            modified_at: new Date().toISOString(),
+        };
+    },
+
+    update_playlist_subscription: async () => {
+        // No-op in browser mode - subscriptions are not persisted
+        return;
+    },
+
+    delete_playlist_subscription: async () => {
+        // No-op in browser mode - subscriptions are not persisted
+        return;
+    },
+
+    refresh_playlist: async (args) => {
+        const subscriptionId = args.subscriptionId as string;
+        
+        if (!isYouTubeApiEnabled()) {
+            throw new Error('YouTube API key not configured. Please add your YouTube Data API key in Settings > Integrations.');
+        }
+
+        // Fetch fresh playlist info
+        const playlistInfo = await fetchPlaylistInfo(subscriptionId);
+
+        return {
+            new_videos_found: playlistInfo.videos.length,
+            imported_count: 0, // Videos are imported on subscribe, not refresh
+        };
+    },
+
+    import_playlist_video: async (args) => {
+        const videoId = args.playlistVideoId as string;
+        // In browser mode, this is handled during subscribe_to_playlist
+        // Return a mock document
+        throw new Error('Individual video import not supported in browser mode. Please import the entire playlist.');
+    },
+
+    get_unimported_playlist_videos: async () => {
+        // Not applicable in browser mode
+        return [];
+    },
+
+    get_playlist_settings: async () => {
+        // Return default settings
+        return {
+            id: 'global',
+            enabled: isYouTubeApiEnabled(),
+            default_intersperse_interval: 5,
+            default_priority: 5,
+            max_consecutive_playlist_videos: 1,
+            prefer_new_videos: true,
+            created_at: new Date().toISOString(),
+            modified_at: new Date().toISOString(),
+        };
+    },
+
+    update_playlist_settings: async () => {
+        // No-op in browser mode - settings are managed via useSettingsStore
+        return;
+    },
+
+    get_playlist_queue_items: async () => {
+        // Not applicable in browser mode
+        return [];
+    },
+
+    mark_playlist_video_queued: async () => {
+        // No-op in browser mode
+        return;
+    },
+
     // Anki Import (browser implementation using jszip and sql.js)
     import_anki_package_to_learning_items: async (args) => {
         const filePath = args.apkgPath as string;
@@ -1380,14 +1540,67 @@ const commandHandlers: Record<string, CommandHandler> = {
         throw new Error(`Failed to fetch feed after trying all methods. Last error: ${lastError?.message || 'Unknown error'}`);
     },
 
-    // Anna's Archive search - not available in browser mode due to CORS
-    search_books: async () => {
-        console.warn('[Browser] Anna\'s Archive search is not available in browser mode due to CORS restrictions.');
-        return [];
+    // Anna's Archive / LibGen search - using Library Genesis API
+    search_books: async (args) => {
+        const { searchLibGen } = await import('../api/libgen');
+        const query = args.query as string;
+        const limit = (args.limit as number) || 25;
+        
+        console.log('[Browser] Searching LibGen for:', query);
+        
+        try {
+            const books = await searchLibGen({
+                query,
+                count: limit,
+                sortBy: 'def',
+                reverse: false,
+            });
+            
+            // Convert to the expected format
+            return books.map(book => ({
+                id: book.md5 || book.id,
+                title: book.title,
+                author: book.author || null,
+                year: book.year ? parseInt(book.year) : null,
+                publisher: book.publisher || null,
+                language: book.language || null,
+                formats: [book.extension.toUpperCase()],
+                cover_url: book.cover || null,
+                description: book.description || null,
+                isbn: book.isbn || null,
+                md5: book.md5 || null,
+                file_size: book.size || null,
+            }));
+        } catch (error) {
+            console.error('[Browser] LibGen search failed:', error);
+            throw error;
+        }
     },
 
-    download_book: async () => {
-        throw new Error('Book download is not available in browser mode');
+    download_book: async (args) => {
+        const { getDownloadLink } = await import('../api/libgen');
+        const bookId = args.bookId as string;
+        const format = (args.format as string)?.toLowerCase() || 'pdf';
+        
+        console.log('[Browser] Getting download link for book:', bookId);
+        
+        try {
+            // Get the download URL
+            const downloadUrl = await getDownloadLink(bookId);
+            
+            // Open the download URL in a new tab
+            // Note: Actual file download may require going through LibGen's download page
+            window.open(downloadUrl, '_blank');
+            
+            return {
+                file_path: downloadUrl,
+                file_name: `${bookId}.${format}`,
+                file_size: 0, // Size unknown until download starts
+            };
+        } catch (error) {
+            console.error('[Browser] Book download failed:', error);
+            throw error;
+        }
     },
 
     // PDF to HTML conversion (not available in browser mode)

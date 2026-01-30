@@ -1,6 +1,6 @@
 import { invokeCommand } from "../lib/tauri";
 
-export type BookFormat = "pdf" | "epub" | "mobi" | "azw3" | "djvu" | "cbz" | "cbr" | "zip";
+export type BookFormat = "pdf" | "epub" | "mobi" | "azw3" | "djvu" | "cbz" | "cbr" | "zip" | "rtf";
 
 export interface BookSearchResult {
   id: string;
@@ -14,6 +14,7 @@ export interface BookSearchResult {
   description?: string;
   isbn?: string;
   md5?: string;
+  file_size?: string;
 }
 
 export interface DownloadProgress {
@@ -22,6 +23,12 @@ export interface DownloadProgress {
   bytes_downloaded: number;
   total_bytes?: number;
   status: "Connecting" | "Downloading" | "Completed" | "Failed" | "Cancelled";
+}
+
+export interface DownloadResult {
+  file_path: string;
+  file_name: string;
+  file_size: number;
 }
 
 /**
@@ -43,18 +50,18 @@ export async function searchBooks(query: string, limit?: number): Promise<BookSe
  *
  * @param bookId - The ID of the book to download
  * @param format - The format to download (pdf, epub, etc.)
- * @param downloadPath - Where to save the downloaded file
- * @returns Path to the downloaded file
+ * @param downloadPath - Optional: Where to save the downloaded file (default: temp directory)
+ * @returns Download result with file path and metadata
  */
 export async function downloadBook(
   bookId: string,
   format: BookFormat,
-  downloadPath: string
-): Promise<string> {
-  return await invokeCommand<string>("download_book", {
+  downloadPath?: string
+): Promise<DownloadResult> {
+  return await invokeCommand<DownloadResult>("download_book", {
     bookId,
     format,
-    downloadPath,
+    downloadPath: downloadPath ?? "temp",
   });
 }
 
@@ -120,6 +127,7 @@ export function getFormatDisplayName(format: BookFormat): string {
     cbz: "CBZ",
     cbr: "CBR",
     zip: "ZIP",
+    rtf: "RTF",
   };
   return names[format] ?? format.toUpperCase();
 }

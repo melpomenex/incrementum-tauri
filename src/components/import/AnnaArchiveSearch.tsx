@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { Search, BookOpen, Download, Loader2, AlertCircle, FileText, ExternalLink } from "lucide-react";
+import { Search, BookOpen, Download, Loader2, AlertCircle, ExternalLink, CheckCircle } from "lucide-react";
 import {
   searchBooks,
   downloadBook,
   getSuggestedDownloadPath,
-  formatFileSize,
   getFormatDisplayName,
   type BookSearchResult,
   type BookFormat,
 } from "../../api/anna-archive";
+import { importDocument } from "../../api/documents";
 
 interface AnnaArchiveSearchProps {
   onImportComplete?: (path: string) => void;
@@ -24,6 +24,7 @@ export function AnnaArchiveSearch({ onImportComplete, onClose }: AnnaArchiveSear
   const [error, setError] = useState<string | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<BookFormat>("epub");
   const [downloadingBookId, setDownloadingBookId] = useState<string | null>(null);
+  const [importedBookIds, setImportedBookIds] = useState<Set<string>>(new Set());
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -44,15 +45,20 @@ export function AnnaArchiveSearch({ onImportComplete, onClose }: AnnaArchiveSear
 
   const handleDownload = async (book: BookSearchResult) => {
     setDownloadingBookId(book.id);
+    setError(null);
 
     try {
-      const filename = getSuggestedDownloadPath(book, selectedFormat);
-      // Use a default import directory
-      const downloadPath = `/tmp/${filename}`;
+      // Download to temp directory (default behavior)
+      const downloadResult = await downloadBook(book.id, selectedFormat);
 
-      const actualPath = await downloadBook(book.id, selectedFormat, downloadPath);
+      // Import the downloaded file
+      const importedDoc = await importDocument(downloadResult.file_path);
 
-      onImportComplete?.(actualPath);
+      // Mark as imported
+      setImportedBookIds((prev) => new Set(prev).add(book.id));
+
+      // Notify parent component
+      onImportComplete?.(importedDoc.file_path);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download book");
     } finally {
@@ -154,6 +160,7 @@ export function AnnaArchiveSearch({ onImportComplete, onClose }: AnnaArchiveSear
                 book={book}
                 selectedFormat={selectedFormat}
                 isDownloading={downloadingBookId === book.id}
+                isImported={importedBookIds.has(book.id)}
                 onDownload={() => handleDownload(book)}
               />
             ))}
@@ -180,23 +187,35 @@ interface BookResultCardProps {
   book: BookSearchResult;
   selectedFormat: BookFormat;
   isDownloading: boolean;
+  isImported: boolean;
   onDownload: () => void;
 }
 
-function BookResultCard({ book, selectedFormat, isDownloading, onDownload }: BookResultCardProps) {
+function BookResultCard({ book, selectedFormat, isDownloading, isImported, onDownload }: BookResultCardProps) {
   return (
-    <div className="bg-background border border-border rounded-md p-4 hover:bg-muted/30 transition-colors">
+    <div className={`bg-background border border-border rounded-md p-4 hover:bg-muted/30 transition-colors ${isImported ? "border-green-500/30 bg-green-500/5" : ""}`}>
       <div className="flex gap-4">
         {/* Cover Image */}
         {book.cover_url ? (
-          <img
-            src={book.cover_url}
-            alt={book.title}
-            className="w-20 h-28 object-cover rounded flex-shrink-0"
-          />
+          <div className="relative">
+            <img
+              src={book.cover_url}
+              alt={book.title}
+              className="w-20 h-28 object-cover rounded flex-shrink-0"
+            />
+            {isImported && (
+              <div className="absolute inset-0 bg-green-500/20 rounded flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-500" />
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="w-20 h-28 bg-muted rounded flex items-center justify-center flex-shrink-0">
-            <BookOpen className="w-8 h-8 text-muted-foreground" />
+          <div className="w-20 h-28 bg-muted rounded flex items-center justify-center flex-shrink-0 relative">
+            {isImported ? (
+              <CheckCircle className="w-8 h-8 text-green-500" />
+            ) : (
+              <BookOpen className="w-8 h-8 text-muted-foreground" />
+            )}
           </div>
         )}
 
@@ -236,23 +255,30 @@ function BookResultCard({ book, selectedFormat, isDownloading, onDownload }: Boo
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={onDownload}
-              disabled={isDownloading || !book.formats.includes(selectedFormat)}
-              className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {isDownloading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Downloading...
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5" />
-                  Download
-                </>
-              )}
-            </button>
+            {isImported ? (
+              <div className="px-3 py-1.5 bg-green-500/10 text-green-500 rounded text-sm flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Imported
+              </div>
+            ) : (
+              <button
+                onClick={onDownload}
+                disabled={isDownloading || !book.formats.includes(selectedFormat)}
+                className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    Download
+                  </>
+                )}
+              </button>
+            )}
             {book.isbn && (
               <a
                 href={`https://annas-archive.org/isbn/${book.isbn}`}

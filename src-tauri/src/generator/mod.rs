@@ -196,6 +196,8 @@ mod tests {
             id: Uuid::new_v4().to_string(),
             document_id: "test-doc".to_string(),
             content: content.to_string(),
+            html_content: None,
+            source_url: None,
             page_title: None,
             page_number: None,
             highlight_color: None,

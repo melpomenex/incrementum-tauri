@@ -1,3 +1,14 @@
+// Early error handler - must be first
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (e) => {
+    console.error('[Global Error]', e.error);
+    const root = document.getElementById('root');
+    if (root) {
+      root.innerHTML = '<div style="padding:20px;background:#000;color:#fff;font-family:monospace;"><h2>Startup Error</h2><pre style="white-space:pre-wrap;">' + e.message + '\n' + (e.error?.stack || '') + '</pre></div>';
+    }
+  });
+}
+
 import React, { Suspense, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
@@ -98,7 +109,7 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
-console.log('Starting Incrementum app...');
+console.log('[main.tsx] Starting Incrementum app...');
 
 // Initialize PWA (works in both Tauri and Web)
 initializePWA();

@@ -73,7 +73,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     field: "priority",
     direction: "desc",
   },
-  queueFilterMode: "due-today", // Default to due-today for FSRS-based scheduling
+  queueFilterMode: "all-items", // Default to show all items so users can see their documents
   bulkOperationLoading: false,
   bulkOperationResult: null,
 

@@ -4,6 +4,7 @@ import { useAnalyticsStore } from "../../stores/analyticsStore";
 import { SyncStatusIndicator } from "../sync/SyncStatusIndicator";
 import { UserMenu } from "../auth/UserMenu";
 import { Breadcrumb } from "../common/Breadcrumb";
+import { Toast } from "../common/Toast";
 import {
   Home,
   BookOpen,
@@ -73,6 +74,9 @@ export function NewMainLayout({
 
   return (
     <div className="flex flex-col h-screen w-full bg-cream">
+      {/* Toast Notifications */}
+      <Toast />
+
       {/* Top Header Bar */}
       <TopHeaderBar
         isAuthenticated={isAuthenticated}

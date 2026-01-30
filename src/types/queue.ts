@@ -9,7 +9,7 @@ export interface QueueItem {
   question?: string;
   answer?: string;
   clozeText?: string;
-  itemType: "document" | "extract" | "learning-item";
+  itemType: "document" | "extract" | "learning-item" | "playlist-video";
   priorityRating?: number;
   prioritySlider?: number;
   priority: number;
@@ -18,6 +18,12 @@ export interface QueueItem {
   tags: string[];
   category?: string;
   progress: number; // 0-100
+  
+  // Playlist interspersion fields
+  /** Source identifier, e.g., "playlist:<subscription_id>" */
+  source?: string;
+  /** Position in queue for interspersion calculation */
+  position?: number;
 }
 
 export interface ReviewSession {

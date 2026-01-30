@@ -815,6 +815,117 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE UNIQUE INDEX IF NOT EXISTS idx_video_transcripts_document_id ON video_transcripts(document_id);
         "#,
     ),
+
+    // Migration 027: Add YouTube playlist subscriptions for auto-import
+    Migration::new(
+        "027_add_youtube_playlist_subscriptions",
+        r#"
+        -- YouTube playlist subscriptions table
+        -- Tracks playlists that users want to auto-import from
+        CREATE TABLE IF NOT EXISTS youtube_playlist_subscriptions (
+            id TEXT PRIMARY KEY,
+            playlist_id TEXT NOT NULL UNIQUE,  -- YouTube playlist ID (e.g., PL...)
+            playlist_url TEXT NOT NULL,
+            title TEXT,
+            channel_name TEXT,
+            channel_id TEXT,
+            description TEXT,
+            thumbnail_url TEXT,
+            total_videos INTEGER,
+            
+            -- Auto-import settings
+            is_active INTEGER NOT NULL DEFAULT 1,
+            auto_import_new INTEGER NOT NULL DEFAULT 1,  -- Auto-import new videos when refreshing
+            queue_intersperse_interval INTEGER NOT NULL DEFAULT 5,  -- Add to queue every N items
+            priority_rating INTEGER NOT NULL DEFAULT 5,  -- Default priority for imported videos
+            
+            -- Refresh tracking
+            last_refreshed_at TEXT,
+            refresh_interval_hours INTEGER NOT NULL DEFAULT 24,  -- How often to check for new videos
+            
+            -- Metadata
+            created_at TEXT NOT NULL,
+            modified_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_youtube_playlist_subs_active ON youtube_playlist_subscriptions(is_active);
+        CREATE INDEX IF NOT EXISTS idx_youtube_playlist_subs_id ON youtube_playlist_subscriptions(playlist_id);
+
+        -- Track which videos from playlists have been imported
+        CREATE TABLE IF NOT EXISTS youtube_playlist_videos (
+            id TEXT PRIMARY KEY,
+            subscription_id TEXT NOT NULL,
+            video_id TEXT NOT NULL,  -- YouTube video ID (11 chars)
+            video_title TEXT,
+            video_duration INTEGER,  -- in seconds
+            thumbnail_url TEXT,
+            position INTEGER,  -- Position in playlist (0-indexed)
+            
+            -- Import status
+            is_imported INTEGER NOT NULL DEFAULT 0,
+            document_id TEXT,  -- Reference to documents table when imported
+            
+            -- Queue interspersion tracking
+            added_to_queue INTEGER NOT NULL DEFAULT 0,
+            queue_position INTEGER,  -- Position in queue (for interspersion calculation)
+            
+            -- Metadata
+            published_at TEXT,
+            discovered_at TEXT NOT NULL,
+            imported_at TEXT,
+            
+            FOREIGN KEY (subscription_id) REFERENCES youtube_playlist_subscriptions(id) ON DELETE CASCADE,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL,
+            UNIQUE(subscription_id, video_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_youtube_playlist_videos_sub ON youtube_playlist_videos(subscription_id);
+        CREATE INDEX IF NOT EXISTS idx_youtube_playlist_videos_imported ON youtube_playlist_videos(is_imported);
+        CREATE INDEX IF NOT EXISTS idx_youtube_playlist_videos_queue ON youtube_playlist_videos(added_to_queue);
+        CREATE INDEX IF NOT EXISTS idx_youtube_playlist_videos_video_id ON youtube_playlist_videos(video_id);
+
+        -- Queue interspersion settings table (global settings)
+        CREATE TABLE IF NOT EXISTS youtube_playlist_settings (
+            id TEXT PRIMARY KEY DEFAULT 'global',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            default_intersperse_interval INTEGER NOT NULL DEFAULT 5,
+            default_priority INTEGER NOT NULL DEFAULT 5,
+            max_consecutive_playlist_videos INTEGER NOT NULL DEFAULT 1,  -- Never add more than N consecutive
+            prefer_new_videos INTEGER NOT NULL DEFAULT 1,  -- Prioritize newer videos
+            created_at TEXT NOT NULL,
+            modified_at TEXT NOT NULL
+        );
+
+        -- Insert default settings
+        INSERT OR IGNORE INTO youtube_playlist_settings (id, enabled, default_intersperse_interval, default_priority, max_consecutive_playlist_videos, prefer_new_videos, created_at, modified_at)
+        VALUES ('global', 1, 5, 5, 1, 1, datetime('now'), datetime('now'));
+        "#,
+    ),
+
+    // Migration 028: Add document scheduling columns for incremental reading
+    Migration::new(
+        "028_add_document_scheduling_columns",
+        r#"
+        -- Number of times this document has been read
+        ALTER TABLE documents ADD COLUMN reading_count INTEGER NOT NULL DEFAULT 0;
+
+        -- FSRS stability (how long memory lasts, in days)
+        ALTER TABLE documents ADD COLUMN stability REAL;
+
+        -- FSRS difficulty (1-10 scale)
+        ALTER TABLE documents ADD COLUMN difficulty REAL;
+
+        -- Total repetitions/reviews
+        ALTER TABLE documents ADD COLUMN reps INTEGER;
+
+        -- Total time spent reading (in seconds)
+        ALTER TABLE documents ADD COLUMN total_time_spent INTEGER;
+
+        -- Consecutive rating count for incremental scheduler
+        -- Positive = consecutive good/easy ratings, Negative = consecutive again/hard ratings
+        ALTER TABLE documents ADD COLUMN consecutive_count INTEGER;
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

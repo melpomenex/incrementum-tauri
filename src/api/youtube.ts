@@ -4,6 +4,8 @@
  * For full YouTube API features, API key would be required
  */
 
+import { isTauri } from "../lib/tauri";
+
 /**
  * YouTube video metadata
  */
@@ -264,20 +266,86 @@ function extractMetaTag(html: string, property: string): string | null {
   return null;
 }
 
+// Cache the API instance for reuse
+let transcriptApi: any = null;
+
+async function getTranscriptApi(): Promise<any> {
+  if (!transcriptApi) {
+    const { YouTubeTranscriptApi } = await import('youtube-transcript-ts');
+    transcriptApi = new YouTubeTranscriptApi();
+  }
+  return transcriptApi;
+}
+
 /**
  * Fetch YouTube transcript
- * Note: This requires backend processing or yt-dlp
+ * 
+ * In Tauri: Uses the backend yt-dlp
+ * In Browser/PWA: Uses youtube-transcript-ts library
  */
 export async function fetchYouTubeTranscript(videoId: string): Promise<YouTubeTranscriptSegment[]> {
-  // In a browser-only environment, we need to use a backend service
-  // For now, return empty array with note about limitation
+  // Check if running in Tauri
+  if (isTauri()) {
+    // In Tauri, the backend handles this via invokeCommand
+    console.log("[YouTube] Using Tauri backend for transcript");
+    const { invokeCommand } = await import("../lib/tauri");
+    const result = await invokeCommand<Array<{ text: string; start: number; duration: number }> | null>(
+      "get_youtube_transcript_by_id",
+      { videoId }
+    );
+    return result || [];
+  }
 
-  console.warn(
-    "YouTube transcript fetching requires backend processing (yt-dlp). " +
-    "This will be available in the Tauri backend."
-  );
+  // In browser/PWA, use youtube-transcript-ts
+  try {
+    const api = await getTranscriptApi();
+    const response = await api.fetchTranscript(videoId);
+    
+    // The library returns a TranscriptResponse with a transcript array
+    const transcript = response.transcript || [];
+    
+    return transcript.map((item: any) => ({
+      text: item.text,
+      start: item.offset / 1000, // Convert ms to seconds
+      duration: item.duration / 1000, // Convert ms to seconds
+    }));
+  } catch (error: any) {
+    console.error("[YouTube] Failed to fetch transcript:", error);
+    
+    // Check for specific library errors
+    const errorMsg = error?.message || '';
+    if (errorMsg.includes('disabled') || errorMsg.includes('not available')) {
+      throw new Error('This video does not have captions enabled.');
+    }
+    if (errorMsg.includes('unavailable') || errorMsg.includes('private')) {
+      throw new Error('This video is unavailable or private.');
+    }
+    
+    // Generic error with original message
+    throw new Error(
+      error instanceof Error 
+        ? error.message 
+        : "Failed to fetch transcript. YouTube may be blocking the request."
+    );
+  }
+}
 
-  return [];
+/**
+ * Check if YouTube transcript is available for a video
+ */
+export async function isTranscriptAvailable(videoId: string): Promise<boolean> {
+  if (isTauri()) {
+    // In Tauri, assume transcripts might be available
+    return true;
+  }
+
+  try {
+    const api = await getTranscriptApi();
+    await api.fetchTranscript(videoId);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -331,6 +399,26 @@ export function getYouTubeWatchURL(videoId: string): string {
 export function getYouTubeEmbedURL(videoId: string, startTime?: number): string {
   // Use YouTube's native embed URL
   const url = `https://www.youtube.com/embed/${videoId}`;
+  const params = new URLSearchParams();
+  
+  // Add parameters for cleaner embed
+  params.set('rel', '0'); // Don't show related videos
+  params.set('modestbranding', '1'); // Minimal YouTube branding
+  
+  if (startTime) {
+    params.set('start', String(Math.floor(startTime)));
+  }
+  
+  return `${url}?${params.toString()}`;
+}
+
+/**
+ * Get YouTube embed URL using privacy-enhanced mode (youtube-nocookie.com)
+ * This is more likely to work in restricted environments like Tauri WebView
+ */
+export function getYouTubeEmbedURLNoCookie(videoId: string, startTime?: number): string {
+  // Use YouTube's privacy-enhanced embed URL
+  const url = `https://www.youtube-nocookie.com/embed/${videoId}`;
   const params = new URLSearchParams();
   
   // Add parameters for cleaner embed

@@ -251,7 +251,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const [extractDialog, setExtractDialog] = useState<WebExtract | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [savedExtracts, setSavedExtracts] = useState<WebExtract[]>([]);
-  const [showAssistant, setShowAssistant] = useState(true);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [iframeStatus, setIframeStatus] = useState<"idle" | "loading" | "loaded" | "blocked">("idle");
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const iframeTimeoutRef = useRef<number | null>(null);
@@ -532,11 +532,10 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
 
         if (iframeOrigin !== parentOrigin) {
           toast.error(
-            `Cannot extract from ${iframeOrigin}. Try opening in system browser or import the URL as a document.`,
-            { duration: 6000 }
+            `Cannot extract from ${iframeOrigin}. Try opening in system browser or import the URL as a document.`
           );
         } else {
-          toast.error("Failed to get selection. Please try selecting text again.", { duration: 4000 });
+          toast.error("Failed to get selection. Please try selecting text again.");
         }
       }
     }
@@ -592,23 +591,24 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
             return;
           }
 
-          const containerEl = webviewContainerRef.current;
-          const rect = containerEl.getBoundingClientRect();
+          // On Linux WebKitGTK, getBoundingClientRect() reports incorrect heights
+          // because the webview is a native window using window-relative coordinates.
+          // Use window-based calculations for reliable dimensions.
+          
+          const windowWidth = window.innerWidth;
+          const windowHeight = window.innerHeight;
+          const toolbarHeight = 140; // Approximate: top bar + address bar + extract bar
+          
+          // Use window-relative coordinates for the webview
+          const x = 8; // Small margin from left
+          const y = toolbarHeight;
+          const width = windowWidth - 16; // Small margin on both sides
+          const height = windowHeight - toolbarHeight - 10; // Bottom margin
 
-          // Platform-specific coordinate calculation:
-          // - Linux (WebKitGTK): y=0 is at the top of the main webview content area
-          // - macOS/Windows: standard coordinates, use rect.top for y position
-          const x = Math.floor(rect.left);
-          const y = isLinux() ? 0 : Math.floor(rect.top + window.scrollY);
-          const width = Math.floor(rect.width);
-          const height = isLinux()
-            ? Math.floor(window.innerHeight - rect.top)
-            : Math.floor(rect.height);
-
-          console.log(`Webview bounds (platform=${isLinux() ? "linux" : "macos/windows"}): x=${x}, y=${y}, width=${width}, height=${height}`);
+          console.log(`Webview bounds (window-based): x=${x}, y=${y}, width=${width}, height=${height}, window=${windowWidth}x${windowHeight}`);
 
           // Only update if we have valid dimensions
-          if (width > 0 && height > 0) {
+          if (width > 0 && height > 200) {
             try {
               if (isTauri()) {
                 const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
@@ -620,7 +620,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
             }
           }
           resolve();
-        }, 50);
+        }, 50); // Reduced delay for faster response
       });
     });
   }, []);
@@ -699,18 +699,19 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           return;
         }
 
-        const containerEl = webviewContainerRef.current;
-        const rect = containerEl.getBoundingClientRect();
+        // On Linux WebKitGTK, getBoundingClientRect() reports incorrect heights
+        // Use window-based calculations for reliable dimensions (same as updateWebviewBounds)
+        
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        const toolbarHeight = 140; // Approximate: top bar + address bar + extract bar
+        
+        const x = 8;
+        const y = toolbarHeight;
+        const width = windowWidth - 16;
+        const height = windowHeight - toolbarHeight - 10;
 
-        // Platform-specific coordinate calculation (same as updateWebviewBounds)
-        const x = Math.floor(rect.left);
-        const y = isLinux() ? 0 : Math.floor(rect.top + window.scrollY);
-        const width = Math.floor(rect.width);
-        const height = isLinux()
-          ? Math.floor(window.innerHeight - rect.top)
-          : Math.floor(rect.height);
-
-        console.log(`Creating webview (platform=${isLinux() ? "linux" : "macos/windows"}): x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
+        console.log(`Creating webview (window-based): x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
 
         const webview = new Webview(appWindow, "web-browser", {
           url: currentUrl,
@@ -768,10 +769,10 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       }
     };
 
-    // Small delay to ensure container is ready
+    // Delay to ensure container layout is fully rendered
     const timeoutId = setTimeout(() => {
       void createWebview();
-    }, 100);
+    }, 250);
 
     return () => {
       isCancelled = true;
@@ -789,6 +790,15 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     observer.observe(webviewContainerRef.current);
     return () => observer.disconnect();
   }, [updateWebviewBounds]);
+
+  // Update webview bounds when assistant visibility changes
+  useEffect(() => {
+    // Small delay to allow layout animation to complete
+    const timeoutId = setTimeout(() => {
+      void updateWebviewBounds();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [showAssistant, updateWebviewBounds]);
 
   useEffect(() => {
     return () => {
@@ -1021,10 +1031,10 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           </div>
         )}
 
-        {/* Browser Content */}
-        <div className="flex-1 relative overflow-hidden min-h-0">
+        {/* Browser Content - fills remaining space */}
+        <div className="flex-1 relative overflow-hidden w-full" style={{ minHeight: '200px' }}>
           {!currentUrl ? (
-            <div className="h-full flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-md">
                 <div className="text-6xl mb-4">🌐</div>
                 <h2 className="text-2xl font-bold text-foreground mb-2">
@@ -1084,7 +1094,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                   </div>
                 </div>
               )}
-              <div ref={webviewContainerRef} className="absolute inset-0">
+              <div ref={webviewContainerRef} className="absolute inset-0 w-full h-full">
                 {!isTauri() && currentUrl && (
                   <iframe
                     key={`${currentUrl}-${refreshToken}`}

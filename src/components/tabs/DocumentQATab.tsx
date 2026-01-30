@@ -12,9 +12,11 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  BookOpen,
 } from "lucide-react";
 import { callIncrementumMCPTool, getIncrementumMCPTools, type MCPTool } from "../../api/mcp";
 import { renderMarkdown } from "../../utils/markdown";
+import { detectChapterReference, buildChapterQAContext, getChapterTitles, type ChapterReference } from "../../utils/chapterUtils";
 
 // Re-export types with simpler names for local use
 type Message = QAMessage;
@@ -49,6 +51,7 @@ export function DocumentQATab() {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionCursorIndex, setMentionCursorIndex] = useState(0);
   const [providerError, setProviderError] = useState<string | null>(null);
+  const [detectedChapter, setDetectedChapter] = useState<{ number: number; title?: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -127,6 +130,22 @@ export function DocumentQATab() {
     const { mentions: newMentions } = parseMentions(value);
     setMentions(newMentions);
 
+    // Detect chapter references in the query
+    const chapterRef = detectChapterReference(value);
+    if (chapterRef && newMentions.length > 0) {
+      // Try to get chapter title from the first mentioned document
+      const mentionedDoc = documents.find(d => d.id === newMentions[0].id);
+      if (mentionedDoc?.content) {
+        const titles = getChapterTitles(mentionedDoc.content);
+        const matchedChapter = titles.find(t => t.number === chapterRef.number);
+        setDetectedChapter({ number: chapterRef.number, title: matchedChapter?.title });
+      } else {
+        setDetectedChapter({ number: chapterRef.number });
+      }
+    } else {
+      setDetectedChapter(null);
+    }
+
     // Update display value
     setInput(formatInputForDisplay(value, newMentions));
   };
@@ -200,26 +219,55 @@ export function DocumentQATab() {
     setProviderError(null);
   };
 
-  // Get document content for context
-  const getDocumentContent = async (documentId: string): Promise<string> => {
+  // Get document content for context (chapter-aware)
+  const getDocumentContent = async (
+    documentId: string, 
+    chapterRef?: ChapterReference | null
+  ): Promise<{ content: string; isChapterSpecific: boolean; chapterNumber?: number }> => {
     try {
       const doc = await getDocument(documentId);
       const docTitle = doc?.title || "Unknown Document";
 
-      // If document has content, use it
-      if (doc && doc.content) {
-        return `Document: ${docTitle}\n\n${doc.content}`;
+      let documentContent = doc?.content || "";
+
+      // If no content stored, try to extract from the document (e.g., PDF)
+      if (!documentContent) {
+        try {
+          const extractionResult = await extractDocumentText(documentId);
+          if (extractionResult.content) {
+            console.log(`[Document Q&A] Extracted ${extractionResult.content.length} chars from document`);
+            documentContent = extractionResult.content;
+          }
+        } catch (extractionError) {
+          console.warn(`Failed to extract text from document ${documentId}:`, extractionError);
+        }
       }
 
-      // Try to extract text from the document (e.g., PDF)
-      try {
-        const extractionResult = await extractDocumentText(documentId);
-        if (extractionResult.content) {
-          console.log(`[Document Q&A] Extracted ${extractionResult.content.length} chars from document`);
-          return `Document: ${docTitle}\n\n${extractionResult.content}`;
+      // If chapter reference detected and we have content, extract that chapter
+      if (chapterRef && documentContent) {
+        const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 4000;
+        const chapterContext = buildChapterQAContext(docTitle, documentContent, chapterRef.number, maxTokens);
+        
+        console.log(`[Document Q&A] Using chapter ${chapterRef.number} content (${chapterContext.length} chars)`);
+        return {
+          content: chapterContext,
+          isChapterSpecific: true,
+          chapterNumber: chapterRef.number,
+        };
+      }
+
+      // If document has content, use it (with truncation if needed)
+      if (documentContent) {
+        const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 4000;
+        const maxChars = maxTokens * 4;
+        let content = documentContent;
+        if (content.length > maxChars) {
+          content = content.slice(0, maxChars) + "\n\n[Content truncated due to length...]";
         }
-      } catch (extractionError) {
-        console.warn(`Failed to extract text from document ${documentId}:`, extractionError);
+        return {
+          content: `Document: ${docTitle}\n\n${content}`,
+          isChapterSpecific: false,
+        };
       }
 
       // Otherwise, try to get extracts (highlights/notes) from the document
@@ -235,41 +283,67 @@ export function DocumentQATab() {
               return text;
             })
             .join("\n\n");
-          return `Document: ${docTitle}\n\nExtracts and highlights from this document:\n\n${extractContent}`;
+          return {
+            content: `Document: ${docTitle}\n\nExtracts and highlights from this document:\n\n${extractContent}`,
+            isChapterSpecific: false,
+          };
         }
       } catch (extractError) {
         console.warn(`Failed to get extracts for document ${documentId}:`, extractError);
       }
 
-      return `Document: ${docTitle}\n\n(No content or extracts available. This document may be a PDF or file that hasn't been processed yet.)`;
+      return {
+        content: `Document: ${docTitle}\n\n(No content or extracts available. This document may be a PDF or file that hasn't been processed yet.)`,
+        isChapterSpecific: false,
+      };
     } catch (error) {
       console.error(`Failed to get document ${documentId}:`, error);
-      return `Document ID: ${documentId}\n\n(Error loading content)`;
+      return {
+        content: `Document ID: ${documentId}\n\n(Error loading content)`,
+        isChapterSpecific: false,
+      };
     }
   };
 
-  // Build aggregated content from mentioned documents
-  const buildMultiDocumentContext = async (documentIds: string[]): Promise<string> => {
+  // Build aggregated content from mentioned documents (chapter-aware)
+  const buildMultiDocumentContext = async (
+    documentIds: string[],
+    chapterRef?: ChapterReference | null
+  ): Promise<{ content: string; isChapterSpecific: boolean; chapterNumber?: number }> => {
     if (documentIds.length === 0) {
       // If no documents mentioned, search all documents
-      return "User is asking about their documents. Search across all available documents to find relevant information.";
+      return {
+        content: "User is asking about their documents. Search across all available documents to find relevant information.",
+        isChapterSpecific: false,
+      };
     }
 
-    const contents = await Promise.all(
-      documentIds.map((id) => getDocumentContent(id))
+    // Get content for each document (with chapter extraction if referenced)
+    const results = await Promise.all(
+      documentIds.map((id) => getDocumentContent(id, chapterRef))
     );
+
+    // Check if any document is using chapter-specific content
+    const isChapterSpecific = results.some(r => r.isChapterSpecific);
+    const chapterNumber = results.find(r => r.chapterNumber)?.chapterNumber;
+
+    // Combine contents
+    let combined = results.map(r => r.content).join("\n\n---\n\n");
 
     // Rough token estimation and truncation
     const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 4000;
     const estimatedCharsPerToken = 4;
     const maxChars = maxTokens * estimatedCharsPerToken;
 
-    let combined = contents.join("\n\n---\n\n");
     if (combined.length > maxChars) {
       combined = combined.slice(0, maxChars) + "\n\n[Content truncated due to length...]";
     }
 
-    return combined;
+    return {
+      content: combined,
+      isChapterSpecific,
+      chapterNumber,
+    };
   };
 
   // Parse tool calls from LLM response
@@ -327,6 +401,9 @@ export function DocumentQATab() {
     // Parse mentions from input
     const mentionedDocumentIds = mentions.map((m) => m.id);
 
+    // Detect chapter references in the query
+    const chapterRef = detectChapterReference(rawInput);
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -340,6 +417,7 @@ export function DocumentQATab() {
     setRawInput("");
     setInput("");
     setMentions([]);
+    setDetectedChapter(null);
     setProviderError(null);
     setIsProcessing(true);
 
@@ -367,7 +445,7 @@ export function DocumentQATab() {
         content: `You are a helpful assistant that answers questions about documents.
 
 ${mentionedDocumentIds.length > 0
-  ? `IMPORTANT: The user has provided document content below. Answer their question directly using ONLY the provided document content. Do NOT use tools to fetch the document - the content is already provided in the user's message.`
+  ? `IMPORTANT: The user has provided document content below. Answer their question directly using ONLY the provided document content. Do NOT use tools to fetch the document - the content is already provided in the user's message.${chapterRef ? `\n\nThe user is asking about Chapter ${chapterRef.number}. Focus your answer on that specific chapter.` : ''}`
   : `The user is asking a general question. Answer based on your knowledge.`}
 
 ONLY use tools when the user explicitly asks you to CREATE or SAVE something:
@@ -385,14 +463,25 @@ Tool call format (only if needed):
 \`\`\`` : ''}`,
       };
 
-      // Get document context
-      const documentContext = await buildMultiDocumentContext(mentionedDocumentIds);
+      // Get document context (chapter-aware)
+      const { content: documentContext, isChapterSpecific, chapterNumber } = await buildMultiDocumentContext(
+        mentionedDocumentIds,
+        chapterRef
+      );
+
+      // Build user prompt with chapter context info
+      let userQuestion = savedRawInput.replace(MENTION_REGEX, "").trim();
+      let contextPrefix = "";
+      
+      if (isChapterSpecific && chapterNumber) {
+        contextPrefix = `[Focusing on Chapter ${chapterNumber}]\n\n`;
+      }
 
       const userPrompt: LLMMessage = {
         role: "user",
         content: mentionedDocumentIds.length > 0
-          ? `Document context:\n${documentContext}\n\nUser question: ${savedRawInput.replace(MENTION_REGEX, "")}`
-          : savedRawInput,
+          ? `${contextPrefix}Document context:\n${documentContext}\n\nUser question: ${userQuestion}`
+          : userQuestion,
       };
 
       // Call LLM
@@ -476,8 +565,8 @@ Tool call format (only if needed):
         )}
       </div>
 
-      {/* Mention badges in input area */}
-      {mentions.length > 0 && (
+      {/* Mention badges and chapter detection in input area */}
+      {(mentions.length > 0 || detectedChapter) && (
         <div className="px-4 pt-2 flex flex-wrap gap-2">
           {mentions.map((mention) => (
             <span
@@ -494,6 +583,13 @@ Tool call format (only if needed):
               </button>
             </span>
           ))}
+          {detectedChapter && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm rounded-full">
+              <BookOpen className="w-3 h-3" />
+              Chapter {detectedChapter.number}
+              {detectedChapter.title && `: ${detectedChapter.title}`}
+            </span>
+          )}
         </div>
       )}
 
@@ -513,10 +609,16 @@ Tool call format (only if needed):
                 <p className="font-semibold mb-2">Example questions:</p>
                 <ul className="space-y-1">
                   <li>• "@MyDocument What are the main points?"</li>
+                  <li>• "Summarize chapter 3" (saves tokens!)</li>
+                  <li>• "@MyDocument Explain chapter 5 in detail"</li>
                   <li>• "Create flashcards from mentioned documents"</li>
-                  <li>• "Summarize these documents"</li>
                   <li>• "What insights can you extract?"</li>
                 </ul>
+                <p className="font-semibold mt-3 mb-1">Chapter-aware queries:</p>
+                <p className="text-xs">
+                  Mention a document, then ask about a specific chapter like "summarize chapter 9" 
+                  to only process that chapter—saving LLM tokens and getting more focused answers.
+                </p>
               </div>
             </div>
           </div>

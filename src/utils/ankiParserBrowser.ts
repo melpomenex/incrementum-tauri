@@ -5,7 +5,7 @@
  * using jszip and sql.js
  */
 
-import JSZip from 'jszip';
+import * as JSZip from 'jszip';
 import initSqlJs, { Database } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 

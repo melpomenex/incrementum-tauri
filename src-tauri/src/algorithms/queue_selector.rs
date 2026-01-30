@@ -229,6 +229,9 @@ mod tests {
             document_title: "Test Document".to_string(),
             extract_id: None,
             learning_item_id: Some(id.to_string()),
+            question: None,
+            answer: None,
+            cloze_text: None,
             item_type: "learning-item".to_string(),
             priority_rating: None,
             priority_slider: None,
@@ -238,6 +241,8 @@ mod tests {
             tags: vec![],
             category: None,
             progress: 0,
+            source: None,
+            position: None,
         }
     }
 
@@ -248,6 +253,9 @@ mod tests {
             document_title: "Test Document".to_string(),
             extract_id: None,
             learning_item_id: Some(id.to_string()),
+            question: None,
+            answer: None,
+            cloze_text: None,
             item_type: "learning-item".to_string(),
             priority_rating: None,
             priority_slider: None,
@@ -257,6 +265,8 @@ mod tests {
             tags: vec![],
             category: None,
             progress: 0,
+            source: None,
+            position: None,
         }
     }
 
@@ -363,6 +373,9 @@ mod tests {
                 document_title: "Due Today".to_string(),
                 extract_id: None,
                 learning_item_id: None,
+                question: None,
+                answer: None,
+                cloze_text: None,
                 item_type: "document".to_string(),
                 priority_rating: None,
                 priority_slider: None,
@@ -372,6 +385,8 @@ mod tests {
                 tags: vec![],
                 category: None,
                 progress: 0,
+                source: None,
+                position: None,
             },
             QueueItem {
                 id: "due_tomorrow".to_string(),
@@ -379,6 +394,9 @@ mod tests {
                 document_title: "Due Tomorrow".to_string(),
                 extract_id: None,
                 learning_item_id: None,
+                question: None,
+                answer: None,
+                cloze_text: None,
                 item_type: "document".to_string(),
                 priority_rating: None,
                 priority_slider: None,
@@ -388,6 +406,8 @@ mod tests {
                 tags: vec![],
                 category: None,
                 progress: 0,
+                source: None,
+                position: None,
             },
         ];
 

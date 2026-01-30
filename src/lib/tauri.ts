@@ -214,6 +214,58 @@ export async function openExternal(url: string): Promise<void> {
 }
 
 /**
+ * Open URL in a new Tauri Webview window
+ * This creates a separate window with a native webview, which can handle YouTube embeds better
+ * than iframe embeds in the main app
+ */
+export async function openInWebviewWindow(
+  url: string,
+  options: { title?: string; width?: number; height?: number } = {}
+): Promise<void> {
+  if (!isTauri()) {
+    // Fallback to regular window.open in browser
+    window.open(url, "_blank", `width=${options.width || 1200},height=${options.height || 800}`);
+    return;
+  }
+
+  try {
+    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+    const windowLabel = `youtube-player-${Date.now()}`;
+    
+    const webview = new WebviewWindow(windowLabel, {
+      url,
+      title: options.title || "YouTube Player",
+      width: options.width || 1200,
+      height: options.height || 800,
+      center: true,
+      resizable: true,
+      minimizable: true,
+      maximizable: true,
+      closable: true,
+      // Enable all features needed for YouTube
+      transparent: false,
+      decorations: true,
+      alwaysOnTop: false,
+    });
+
+    // Handle window creation events
+    webview.once("tauri://created", () => {
+      console.log("YouTube player window created successfully");
+    });
+
+    webview.once("tauri://error", (event: unknown) => {
+      console.error("Failed to create YouTube player window:", event);
+      // Fallback to browser
+      openExternal(url);
+    });
+  } catch (error) {
+    console.error("Failed to create webview window:", error);
+    // Fallback to browser
+    openExternal(url);
+  }
+}
+
+/**
  * Type alias for unlisten function
  */
 export type UnlistenFn = () => void;

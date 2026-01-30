@@ -27,6 +27,7 @@ import { importYouTubeVideo, resolveDocumentCover, updateDocument as updateDocum
 import { getYouTubeThumbnail, extractYouTubeTimestamp } from "../../api/youtube";
 import { getDeviceInfo } from "../../lib/pwa";
 import { isTauri } from "../../lib/tauri";
+import { storeBrowserFile } from "../../lib/browser-file-store";
 
 const MODE_STORAGE_KEY = "documentsViewMode";
 const SAVED_VIEWS_KEY = "documentsSavedViews";
@@ -282,9 +283,18 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
 
       const files = Array.from(event.dataTransfer.files);
       if (files.length === 0) return;
-      const filePaths = files
-        .map((file) => (file as any).path)
-        .filter((path) => path && typeof path === "string");
+
+      let filePaths: string[];
+
+      if (isTauri()) {
+        // In Tauri, files have a path property
+        filePaths = files
+          .map((file) => (file as any).path)
+          .filter((path) => path && typeof path === "string");
+      } else {
+        // In web mode, store files in browser file store and get virtual paths
+        filePaths = files.map((file) => storeBrowserFile(file));
+      }
 
       if (filePaths.length === 0) return;
       try {
@@ -533,14 +543,16 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                 Import YouTube
               </button>
             )}
-            <button
-              onClick={() => setShowAnnaArchiveSearch(true)}
-              className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
-              title="Search and download books from Anna's Archive"
-            >
-              <BookOpen className="w-4 h-4" />
-              Anna's Archive
-            </button>
+            {isTauri() && (
+              <button
+                onClick={() => setShowAnnaArchiveSearch(true)}
+                className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+                title="Search and download books from Anna's Archive"
+              >
+                <BookOpen className="w-4 h-4" />
+                Anna's Archive
+              </button>
+            )}
             <button
               onClick={handleImport}
               disabled={isImporting}

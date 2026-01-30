@@ -12,7 +12,13 @@ import {
   Upload,
   Server,
   Plug,
+  ListVideo,
+  Cookie,
+  Trash2,
+  AlertCircle,
+  Info,
 } from "lucide-react";
+import { YouTubePlaylistManager } from "../media/YouTubePlaylistManager";
 import {
   getIntegrationSettings,
   saveIntegrationSettings,
@@ -33,8 +39,19 @@ import {
   type ObsidianConfig,
   type AnkiConfig,
 } from "../../api/integrations";
+import {
+  getStoredYouTubeCookies,
+  storeYouTubeCookies,
+  clearYouTubeCookies,
+  hasYouTubeCookies,
+  getYouTubeCookieCount,
+  parseCookiesFromString,
+  testYouTubeCookies,
+  validateYouTubeCookies,
+  type YouTubeCookie,
+} from "../../utils/youtubeCookies";
 
-type IntegrationType = "obsidian" | "anki" | "extension";
+type IntegrationType = "obsidian" | "anki" | "extension" | "youtube" | "youtube-cookies";
 
 export function IntegrationSettings() {
   const [settings, setSettings] = useState(getIntegrationSettings());
@@ -62,6 +79,15 @@ export function IntegrationSettings() {
     port: number;
     connections: number;
   }>({ running: false, port: 8766, connections: 0 });
+
+  // YouTube Cookies state
+  const [youtubeCookies, setYoutubeCookies] = useState<YouTubeCookie[]>([]);
+  const [cookieInput, setCookieInput] = useState("");
+  const [cookieTestStatus, setCookieTestStatus] = useState<{
+    status: "idle" | "testing" | "success" | "error";
+    message: string;
+  }>({ status: "idle", message: "" });
+  const [showCookieInput, setShowCookieInput] = useState(false);
 
   // Operation status
   const [isOperating, setIsOperating] = useState(false);
@@ -110,6 +136,11 @@ export function IntegrationSettings() {
     loadExtensionStatus();
     const interval = setInterval(loadExtensionStatus, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Load YouTube cookies on mount
+  useEffect(() => {
+    setYoutubeCookies(getStoredYouTubeCookies());
   }, []);
 
   const loadExtensionStatus = async () => {
@@ -205,6 +236,72 @@ export function IntegrationSettings() {
     }
   };
 
+  // YouTube Cookies handlers
+  const handleSaveCookies = () => {
+    if (!cookieInput.trim()) {
+      showResult(false, "Please enter cookies");
+      return;
+    }
+
+    try {
+      const parsed = parseCookiesFromString(cookieInput);
+      if (parsed.length === 0) {
+        showResult(false, "No valid cookies found. Please check the format.");
+        return;
+      }
+
+      const validation = validateYouTubeCookies(parsed);
+      storeYouTubeCookies(parsed);
+      setYoutubeCookies(parsed);
+      setCookieInput("");
+      setShowCookieInput(false);
+
+      if (validation.valid) {
+        showResult(
+          true,
+          `Saved ${parsed.length} cookies. ${validation.hasAuth ? "Authentication cookies detected!" : ""}`
+        );
+      } else {
+        showResult(
+          true,
+          `Saved ${parsed.length} cookies. Warning: Missing recommended cookies: ${validation.missing.join(", ")}`
+        );
+      }
+    } catch (error) {
+      showResult(false, error instanceof Error ? error.message : "Failed to parse cookies");
+    }
+  };
+
+  const handleTestCookies = async () => {
+    if (youtubeCookies.length === 0) {
+      showResult(false, "No cookies to test");
+      return;
+    }
+
+    setCookieTestStatus({ status: "testing", message: "Testing cookies..." });
+
+    const result = await testYouTubeCookies(youtubeCookies);
+
+    if (result.success) {
+      setCookieTestStatus({ status: "success", message: result.message });
+      showResult(true, result.message);
+    } else {
+      setCookieTestStatus({ status: "error", message: result.message });
+      showResult(false, result.message);
+    }
+
+    setTimeout(() => {
+      setCookieTestStatus({ status: "idle", message: "" });
+    }, 5000);
+  };
+
+  const handleClearCookies = () => {
+    clearYouTubeCookies();
+    setYoutubeCookies([]);
+    setCookieTestStatus({ status: "idle", message: "" });
+    showResult(true, "Cookies cleared");
+  };
+
   const showResult = (success: boolean, message: string) => {
     setOperationResult({ success, message });
     setTimeout(() => setOperationResult(null), 3000);
@@ -252,6 +349,28 @@ export function IntegrationSettings() {
         >
           <Globe className="w-4 h-4" />
           Browser Extension
+        </button>
+        <button
+          onClick={() => setActiveTab("youtube")}
+          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+            activeTab === "youtube"
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-secondary-foreground hover:opacity-90"
+          }`}
+        >
+          <ListVideo className="w-4 h-4" />
+          YouTube Playlists
+        </button>
+        <button
+          onClick={() => setActiveTab("youtube-cookies")}
+          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+            activeTab === "youtube-cookies"
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-secondary-foreground hover:opacity-90"
+          }`}
+        >
+          <Cookie className="w-4 h-4" />
+          YouTube Cookies
         </button>
       </div>
 
@@ -604,6 +723,151 @@ export function IntegrationSettings() {
               with the desktop application via HTTP. Start the server to enable web clipping functionality.
               Configure the extension to connect to http://127.0.0.1:{extensionPort}.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* YouTube Playlist Settings */}
+      {activeTab === "youtube" && (
+        <div className="space-y-4">
+          <div className="bg-card border border-border rounded-lg p-6">
+            <YouTubePlaylistManager />
+          </div>
+        </div>
+      )}
+
+      {/* YouTube Cookies Settings */}
+      {activeTab === "youtube-cookies" && (
+        <div className="space-y-4">
+          <div className="bg-card border border-border rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Cookie className="w-5 h-5 text-red-500" />
+              <h3 className="text-lg font-semibold text-foreground">YouTube Authentication Cookies</h3>
+              {youtubeCookies.length > 0 && (
+                <span className="ml-auto px-2 py-1 bg-green-500/20 text-green-500 text-xs rounded-full flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  {youtubeCookies.length} cookies
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {/* Info banner */}
+              <div className="p-4 bg-muted/30 rounded-lg flex gap-3">
+                <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground mb-1">Why upload cookies?</p>
+                  <p>
+                    YouTube may block transcript requests due to bot detection. By uploading your own YouTube cookies,
+                    the server can make authenticated requests on your behalf. Your cookies are stored locally in your
+                    browser and sent directly to the server.
+                  </p>
+                </div>
+              </div>
+
+              {/* Cookie status */}
+              {youtubeCookies.length > 0 ? (
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">Cookies stored</span>
+                    <span className="text-sm text-green-500">{youtubeCookies.length} cookies</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleTestCookies}
+                      disabled={cookieTestStatus.status === "testing"}
+                      className="flex-1 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${cookieTestStatus.status === "testing" ? "animate-spin" : ""}`} />
+                      {cookieTestStatus.status === "testing" ? "Testing..." : "Test Cookies"}
+                    </button>
+                    <button
+                      onClick={handleClearCookies}
+                      className="px-3 py-2 bg-destructive/20 text-destructive rounded-lg hover:opacity-90 flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Clear
+                    </button>
+                  </div>
+                  {cookieTestStatus.status !== "idle" && (
+                    <div className={`mt-2 text-sm flex items-center gap-2 ${
+                      cookieTestStatus.status === "success" ? "text-green-500" :
+                      cookieTestStatus.status === "error" ? "text-destructive" :
+                      "text-muted-foreground"
+                    }`}>
+                      {cookieTestStatus.status === "success" && <Check className="w-4 h-4" />}
+                      {cookieTestStatus.status === "error" && <X className="w-4 h-4" />}
+                      {cookieTestStatus.message}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">No cookies stored</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Cookie input area */}
+              {!showCookieInput ? (
+                <button
+                  onClick={() => setShowCookieInput(true)}
+                  className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center justify-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload Cookies
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Paste your YouTube cookies (JSON format)
+                    </label>
+                    <textarea
+                      value={cookieInput}
+                      onChange={(e) => setCookieInput(e.target.value)}
+                      placeholder='[{"name": "VISITOR_INFO1_LIVE", "value": "...", "domain": ".youtube.com"}, ...]'
+                      rows={6}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm font-mono"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSaveCookies}
+                      className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90"
+                    >
+                      Save Cookies
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCookieInput(false);
+                        setCookieInput("");
+                      }}
+                      className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Instructions */}
+              <div className="p-4 bg-muted/30 rounded-lg">
+                <p className="text-sm font-medium text-foreground mb-2">How to get your cookies:</p>
+                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                  <li>Install a cookie exporter extension (e.g., "Get cookies.txt" for Chrome/Firefox)</li>
+                  <li>Go to YouTube.com and make sure you're logged in</li>
+                  <li>Export cookies for youtube.com in JSON format</li>
+                  <li>Paste the JSON above and click "Save Cookies"</li>
+                </ol>
+                <p className="text-xs text-muted-foreground mt-3">
+                  <strong>Important:</strong> Cookies contain authentication tokens. Only share them with services you trust.
+                  Your cookies are stored locally in your browser.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}

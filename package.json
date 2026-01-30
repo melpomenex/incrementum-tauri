@@ -46,6 +46,7 @@
     "epubjs": "^0.3.93",
     "idb": "^8.0.3",
     "jszip": "^3.10.1",
+    "libgen": "^2.2.0",
     "lucide-react": "^0.562.0",
     "pdfjs-dist": "^5.4.530",
     "react": "^19.1.0",
@@ -58,6 +59,7 @@
     "ts-fsrs": "^5.2.3",
     "typings": "^2.1.1",
     "uuid": "^10.0.0",
+    "youtube-transcript-ts": "^1.3.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

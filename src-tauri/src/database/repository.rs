@@ -657,6 +657,47 @@ impl Repository {
         Ok(extracts)
     }
 
+    pub async fn list_all_extracts(&self) -> Result<Vec<Extract>> {
+        let rows = sqlx::query("SELECT * FROM extracts ORDER BY date_created DESC")
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut extracts = Vec::new();
+        for row in rows {
+            let tags_json: String = row.try_get("tags")?;
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+            let stability: Option<f64> = row.try_get("memory_state_stability").ok();
+            let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
+            let memory_state = Self::parse_memory_state(stability, difficulty);
+
+            extracts.push(Extract {
+                id: row.try_get("id")?,
+                document_id: row.try_get("document_id")?,
+                content: row.try_get("content")?,
+                html_content: row.try_get("html_content").ok(),
+                source_url: row.try_get("source_url").ok(),
+                page_title: row.try_get("page_title")?,
+                page_number: row.try_get("page_number")?,
+                highlight_color: row.try_get("highlight_color")?,
+                notes: row.try_get("notes")?,
+                progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,
+                max_disclosure_level: row.try_get("max_disclosure_level")?,
+                date_created: row.try_get("date_created")?,
+                date_modified: row.try_get("date_modified")?,
+                tags,
+                category: row.try_get("category")?,
+                memory_state,
+                next_review_date: row.try_get("next_review_date").ok(),
+                last_review_date: row.try_get("last_review_date").ok(),
+                review_count: row.try_get("review_count").unwrap_or(0),
+                reps: row.try_get("reps").unwrap_or(0),
+            });
+        }
+
+        Ok(extracts)
+    }
+
     pub async fn update_extract(&self, extract: &Extract) -> Result<Extract> {
         let tags_json = serde_json::to_string(&extract.tags)?;
         let (stability, difficulty) = extract.memory_state.as_ref()
@@ -1789,6 +1830,428 @@ impl Repository {
             let segments_json: String = row.get("segments_json");
             (transcript, segments_json)
         }))
+    }
+
+    // ============================================================================
+    // YouTube Playlist Subscription operations
+    // ============================================================================
+
+    /// Create a new playlist subscription
+    pub async fn create_playlist_subscription(
+        &self,
+        id: &str,
+        playlist_id: &str,
+        playlist_url: &str,
+        title: Option<&str>,
+        channel_name: Option<&str>,
+        channel_id: Option<&str>,
+        description: Option<&str>,
+        thumbnail_url: Option<&str>,
+        total_videos: Option<i32>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            INSERT INTO youtube_playlist_subscriptions (
+                id, playlist_id, playlist_url, title, channel_name, channel_id,
+                description, thumbnail_url, total_videos,
+                is_active, auto_import_new, queue_intersperse_interval, priority_rating,
+                last_refreshed_at, refresh_interval_hours, created_at, modified_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, 1, 5, 5, NULL, 24, ?10, ?10)
+            "#,
+        )
+        .bind(id)
+        .bind(playlist_id)
+        .bind(playlist_url)
+        .bind(title)
+        .bind(channel_name)
+        .bind(channel_id)
+        .bind(description)
+        .bind(thumbnail_url)
+        .bind(total_videos)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get all playlist subscriptions
+    pub async fn get_playlist_subscriptions(&self) -> Result<Vec<crate::models::PlaylistSubscription>> {
+        let rows = sqlx::query(
+            "SELECT * FROM youtube_playlist_subscriptions ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|row| {
+            crate::models::PlaylistSubscription {
+                id: row.get("id"),
+                playlist_id: row.get("playlist_id"),
+                playlist_url: row.get("playlist_url"),
+                title: row.get("title"),
+                channel_name: row.get("channel_name"),
+                channel_id: row.get("channel_id"),
+                description: row.get("description"),
+                thumbnail_url: row.get("thumbnail_url"),
+                total_videos: row.get("total_videos"),
+                is_active: row.get::<i32, _>("is_active") != 0,
+                auto_import_new: row.get::<i32, _>("auto_import_new") != 0,
+                queue_intersperse_interval: row.get("queue_intersperse_interval"),
+                priority_rating: row.get("priority_rating"),
+                last_refreshed_at: row.get("last_refreshed_at"),
+                refresh_interval_hours: row.get("refresh_interval_hours"),
+                created_at: row.get("created_at"),
+                modified_at: row.get("modified_at"),
+            }
+        }).collect())
+    }
+
+    /// Get a single playlist subscription by ID
+    pub async fn get_playlist_subscription(&self, id: &str) -> Result<Option<crate::models::PlaylistSubscription>> {
+        let row = sqlx::query(
+            "SELECT * FROM youtube_playlist_subscriptions WHERE id = ?1"
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| crate::models::PlaylistSubscription {
+            id: row.get("id"),
+            playlist_id: row.get("playlist_id"),
+            playlist_url: row.get("playlist_url"),
+            title: row.get("title"),
+            channel_name: row.get("channel_name"),
+            channel_id: row.get("channel_id"),
+            description: row.get("description"),
+            thumbnail_url: row.get("thumbnail_url"),
+            total_videos: row.get("total_videos"),
+            is_active: row.get::<i32, _>("is_active") != 0,
+            auto_import_new: row.get::<i32, _>("auto_import_new") != 0,
+            queue_intersperse_interval: row.get("queue_intersperse_interval"),
+            priority_rating: row.get("priority_rating"),
+            last_refreshed_at: row.get("last_refreshed_at"),
+            refresh_interval_hours: row.get("refresh_interval_hours"),
+            created_at: row.get("created_at"),
+            modified_at: row.get("modified_at"),
+        }))
+    }
+
+    /// Get a playlist subscription by playlist_id
+    pub async fn get_playlist_subscription_by_playlist_id(&self, playlist_id: &str) -> Result<Option<crate::models::PlaylistSubscription>> {
+        let row = sqlx::query(
+            "SELECT * FROM youtube_playlist_subscriptions WHERE playlist_id = ?1"
+        )
+        .bind(playlist_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| crate::models::PlaylistSubscription {
+            id: row.get("id"),
+            playlist_id: row.get("playlist_id"),
+            playlist_url: row.get("playlist_url"),
+            title: row.get("title"),
+            channel_name: row.get("channel_name"),
+            channel_id: row.get("channel_id"),
+            description: row.get("description"),
+            thumbnail_url: row.get("thumbnail_url"),
+            total_videos: row.get("total_videos"),
+            is_active: row.get::<i32, _>("is_active") != 0,
+            auto_import_new: row.get::<i32, _>("auto_import_new") != 0,
+            queue_intersperse_interval: row.get("queue_intersperse_interval"),
+            priority_rating: row.get("priority_rating"),
+            last_refreshed_at: row.get("last_refreshed_at"),
+            refresh_interval_hours: row.get("refresh_interval_hours"),
+            created_at: row.get("created_at"),
+            modified_at: row.get("modified_at"),
+        }))
+    }
+
+    /// Update a playlist subscription
+    pub async fn update_playlist_subscription(
+        &self,
+        id: &str,
+        title: Option<&str>,
+        is_active: Option<bool>,
+        auto_import_new: Option<bool>,
+        queue_intersperse_interval: Option<i32>,
+        priority_rating: Option<i32>,
+        refresh_interval_hours: Option<i32>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            UPDATE youtube_playlist_subscriptions SET
+                title = COALESCE(?1, title),
+                is_active = COALESCE(?2, is_active),
+                auto_import_new = COALESCE(?3, auto_import_new),
+                queue_intersperse_interval = COALESCE(?4, queue_intersperse_interval),
+                priority_rating = COALESCE(?5, priority_rating),
+                refresh_interval_hours = COALESCE(?6, refresh_interval_hours),
+                modified_at = ?7
+            WHERE id = ?8
+            "#,
+        )
+        .bind(title)
+        .bind(is_active.map(|v| if v { 1 } else { 0 }))
+        .bind(auto_import_new.map(|v| if v { 1 } else { 0 }))
+        .bind(queue_intersperse_interval)
+        .bind(priority_rating)
+        .bind(refresh_interval_hours)
+        .bind(&now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete a playlist subscription
+    pub async fn delete_playlist_subscription(&self, id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM youtube_playlist_subscriptions WHERE id = ?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Update last refreshed timestamp
+    pub async fn update_playlist_last_refreshed(&self, id: &str) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            UPDATE youtube_playlist_subscriptions SET
+                last_refreshed_at = ?1,
+                modified_at = ?1
+            WHERE id = ?2
+            "#,
+        )
+        .bind(&now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    // ============================================================================
+    // YouTube Playlist Video operations
+    // ============================================================================
+
+    /// Add a video to a playlist tracking
+    pub async fn add_playlist_video(
+        &self,
+        id: &str,
+        subscription_id: &str,
+        video_id: &str,
+        video_title: Option<&str>,
+        video_duration: Option<i32>,
+        thumbnail_url: Option<&str>,
+        position: Option<i32>,
+        published_at: Option<&str>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            INSERT OR IGNORE INTO youtube_playlist_videos (
+                id, subscription_id, video_id, video_title, video_duration,
+                thumbnail_url, position, is_imported, document_id, added_to_queue,
+                queue_position, published_at, discovered_at, imported_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, NULL, 0, NULL, ?8, ?9, NULL)
+            "#,
+        )
+        .bind(id)
+        .bind(subscription_id)
+        .bind(video_id)
+        .bind(video_title)
+        .bind(video_duration)
+        .bind(thumbnail_url)
+        .bind(position)
+        .bind(published_at)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get videos for a subscription
+    pub async fn get_playlist_videos(
+        &self,
+        subscription_id: &str,
+        only_unimported: bool,
+    ) -> Result<Vec<crate::models::PlaylistVideo>> {
+        let query = if only_unimported {
+            "SELECT * FROM youtube_playlist_videos WHERE subscription_id = ?1 AND is_imported = 0 ORDER BY position ASC"
+        } else {
+            "SELECT * FROM youtube_playlist_videos WHERE subscription_id = ?1 ORDER BY position ASC"
+        };
+
+        let rows = sqlx::query(query)
+            .bind(subscription_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows.into_iter().map(|row| {
+            crate::models::PlaylistVideo {
+                id: row.get("id"),
+                subscription_id: row.get("subscription_id"),
+                video_id: row.get("video_id"),
+                video_title: row.get("video_title"),
+                video_duration: row.get("video_duration"),
+                thumbnail_url: row.get("thumbnail_url"),
+                position: row.get("position"),
+                is_imported: row.get::<i32, _>("is_imported") != 0,
+                document_id: row.get("document_id"),
+                added_to_queue: row.get::<i32, _>("added_to_queue") != 0,
+                queue_position: row.get("queue_position"),
+                published_at: row.get("published_at"),
+                discovered_at: row.get("discovered_at"),
+                imported_at: row.get("imported_at"),
+            }
+        }).collect())
+    }
+
+    /// Get videos ready for queue interspersion (imported but not yet added to queue)
+    pub async fn get_videos_for_queue_interspersion(&self) -> Result<Vec<crate::models::PlaylistVideo>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT pv.* FROM youtube_playlist_videos pv
+            JOIN youtube_playlist_subscriptions ps ON pv.subscription_id = ps.id
+            WHERE pv.is_imported = 1 
+              AND pv.added_to_queue = 0
+              AND ps.is_active = 1
+            ORDER BY pv.discovered_at ASC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|row| {
+            crate::models::PlaylistVideo {
+                id: row.get("id"),
+                subscription_id: row.get("subscription_id"),
+                video_id: row.get("video_id"),
+                video_title: row.get("video_title"),
+                video_duration: row.get("video_duration"),
+                thumbnail_url: row.get("thumbnail_url"),
+                position: row.get("position"),
+                is_imported: row.get::<i32, _>("is_imported") != 0,
+                document_id: row.get("document_id"),
+                added_to_queue: row.get::<i32, _>("added_to_queue") != 0,
+                queue_position: row.get("queue_position"),
+                published_at: row.get("published_at"),
+                discovered_at: row.get("discovered_at"),
+                imported_at: row.get("imported_at"),
+            }
+        }).collect())
+    }
+
+    /// Mark a video as imported
+    pub async fn mark_video_imported(
+        &self,
+        video_id: &str,
+        document_id: &str,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            UPDATE youtube_playlist_videos SET
+                is_imported = 1,
+                document_id = ?1,
+                imported_at = ?2
+            WHERE id = ?3
+            "#,
+        )
+        .bind(document_id)
+        .bind(&now)
+        .bind(video_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Mark a video as added to queue
+    pub async fn mark_video_added_to_queue(
+        &self,
+        video_id: &str,
+        queue_position: i32,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE youtube_playlist_videos SET
+                added_to_queue = 1,
+                queue_position = ?1
+            WHERE id = ?2
+            "#,
+        )
+        .bind(queue_position)
+        .bind(video_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get global playlist settings
+    pub async fn get_playlist_settings(&self) -> Result<crate::models::PlaylistSettings> {
+        let row = sqlx::query(
+            "SELECT * FROM youtube_playlist_settings WHERE id = 'global'"
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(crate::models::PlaylistSettings {
+            id: row.get("id"),
+            enabled: row.get::<i32, _>("enabled") != 0,
+            default_intersperse_interval: row.get("default_intersperse_interval"),
+            default_priority: row.get("default_priority"),
+            max_consecutive_playlist_videos: row.get("max_consecutive_playlist_videos"),
+            prefer_new_videos: row.get::<i32, _>("prefer_new_videos") != 0,
+            created_at: row.get("created_at"),
+            modified_at: row.get("modified_at"),
+        })
+    }
+
+    /// Update global playlist settings
+    pub async fn update_playlist_settings(
+        &self,
+        enabled: Option<bool>,
+        default_intersperse_interval: Option<i32>,
+        default_priority: Option<i32>,
+        max_consecutive_playlist_videos: Option<i32>,
+        prefer_new_videos: Option<bool>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            UPDATE youtube_playlist_settings SET
+                enabled = COALESCE(?1, enabled),
+                default_intersperse_interval = COALESCE(?2, default_intersperse_interval),
+                default_priority = COALESCE(?3, default_priority),
+                max_consecutive_playlist_videos = COALESCE(?4, max_consecutive_playlist_videos),
+                prefer_new_videos = COALESCE(?5, prefer_new_videos),
+                modified_at = ?6
+            WHERE id = 'global'
+            "#,
+        )
+        .bind(enabled.map(|v| if v { 1 } else { 0 }))
+        .bind(default_intersperse_interval)
+        .bind(default_priority)
+        .bind(max_consecutive_playlist_videos)
+        .bind(prefer_new_videos.map(|v| if v { 1 } else { 0 }))
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 }
 

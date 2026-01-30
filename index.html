@@ -37,6 +37,21 @@
 
 <body data-incrementum-app="true">
   <div id="root"></div>
+  <div id="error-display" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000;color:#fff;padding:20px;overflow:auto;z-index:99999;font-family:monospace;white-space:pre-wrap;"></div>
+  <script>
+    (function() {
+      var errorDiv = document.getElementById('error-display');
+      window.addEventListener('error', function(e) {
+        errorDiv.style.display = 'block';
+        errorDiv.textContent += 'Error: ' + e.message + '\n' + (e.error && e.error.stack ? e.error.stack : '') + '\n\n';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        errorDiv.style.display = 'block';
+        errorDiv.textContent += 'Promise rejection: ' + e.reason + '\n' + (e.reason && e.reason.stack ? e.reason.stack : '') + '\n\n';
+      });
+      console.log('Error handler installed');
+    })();
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

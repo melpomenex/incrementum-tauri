@@ -12,7 +12,7 @@ pub struct QueueItem {
     pub question: Option<String>,
     pub answer: Option<String>,
     pub cloze_text: Option<String>,
-    pub item_type: String, // "document", "extract", "learning-item"
+    pub item_type: String, // "document", "extract", "learning-item", "playlist-video"
     pub priority_rating: Option<i32>,
     pub priority_slider: Option<i32>,
     pub priority: f64,
@@ -21,4 +21,10 @@ pub struct QueueItem {
     pub tags: Vec<String>,
     pub category: Option<String>,
     pub progress: i32, // 0-100
+    
+    // Playlist video interspersion fields
+    /// The source of this queue item (e.g., "playlist:<subscription_id>")
+    pub source: Option<String>,
+    /// The position in the queue (used for interspersion ordering)
+    pub position: Option<i32>,
 }

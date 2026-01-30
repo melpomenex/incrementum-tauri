@@ -55,9 +55,9 @@ export interface UpdateExtractInput {
 }
 
 /**
- * Get all extracts for a document
+ * Get all extracts for a document, or all extracts if no documentId is provided
  */
-export async function getExtracts(documentId: string): Promise<Extract[]> {
+export async function getExtracts(documentId?: string | null): Promise<Extract[]> {
   return await invokeCommand<Extract[]>("get_extracts", { documentId });
 }
 

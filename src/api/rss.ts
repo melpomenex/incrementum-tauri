@@ -2,7 +2,7 @@
  * RSS and Atom feed parser and management
  */
 
-import { invokeCommand } from "../lib/tauri";
+import { invokeCommand, isTauri } from "../lib/tauri";
 
 /**
  * Feed item (article/blog post)
@@ -1175,6 +1175,11 @@ export async function unsubscribeFromFeedAuto(feedId: string): Promise<void> {
  * Unified markItemRead - works in both Tauri and Web mode
  */
 export async function markItemReadAuto(feedId: string, itemId: string, read: boolean = true): Promise<void> {
+  if (isTauri()) {
+    // In Tauri mode, use the backend command to update SQLite
+    await invokeCommand("mark_rss_article_read", { id: itemId, is_read: read });
+    return;
+  }
   if (shouldUseHttpBackend()) {
     await markArticleReadViaHttp(itemId, read);
     return;

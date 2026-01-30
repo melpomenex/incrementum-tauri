@@ -7,10 +7,14 @@ use crate::models::Extract;
 
 #[tauri::command]
 pub async fn get_extracts(
-    document_id: String,
+    document_id: Option<String>,
     repo: State<'_, Repository>,
 ) -> Result<Vec<Extract>> {
-    let extracts = repo.list_extracts_by_document(&document_id).await?;
+    let extracts = if let Some(id) = document_id {
+        repo.list_extracts_by_document(&id).await?
+    } else {
+        repo.list_all_extracts().await?
+    };
     Ok(extracts)
 }
 

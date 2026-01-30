@@ -1,8 +1,10 @@
 /**
  * Browser-based YouTube transcript fetching
- * Uses CORS proxies to access YouTube's transcript data
+ * Uses youtube-transcript-ts library for PWA/Web app
  * Falls back to Vercel API endpoint when deployed on Vercel
  */
+
+import { isTauri } from "../lib/tauri";
 
 export interface TranscriptSegment {
   text: string;
@@ -32,6 +34,17 @@ const TRANSCRIPT_APIS = [
   // Returns JSON transcript directly
   { url: 'https://yt.lemnoslife.com/videos?part=snippet&id=', extract: (data: any) => null }, // Not a transcript API, placeholder
 ];
+
+// Cache the API instance for reuse
+let transcriptApi: any = null;
+
+async function getTranscriptApi(): Promise<any> {
+  if (!transcriptApi) {
+    const { YouTubeTranscriptApi } = await import('youtube-transcript-ts');
+    transcriptApi = new YouTubeTranscriptApi();
+  }
+  return transcriptApi;
+}
 
 /**
  * Check if running on Vercel or production domain
@@ -219,7 +232,17 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
     const params = new URLSearchParams({ videoId });
     if (language) params.append('language', language);
 
-    const response = await fetch(`/api/youtube/transcript?${params.toString()}`);
+    // Get stored cookies to send with the request
+    const { getCookiesForApi } = await import('./youtubeCookies');
+    const cookies = getCookiesForApi();
+
+    const response = await fetch(`/api/youtube/transcript?${params.toString()}`, {
+      method: cookies.length > 0 ? 'POST' : 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: cookies.length > 0 ? JSON.stringify({ cookies }) : undefined,
+    });
     
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
@@ -259,6 +282,10 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
 
 /**
  * Fetch YouTube transcript by video ID
+ * 
+ * For PWA/Web: Uses youtube-transcript-ts library (primary) or API endpoint
+ * For Tauri: Uses Tauri backend via invokeCommand
+ * 
  * Note: In local development, this may fail due to CORS restrictions.
  * The transcript fetching works best when deployed to Vercel with the API endpoints.
  */
@@ -272,11 +299,66 @@ export async function fetchYouTubeTranscript(
     throw new Error('Invalid YouTube video ID or URL');
   }
 
+  // Check if running in Tauri
+  if (isTauri()) {
+    console.log('[YouTubeTranscript] Using Tauri backend');
+    const { invokeCommand } = await import("../lib/tauri");
+    const result = await invokeCommand<Array<{ text: string; start: number; duration: number }> | null>(
+      "get_youtube_transcript_by_id",
+      { videoId }
+    );
+    
+    if (!result) {
+      throw new Error('Transcript not available via Tauri backend');
+    }
+    
+    return {
+      segments: result.map(item => ({
+        text: item.text,
+        start: item.start,
+        duration: item.duration,
+      })),
+      videoId,
+      language: language || 'en',
+    };
+  }
+
   // Check if running locally
   const isLocalhost = typeof window !== 'undefined' && 
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  // Try API endpoint first (works best on Vercel deployments)
+  // Try youtube-transcript-ts library first (for PWA/Web)
+  try {
+    const api = await getTranscriptApi();
+    const response = await api.fetchTranscript(videoId, language ? [language] : undefined);
+    
+    const transcript = response.transcript || [];
+    
+    return {
+      segments: transcript.map((item: any) => ({
+        text: item.text,
+        start: item.offset / 1000, // Convert ms to seconds
+        duration: item.duration / 1000, // Convert ms to seconds
+      })),
+      videoId,
+      language: language || response.language || 'en',
+    };
+  } catch (libError: any) {
+    console.warn('[YouTubeTranscript] Library fetch failed:', libError);
+    
+    // Check if it's a specific library error we can handle
+    const libErrorMsg = libError?.message || '';
+    if (libErrorMsg.includes('Transcript is disabled') || libErrorMsg.includes('No transcript found')) {
+      throw new Error('This video does not have captions or subtitles enabled by the creator.');
+    }
+    if (libErrorMsg.includes('Video is unavailable') || libErrorMsg.includes('Video is private')) {
+      throw new Error('This video is unavailable or private.');
+    }
+    // For other library errors, continue to fallback but note the library failure
+    console.log('[YouTubeTranscript] Library failed, trying fallback methods...');
+  }
+
+  // Try API endpoint (works best on Vercel deployments)
   try {
     const apiResult = await fetchFromApi(videoId, language);
     console.log('[YouTubeTranscript] Successfully fetched via API');
@@ -352,15 +434,27 @@ export async function fetchYouTubeTranscript(
       videoId,
       language: selectedTrack.languageCode,
     };
-  } catch (error) {
+  } catch (error: any) {
+    // All methods failed
+    const errorMsg = error?.message || String(error);
+    
+    // Check for specific error types
+    if (errorMsg.includes('disabled') || errorMsg.includes('No caption tracks')) {
+      throw new Error('This video does not have captions or subtitles enabled.');
+    }
+    
     if (isLocalhost) {
+      // In local development, YouTube often blocks requests
       throw new Error(
-        'Transcript fetching failed in local development mode. ' +
-        'This is typically due to CORS restrictions. ' +
-        'Please deploy to Vercel or use `vercel dev` for full functionality. ' +
-        `Original error: ${error}`
+        'YouTube is blocking transcript requests from local development. ' +
+        'This is a common anti-bot measure. ' +
+        'Try: 1) Opening YouTube in your browser first to establish a session, ' +
+        '2) Using a different video, or ' +
+        '3) Deploying to production where requests come from a consistent IP.' +
+        ` (Error: ${errorMsg})`
       );
     }
+    
     throw error;
   }
 }

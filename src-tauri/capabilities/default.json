@@ -21,6 +21,10 @@
     "core:webview:allow-webview-show",
     "core:webview:allow-get-all-webviews",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "notification:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
   ]
 }

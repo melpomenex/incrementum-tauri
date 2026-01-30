@@ -50,6 +50,8 @@ interface RustQueueItem {
   tags: string[];
   category?: string;
   progress: number;
+  source?: string;
+  position?: number;
 }
 
 // Convert from Rust snake_case to TypeScript camelCase
@@ -63,7 +65,7 @@ function convertQueueItem(item: RustQueueItem): QueueItem {
     question: item.question,
     answer: item.answer,
     clozeText: item.cloze_text,
-    itemType: item.item_type as "document" | "extract" | "learning-item",
+    itemType: item.item_type as "document" | "extract" | "learning-item" | "playlist-video",
     priorityRating: item.priority_rating,
     prioritySlider: item.priority_slider,
     priority: item.priority,
@@ -72,6 +74,8 @@ function convertQueueItem(item: RustQueueItem): QueueItem {
     tags: item.tags,
     category: item.category,
     progress: item.progress,
+    source: item.source,
+    position: item.position,
   };
 }
 
@@ -156,4 +160,13 @@ export async function bulkDeleteItems(itemIds: string[]): Promise<BulkOperationR
  */
 export async function exportQueue(): Promise<QueueExportItem[]> {
   return await invokeCommand<QueueExportItem[]>("export_queue");
+}
+
+/**
+ * Get queue with playlist videos interspersed
+ * Playlist videos are inserted at regular intervals based on subscription settings
+ */
+export async function getQueueWithPlaylistIntersperse(randomness?: number): Promise<QueueItem[]> {
+  const items = await invokeCommand<RustQueueItem[]>("get_queue_with_playlist_intersperse", { randomness });
+  return items.map(convertQueueItem);
 }

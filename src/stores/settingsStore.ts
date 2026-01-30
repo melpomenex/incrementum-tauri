@@ -212,6 +212,14 @@ interface ScrollQueueSettings {
 }
 
 /**
+ * YouTube API Settings
+ */
+interface YouTubeSettings {
+  apiKey?: string;
+  enabled: boolean;
+}
+
+/**
  * Main Settings Interface
  */
 export interface Settings {
@@ -228,6 +236,7 @@ export interface Settings {
   audioTranscription: AudioTranscriptionSettings;
   smartQueue: SmartQueueSettings;
   scrollQueue: ScrollQueueSettings;
+  youtube: YouTubeSettings;
 }
 
 /**
@@ -359,6 +368,10 @@ export const defaultSettings: Settings = {
   scrollQueue: {
     flashcardPercentage: 30, // 30% of queue should be flashcards by default
     extractsCountAsFlashcards: true, // Extracts count towards the flashcard percentage
+  },
+  youtube: {
+    apiKey: undefined,
+    enabled: false,
   },
 };
 

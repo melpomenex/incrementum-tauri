@@ -61,17 +61,26 @@ jobs:
         run: npm run build
 
       - name: Build Tauri application
-        uses: tauri-apps/tauri-action@v0.6
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List bundle directory (debug)
+        run: |
+          echo "=== Bundle directory contents ==="
+          find src-tauri/target -name "bundle" -type d 2>/dev/null | head -5
+          find src-tauri/target -path "*/bundle/*" -type f 2>/dev/null | head -20
+          echo "=== Release directory ==="
+          ls -la src-tauri/target/release/ 2>/dev/null || echo "No release dir"
+          ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "No bundle dir"
+        shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: incrementum-${{ matrix.platform }}
           path: |
-            src-tauri/target/release/bundle/*
-            src-tauri/target/*/release/bundle/*
+            src-tauri/target/release/bundle/**
           if-no-files-found: warn
 
       - name: Upload to release (on push to main)
@@ -79,8 +88,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            src-tauri/target/release/bundle/*
-            src-tauri/target/*/release/bundle/*
+            src-tauri/target/release/bundle/**/*
           draft: false
           prerelease: false
           generate_release_notes: true

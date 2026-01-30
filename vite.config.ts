@@ -38,7 +38,7 @@ export default defineConfig(async ({ mode }) => {
     // Use relative asset paths so the production build works with
     // Tauri's custom protocol and when opening the file directly.
     // Always use relative paths to avoid CORS issues with dynamic imports.
-    base: "./",
+    base: isProd ? "./" : "/",
 
     // Define environment variables
     define: {
@@ -130,6 +130,11 @@ export default defineConfig(async ({ mode }) => {
     optimizeDeps: {
       // Force re-optimization in Tauri dev to avoid stale pre-bundles.
       force: isTauriBuild,
+      // Include jszip and handle its CommonJS format
+      include: ["jszip"],
+      esbuildOptions: {
+        plugins: [],
+      },
     },
   };
 });

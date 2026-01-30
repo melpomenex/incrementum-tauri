@@ -4,15 +4,15 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Youtube, Clock, ExternalLink, Share2 } from "lucide-react";
+import { Play, Pause, PlayCircle, Volume2, VolumeX, Maximize, Settings, Youtube, Clock, ExternalLink, Share2 } from "lucide-react";
 import { useToast } from "../common/Toast";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
-import { getYouTubeEmbedURL, getYouTubeWatchURL, formatDuration } from "../../api/youtube";
+import { getYouTubeEmbedURL, getYouTubeEmbedURLNoCookie, getYouTubeWatchURL, formatDuration } from "../../api/youtube";
 import { getDocumentAuto, updateDocument, updateDocumentProgressAuto } from "../../api/documents";
 import { generateShareUrl, generateYouTubeShareUrl, copyShareLink, DocumentState, parseStateFromUrl } from "../../lib/shareLink";
 import { saveDocumentPosition, timePosition } from "../../api/position";
-import { isTauri } from "../../lib/tauri";
+import { isTauri, openInWebviewWindow } from "../../lib/tauri";
 
 interface YouTubeViewerProps {
   videoId: string;
@@ -52,6 +52,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [volume, setVolume] = useState(100);
   const [isMuted, setIsMuted] = useState(false);
   const [showTranscript, setShowTranscript] = useState(true);
+  const [transcriptLayout, setTranscriptLayout] = useState<'below' | 'side'>('below');
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
@@ -59,7 +60,13 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   const [positionLoaded, setPositionLoaded] = useState(false);
   // Default to iframe fallback in Tauri to avoid WebView crashes with YouTube API
   const [useIframeFallback, setUseIframeFallback] = useState(() => isTauri());
+  // Track if the embed actually fails to load (for Tauri fallback)
+  const [embedFailed, setEmbedFailed] = useState(false);
+  const [isLoadingEmbed, setIsLoadingEmbed] = useState(false);
+  const [tauriEmbedMode, setTauriEmbedMode] = useState<"standard" | "nocookie">("standard");
+  const [allowTauriInlineEmbed, setAllowTauriInlineEmbed] = useState(() => !isTauri());
   const [resolvedTitle, setResolvedTitle] = useState<string | undefined>(title);
+  const embedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const titleFetchRef = useRef<string | null>(null);
 
   // Update refs when values change
@@ -83,6 +90,47 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  // Cleanup embed timeout on unmount or video change
+  useEffect(() => {
+    return () => {
+      if (embedTimeoutRef.current) {
+        clearTimeout(embedTimeoutRef.current);
+        embedTimeoutRef.current = null;
+      }
+    };
+  }, [videoId]);
+
+  // Reset embed state when video changes
+  useEffect(() => {
+    setEmbedFailed(false);
+    setIsLoadingEmbed(false);
+    setTauriEmbedMode("standard");
+  }, [videoId]);
+
+  // Start a timeout for Tauri iframe embeds so we can fallback cleanly if it never loads
+  useEffect(() => {
+    if (!useIframeFallback || !isTauri() || embedFailed || !allowTauriInlineEmbed) return;
+    if (embedTimeoutRef.current) return;
+
+    setIsLoadingEmbed(true);
+    embedTimeoutRef.current = setTimeout(() => {
+      if (tauriEmbedMode === "standard") {
+        setTauriEmbedMode("nocookie");
+      } else {
+        setEmbedFailed(true);
+      }
+      setIsLoadingEmbed(false);
+      embedTimeoutRef.current = null;
+    }, 10000);
+
+    return () => {
+      if (embedTimeoutRef.current) {
+        clearTimeout(embedTimeoutRef.current);
+        embedTimeoutRef.current = null;
+      }
+    };
+  }, [embedFailed, tauriEmbedMode, useIframeFallback, videoId]);
 
   // Load transcript from backend
   const loadTranscript = useCallback(async () => {
@@ -244,6 +292,11 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       if (!containerRef.current) {
         console.warn('[YouTubeViewer] Container ref is no longer valid');
         return;
+      }
+
+      // Clear any existing content in the container to prevent DOM conflicts
+      if (containerRef.current.firstChild) {
+        containerRef.current.innerHTML = '';
       }
 
       playerRef.current = new window.YT.Player(containerRef.current, {
@@ -448,9 +501,8 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       } catch (e) {
         // Ignore errors on unmount
       }
-      // We don't destroy the player on unmount if we want to reuse it,
-      // but React strict mode might cause double mounting.
-      // Safer to destroy.
+      // Destroy player and clear DOM to prevent React cleanup errors
+      // The YouTube API replaces our container div with an iframe, which confuses React
       try {
         if (playerRef.current && typeof playerRef.current.destroy === 'function') {
           playerRef.current.destroy();
@@ -458,6 +510,15 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
         }
       } catch (e) {
         // Ignore errors on destroy
+      }
+      // Clear the container's innerHTML to remove any leftover DOM nodes
+      // This must happen AFTER player.destroy() to avoid React DOM mismatch errors
+      try {
+        if (containerRef.current) {
+          containerRef.current.innerHTML = '';
+        }
+      } catch (e) {
+        // Ignore errors if container is already gone
       }
     };
   }, [initializePlayer, saveCurrentPosition, positionLoaded, useIframeFallback]);
@@ -580,45 +641,21 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
   };
 
   const showOverlay = !useIframeFallback && !isReady;
+  const preferExternalPlayback = isTauri() && !allowTauriInlineEmbed;
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Video Player Container */}
-      <div className="relative bg-black" style={{ paddingBottom: "56.25%" }}>
-        {/* YouTube iframe - don't render in Tauri as it causes crashes */}
-        {useIframeFallback && !isTauri() ? (
-          <iframe
-            title={title || "YouTube video"}
-            className="absolute inset-0 w-full h-full"
-            src={getYouTubeEmbedURL(videoId, startTimeRef.current)}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
-        ) : useIframeFallback && isTauri() ? (
-          // Placeholder div for Tauri - actual content is shown in overlay
-          <div className="absolute inset-0 w-full h-full bg-black" />
-        ) : (
-          <div
-            ref={containerRef}
-            className="absolute inset-0 w-full h-full"
-            id={`youtube-player-${videoId}`}
-          />
-        )}
-
-        {/* Loading overlay */}
-        {showOverlay && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="text-center">
-              <Youtube className="w-12 h-12 text-red-500 mx-auto mb-3 animate-pulse" />
-              <p className="text-white">Loading player...</p>
-            </div>
-          </div>
-        )}
-
-        {/* Tauri browser open overlay - YouTube embeds crash Tauri WebView */}
-        {useIframeFallback && isTauri() && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+    <div className={`flex h-full bg-background ${transcriptLayout === 'side' && showTranscript ? 'flex-row' : 'flex-col'}`}>
+      {/* Video Player Container - Toggleable size */}
+      <div 
+        className={`relative bg-black flex-shrink-0 transition-all duration-300 ${transcriptLayout === 'side' && showTranscript ? 'w-1/2 h-full' : 'w-full'}`}
+        style={transcriptLayout === 'side' && showTranscript ? {} : { 
+          paddingBottom: showTranscript ? "40%" : "56.25%",
+          minHeight: showTranscript ? "300px" : "auto"
+        }}
+      >
+        {/* YouTube iframe */}
+        {preferExternalPlayback ? (
+          <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
             <div className="text-center p-8 max-w-lg">
               <img
                 src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
@@ -634,17 +671,155 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                 {resolvedTitle || title || "YouTube Video"}
               </h3>
               <p className="text-gray-300 mb-6 text-sm">
-                YouTube embeds are not compatible with Tauri's WebView. Please open the video in your browser.
+                Inline playback is disabled in the desktop app to prevent freezes.
               </p>
-              <a
-                href={getYouTubeWatchURL(videoId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => openInWebviewWindow(getYouTubeWatchURL(videoId), { 
+                    title: resolvedTitle || title || "YouTube Video",
+                    width: 1280,
+                    height: 720
+                  })}
+                  className="inline-flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+                >
+                  <Play className="w-5 h-5" />
+                  Play in App Window
+                </button>
+                <a
+                  href={getYouTubeWatchURL(videoId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Open in Browser
+                </a>
+              </div>
+              <button
+                onClick={() => {
+                  setAllowTauriInlineEmbed(true);
+                  setEmbedFailed(false);
+                  setTauriEmbedMode("standard");
+                }}
+                className="mt-4 text-xs text-gray-400 hover:text-gray-200 underline"
               >
-                <ExternalLink className="w-5 h-5" />
-                Open in Browser
-              </a>
+                Try inline playback anyway
+              </button>
+            </div>
+          </div>
+        ) : useIframeFallback && !isTauri() ? (
+          <iframe
+            title={title || "YouTube video"}
+            className="absolute inset-0 w-full h-full"
+            src={getYouTubeEmbedURL(videoId, startTimeRef.current)}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        ) : useIframeFallback && isTauri() && !embedFailed ? (
+          // Try standard embed first in Tauri, then fall back to privacy-enhanced if needed
+          <>
+            <iframe
+              title={title || "YouTube video"}
+              className="absolute inset-0 w-full h-full"
+              src={
+                tauriEmbedMode === "standard"
+                  ? getYouTubeEmbedURL(videoId, startTimeRef.current)
+                  : getYouTubeEmbedURLNoCookie(videoId, startTimeRef.current)
+              }
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+              onLoad={() => {
+                // Clear any pending timeout when iframe loads successfully
+                if (embedTimeoutRef.current) {
+                  clearTimeout(embedTimeoutRef.current);
+                  embedTimeoutRef.current = null;
+                }
+                setIsLoadingEmbed(false);
+              }}
+              onError={() => {
+                if (tauriEmbedMode === "standard") {
+                  setTauriEmbedMode("nocookie");
+                } else {
+                  setEmbedFailed(true);
+                }
+                setIsLoadingEmbed(false);
+              }}
+            />
+          </>
+        ) : useIframeFallback && isTauri() && embedFailed ? (
+          // Fallback: show thumbnail with open options
+          <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
+            <div className="text-center p-8 max-w-lg">
+              <img
+                src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
+                alt={title || "YouTube video thumbnail"}
+                className="w-full rounded-lg shadow-2xl mb-6"
+                onError={(e) => {
+                  // Fallback to lower quality thumbnail
+                  (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                }}
+              />
+              <Youtube className="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <h3 className="text-white text-lg font-semibold mb-2">
+                {resolvedTitle || title || "YouTube Video"}
+              </h3>
+              <p className="text-gray-300 mb-6 text-sm">
+                Embedded playback couldn't be loaded. Choose how you'd like to watch:
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => openInWebviewWindow(getYouTubeWatchURL(videoId), { 
+                    title: resolvedTitle || title || "YouTube Video",
+                    width: 1280,
+                    height: 720
+                  })}
+                  className="inline-flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+                >
+                  <Play className="w-5 h-5" />
+                  Play in App Window
+                </button>
+                <a
+                  href={getYouTubeWatchURL(videoId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Open in Browser
+                </a>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Wrapper div isolates YouTube's DOM manipulation from React
+          <div className="absolute inset-0 w-full h-full">
+            <div
+              ref={containerRef}
+              className="w-full h-full"
+              id={`youtube-player-${videoId}`}
+            />
+          </div>
+        )}
+
+        {/* Loading overlay for non-Tauri or Tauri with working embed */}
+        {showOverlay && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="text-center">
+              <Youtube className="w-12 h-12 text-red-500 mx-auto mb-3 animate-pulse" />
+              <p className="text-white">Loading player...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Loading overlay for Tauri embed attempt */}
+        {useIframeFallback && isTauri() && !embedFailed && isLoadingEmbed && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
+            <div className="text-center">
+              <Youtube className="w-12 h-12 text-red-500 mx-auto mb-3 animate-pulse" />
+              <p className="text-white mb-2">Loading video...</p>
+              <p className="text-gray-400 text-sm">Trying privacy-enhanced mode</p>
             </div>
           </div>
         )}
@@ -747,16 +922,16 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       </div>
 
       {/* Content area with transcript toggle */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className={`flex-1 flex overflow-hidden ${transcriptLayout === 'side' && showTranscript ? 'w-1/2' : ''}`}>
         {/* Video info and transcript */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Video info header */}
-        <div className="p-4 border-b border-border">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-foreground line-clamp-2 mb-1">
-                {resolvedTitle || title}
-              </h2>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Video info header */}
+          <div className="p-4 border-b border-border flex-shrink-0">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-semibold text-foreground line-clamp-2 mb-1">
+                  {resolvedTitle || title}
+                </h2>
                 {duration > 0 && (
                   <p className="text-sm text-muted-foreground">
                     Duration: {formatDuration(duration)}
@@ -764,25 +939,41 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                 )}
               </div>
 
-              {/* Transcript toggle button */}
-              <button
-                onClick={() => setShowTranscript(!showTranscript)}
-                className="ml-4 px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors flex items-center gap-2"
-              >
-                <span className="font-medium">Transcript</span>
-                <span className="text-xs text-muted-foreground">
-                  {showTranscript ? "▼" : "▶"}
-                </span>
-              </button>
+              <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                {/* Layout toggle - only show when transcript is visible */}
+                {showTranscript && (
+                  <button
+                    onClick={() => setTranscriptLayout(transcriptLayout === 'below' ? 'side' : 'below')}
+                    className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors flex items-center gap-2"
+                    title={transcriptLayout === 'below' ? 'Switch to side-by-side view' : 'Switch to stacked view'}
+                  >
+                    <span className="text-xs">{transcriptLayout === 'below' ? '↔' : '↕'}</span>
+                  </button>
+                )}
+
+                {/* Transcript toggle button */}
+                <button
+                  onClick={() => setShowTranscript(!showTranscript)}
+                  className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors flex items-center gap-2"
+                >
+                  <span className="font-medium">{showTranscript ? "Hide" : "Show"} Transcript</span>
+                  <span className="text-xs text-muted-foreground">
+                    {showTranscript ? "▼" : "▶"}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Transcript panel */}
+          {/* Transcript panel - scrollable */}
           {showTranscript && (
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
               {isLoadingTranscript ? (
                 <div className="h-full flex items-center justify-center text-muted-foreground">
-                  Loading transcript...
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    Loading transcript...
+                  </div>
                 </div>
               ) : transcript.length > 0 ? (
                 <TranscriptSync
@@ -793,11 +984,11 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                   showTimestamps={true}
                   showSpeakers={false}
                   onExport={handleExportTranscript}
-                  className="flex-1 h-full"
+                  className="h-full"
                 />
               ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center max-w-md px-4">
+                <div className="h-full flex items-center justify-center text-muted-foreground overflow-y-auto">
+                  <div className="text-center max-w-md px-4 py-8">
                     <p className="mb-2">No transcript available for this video</p>
                     
                     {transcriptError ? (
@@ -820,10 +1011,10 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                               <strong>Bot Detection:</strong> YouTube is requiring sign-in for this video. To fix this, open YouTube in your browser first, or export your browser cookies for yt-dlp.
                             </p>
                           </div>
-                        ) : transcriptError.includes('CORS') || transcriptError.includes('local development') ? (
+                        ) : transcriptError.includes('blocking') || transcriptError.includes('local development') || transcriptError.includes('anti-bot') ? (
                           <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                             <p className="text-xs text-amber-600">
-                              <strong>Development Mode:</strong> Transcript fetching requires CORS proxies in local development, which may be unreliable. Deploy to Vercel for full functionality.
+                              <strong>YouTube Blocking:</strong> YouTube is blocking transcript requests. Try opening the video on YouTube first, then return here. Alternatively, you can still watch the video without transcripts.
                             </p>
                           </div>
                         ) : (

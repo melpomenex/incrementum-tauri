@@ -63,7 +63,7 @@ jobs:
             core.setOutput('VERSION', version);
 
       - name: Build Tauri application
-        uses: tauri-apps/tauri-action@v0.6
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -72,6 +72,15 @@ jobs:
           releaseBody: 'See https://github.com/melpomenex/incrementum-tauri/releases/tag/${{ steps.get_version.outputs.VERSION }} for release notes.'
           releaseDraft: false
           prerelease: false
+
+      - name: List bundle directory (debug)
+        run: |
+          echo "=== Bundle directory contents ==="
+          find src-tauri/target -name "bundle" -type d 2>/dev/null | head -5
+          find src-tauri/target -path "*/bundle/*" -type f 2>/dev/null | head -20
+          echo "=== Release directory ==="
+          ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "No bundle dir"
+        shell: bash
 
   release-appimage:
     runs-on: ubuntu-latest

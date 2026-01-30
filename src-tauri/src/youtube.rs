@@ -639,25 +639,124 @@ pub fn search_youtube(query: &str, _api_key: Option<&str>) -> Result<Vec<serde_j
 }
 
 /// Get playlist info
+/// 
+/// Uses --flat-playlist to get simplified video list, then fetches detailed info
 pub fn get_playlist_info(url: &str) -> Result<serde_json::Value, String> {
+    eprintln!("[yt-dlp] Fetching playlist info for: {}", url);
+    
+    // Try with browser cookies first (helps with authentication and rate limiting)
+    let browsers = ["chrome", "firefox", "safari", "edge", "brave", "vivaldi", "opera"];
+    
+    // First try without cookies - use --flat-playlist for simplified output
+    // but we need to handle multiple JSON lines
     let output = Command::new("yt-dlp")
         .args([
             "--dump-json",
             "--flat-playlist",
+            "--no-download",
+            "--ignore-errors",
             url,
         ])
-        .output()
-        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+        .output();
 
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Failed to get playlist: {}", error));
+    match output {
+        Ok(output) if output.status.success() => {
+            eprintln!("[yt-dlp] Success without cookies, output size: {} bytes", output.stdout.len());
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            
+            // Parse all lines into a vector of videos
+            let mut entries = Vec::new();
+            for line in stdout_str.lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                match serde_json::from_str::<serde_json::Value>(line) {
+                    Ok(video) => entries.push(video),
+                    Err(e) => eprintln!("[yt-dlp] Failed to parse line: {} - Error: {}", line, e),
+                }
+            }
+            
+            if entries.is_empty() {
+                return Err("No videos found in playlist".to_string());
+            }
+            
+            // Construct a playlist object from the entries
+            let playlist = serde_json::json!({
+                "title": entries.first().and_then(|e| e["playlist_title"].as_str()).unwrap_or("Unknown Playlist"),
+                "channel": entries.first().and_then(|e| e["channel"].as_str()).unwrap_or("Unknown Channel"),
+                "channel_id": entries.first().and_then(|e| e["channel_id"].as_str()),
+                "description": entries.first().and_then(|e| e["description"].as_str()).unwrap_or(""),
+                "entries": entries,
+            });
+            
+            return Ok(playlist);
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("[yt-dlp] Failed without cookies: {}", stderr);
+        }
+        Err(e) => {
+            eprintln!("[yt-dlp] Command failed: {}", e);
+            return Err(format!("Failed to run yt-dlp: {}. Make sure yt-dlp is installed and in your PATH.", e));
+        }
     }
-
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    Ok(json)
+    
+    // Try with each browser's cookies
+    for browser in &browsers {
+        eprintln!("[yt-dlp] Trying with {} cookies...", browser);
+        let output = Command::new("yt-dlp")
+            .args([
+                "--dump-json",
+                "--flat-playlist",
+                "--no-download",
+                "--ignore-errors",
+                "--cookies-from-browser",
+                browser,
+                url,
+            ])
+            .output();
+        
+        match output {
+            Ok(output) if output.status.success() => {
+                eprintln!("[yt-dlp] Success with {} cookies", browser);
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                
+                let mut entries = Vec::new();
+                for line in stdout_str.lines() {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    if let Ok(video) = serde_json::from_str::<serde_json::Value>(line) {
+                        entries.push(video);
+                    }
+                }
+                
+                if !entries.is_empty() {
+                    let playlist = serde_json::json!({
+                        "title": entries.first().and_then(|e| e["playlist_title"].as_str()).unwrap_or("Unknown Playlist"),
+                        "channel": entries.first().and_then(|e| e["channel"].as_str()).unwrap_or("Unknown Channel"),
+                        "channel_id": entries.first().and_then(|e| e["channel_id"].as_str()),
+                        "description": entries.first().and_then(|e| e["description"].as_str()).unwrap_or(""),
+                        "entries": entries,
+                    });
+                    return Ok(playlist);
+                }
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                eprintln!("[yt-dlp] Failed with {}: {}", browser, stderr);
+            }
+            Err(e) => {
+                eprintln!("[yt-dlp] Command failed with {}: {}", browser, e);
+            }
+        }
+    }
+    
+    Err("Failed to get playlist info. This could be because:\n\
+        1. The playlist is private or doesn't exist\n\
+        2. YouTube is requiring authentication - try watching the playlist in your browser first\n\
+        3. yt-dlp needs to be updated (run: yt-dlp -U)\n\
+        4. Your IP might be rate-limited by YouTube".to_string())
 }
 
 /// Extract video ID from URL

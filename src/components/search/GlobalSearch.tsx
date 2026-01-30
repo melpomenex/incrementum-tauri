@@ -1,10 +1,15 @@
 /**
  * Global search system
  * Fast, full-text search across all content types
+ * Enhanced with URL import capability
  */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Search, X, Clock, Star, Filter, SlidersHorizontal } from "lucide-react";
+import { Search, X, Clock, Star, Filter, SlidersHorizontal, Link2 } from "lucide-react";
+import { useURLDetector, URLType } from "../../hooks/useURLDetector";
+import { useURLMetadata, useURLImport } from "../../hooks/useURLMetadata";
+import { ImportPreview } from "../import/ImportPreview";
+import { useToast } from "../../components/common/Toast";
 
 /**
  * Search result types
@@ -121,6 +126,18 @@ export function GlobalSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  // URL detection and import state
+  const urlDetection = useURLDetector(query);
+  const { data: urlMetadata, isLoading: isMetadataLoading, error: metadataError } = useURLMetadata(
+    urlDetection.type,
+    urlDetection.url,
+    { debounceMs: 500, enabled: urlDetection.isURL }
+  );
+  const { importURL, isImporting, error: importError } = useURLImport();
+  const toast = useToast();
+
+  const isURLMode = urlDetection.isURL && urlDetection.type !== URLType.Unknown;
+
   // Debounced search
   const debouncedSearch = useMemo(
     () =>
@@ -137,8 +154,15 @@ export function GlobalSearch({
     [onSearch]
   );
 
-  // Update search when query or filters change
+  // Update search when query or filters change (skip when in URL mode)
   useEffect(() => {
+    if (isURLMode) {
+      // Don't search when URL is detected
+      setResults([]);
+      setIsSearching(false);
+      return;
+    }
+
     if (query.trim()) {
       const searchQuery: SearchQuery = {
         query: query.trim(),
@@ -150,7 +174,7 @@ export function GlobalSearch({
     } else if (results.length > 0) {
       setResults([]);
     }
-  }, [query, filters, debouncedSearch]);
+  }, [query, filters, debouncedSearch, isURLMode]);
 
   // Focus input when opened
   useEffect(() => {
@@ -182,13 +206,22 @@ export function GlobalSearch({
           break;
         case "Enter":
           e.preventDefault();
-          if (results[selectedIndex]) {
+          if (isURLMode && urlMetadata && !isImporting) {
+            // Handle URL import
+            handleURLImport();
+          } else if (results[selectedIndex]) {
             handleResultClick(results[selectedIndex]);
           }
           break;
         case "Escape":
           e.preventDefault();
-          setIsOpen(false);
+          if (isURLMode) {
+            // Clear URL and return to search mode
+            setQuery("");
+            setResults([]);
+          } else {
+            setIsOpen(false);
+          }
           break;
       }
     };
@@ -206,6 +239,42 @@ export function GlobalSearch({
     },
     [onResultClick, setIsOpen]
   );
+
+  const handleURLImport = useCallback(async () => {
+    if (!urlDetection.isURL || !urlMetadata) return;
+
+    try {
+      await importURL(urlDetection.type, urlDetection.url, {
+        tags: [],
+        collectionId: undefined,
+      });
+
+      // Show success toast
+      const title = urlDetection.type === URLType.YouTube
+        ? `Imported: ${(urlMetadata as any).title}`
+        : urlDetection.type === URLType.RSSFeed
+        ? `Subscribed to: ${(urlMetadata as any).title}`
+        : `Imported: ${(urlMetadata as any).title}`;
+
+      toast.success(title, "Click to view", {
+        action: {
+          label: "Open",
+          onClick: () => {
+            // TODO: Navigate to imported item
+            setIsOpen(false);
+          },
+        },
+      } as any);
+
+      // Clear for next import
+      setQuery("");
+    } catch (err) {
+      toast.error(
+        "Import failed",
+        err instanceof Error ? err.message : "Unknown error"
+      );
+    }
+  }, [urlDetection, urlMetadata, importURL, toast, setIsOpen]);
 
   const toggleTypeFilter = useCallback((type: SearchResultType) => {
     setFilters((prev) => ({
@@ -254,13 +323,17 @@ export function GlobalSearch({
           <div className="relative w-full max-w-2xl bg-card border border-border rounded-lg shadow-2xl overflow-hidden">
             {/* Search Input */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-              <Search className="w-5 h-5 text-muted-foreground" />
+              {isURLMode ? (
+                <Link2 className="w-5 h-5 text-blue-500" />
+              ) : (
+                <Search className="w-5 h-5 text-muted-foreground" />
+              )}
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search documents, extracts, flashcards..."
+                placeholder={isURLMode ? "Press Enter to import..." : "Search documents, extracts, flashcards... or paste a URL"}
                 className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground"
               />
               {query && (
@@ -327,7 +400,18 @@ export function GlobalSearch({
               ref={resultsRef}
               className="max-h-96 overflow-y-auto"
             >
-              {!query ? (
+              {/* URL Import Mode */}
+              {isURLMode ? (
+                <ImportPreview
+                  urlType={urlDetection.type}
+                  url={urlDetection.url}
+                  data={urlMetadata}
+                  isLoading={isMetadataLoading}
+                  error={metadataError}
+                  onImport={handleURLImport}
+                  isImporting={isImporting}
+                />
+              ) : !query ? (
                 <div className="p-6">
                   {/* Recent Searches */}
                   {recentSearches.length > 0 && (
@@ -463,26 +547,45 @@ export function GlobalSearch({
             <div className="px-4 py-2 border-t border-border bg-muted/30">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1">
-                    <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
-                      ↑↓
-                    </kbd>
-                    Navigate
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
-                      ↵
-                    </kbd>
-                    Select
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
-                      ESC
-                    </kbd>
-                    Close
-                  </span>
+                  {isURLMode ? (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
+                          ↵
+                        </kbd>
+                        Import
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
+                          ESC
+                        </kbd>
+                        Clear
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
+                          ↑↓
+                        </kbd>
+                        Navigate
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
+                          ↵
+                        </kbd>
+                        Select
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <kbd className="px-1.5 py-0.5 bg-background border border-border rounded">
+                          ESC
+                        </kbd>
+                        Close
+                      </span>
+                    </>
+                  )}
                 </div>
-                {query && (
+                {!isURLMode && query && (
                   <button
                     onClick={() => {
                       if (onSaveSearch) {

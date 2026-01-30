@@ -17,7 +17,7 @@ import { ExtractScrollItem } from "../components/review/ExtractScrollItem";
 import { ClozeCreatorPopup } from "../components/extracts/ClozeCreatorPopup";
 import { QACreatorPopup } from "../components/extracts/QACreatorPopup";
 import { submitReview } from "../api/review";
-import { getUnreadItems, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemRead } from "../api/rss";
+import { getUnreadItems, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemReadAuto } from "../api/rss";
 import { cn } from "../utils";
 import type { QueueItem } from "../types";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../components/common/ItemDetailsPopover";
@@ -754,7 +754,12 @@ export function QueueScrollPage() {
 
   // Handle rating (for documents, flashcards, or mark as read for RSS)
   const handleRating = async (rating: number) => {
-    if (!currentItem || isRating) return;
+    console.log("[QueueScroll] handleRating called:", { rating, currentItem: currentItem?.id, type: currentItem?.type, isRating });
+    
+    if (!currentItem || isRating) {
+      console.log("[QueueScroll] handleRating early return:", { hasCurrentItem: !!currentItem, isRating });
+      return;
+    }
 
     setIsRating(true);
     const ratedItemId = currentItem.id;
@@ -763,7 +768,7 @@ export function QueueScrollPage() {
       const timeTaken = Math.round((Date.now() - startTimeRef.current) / 1000);
 
       if (currentItem.type === "document") {
-        console.log(`Rating document ${currentItem.documentId} as ${rating} (time: ${timeTaken}s)`);
+        console.log(`[QueueScroll] Rating document ${currentItem.documentId} as ${rating} (time: ${timeTaken}s)`);
         await rateDocument(currentItem.documentId!, rating, timeTaken);
 
         // Track rated document to prevent immediate re-appearance
@@ -782,7 +787,7 @@ export function QueueScrollPage() {
         setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
       } else if (currentItem.type === "rss" && currentItem.rssItem && currentItem.rssFeed) {
         // Mark RSS item as read
-        markItemRead(currentItem.rssFeed.id, currentItem.rssItem.id, true);
+        await markItemReadAuto(currentItem.rssFeed.id, currentItem.rssItem.id, true);
         console.log(`Marked RSS item ${currentItem.rssItem.id} as read (time: ${timeTaken}s)`);
         // Reload RSS items to update the list
         const rssUnread = getUnreadItems();
@@ -1294,8 +1299,10 @@ export function QueueScrollPage() {
             {currentItem.type === "document" && !isNewDocument ? (
               <>
                 <button
+                  type="button"
                   onClick={() => handleRating(1)}
-                  className="group p-3 rounded-full bg-red-500/80 backdrop-blur-sm hover:bg-red-500 hover:scale-110 transition-all shadow-lg"
+                  disabled={isRating}
+                  className="group p-3 rounded-full bg-red-500/80 backdrop-blur-sm hover:bg-red-500 hover:scale-110 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Again - Forgot completely (1)"
                 >
                   <AlertCircle className="w-6 h-6 text-white" />
@@ -1305,8 +1312,10 @@ export function QueueScrollPage() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => handleRating(2)}
-                  className="group p-3 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg"
+                  disabled={isRating}
+                  className="group p-3 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Hard - Difficult recall (2)"
                 >
                   <Star className="w-6 h-6 text-white" />
@@ -1316,8 +1325,10 @@ export function QueueScrollPage() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => handleRating(3)}
-                  className="group p-3 rounded-full bg-blue-500/80 backdrop-blur-sm hover:bg-blue-500 hover:scale-110 transition-all shadow-lg"
+                  disabled={isRating}
+                  className="group p-3 rounded-full bg-blue-500/80 backdrop-blur-sm hover:bg-blue-500 hover:scale-110 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Good - Normal recall (3)"
                 >
                   <CheckCircle className="w-6 h-6 text-white" />
@@ -1327,8 +1338,10 @@ export function QueueScrollPage() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => handleRating(4)}
-                  className="group p-3 rounded-full bg-green-500/80 backdrop-blur-sm hover:bg-green-500 hover:scale-110 transition-all shadow-lg"
+                  disabled={isRating}
+                  className="group p-3 rounded-full bg-green-500/80 backdrop-blur-sm hover:bg-green-500 hover:scale-110 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Easy - Perfect recall (4)"
                 >
                   <Sparkles className="w-6 h-6 text-white" />
@@ -1339,8 +1352,13 @@ export function QueueScrollPage() {
               </>
             ) : (
               <button
-                onClick={() => handleRating(3)}
-                className="group p-4 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg"
+                type="button"
+                onClick={() => {
+                  console.log("[QueueScroll] Mark as Read clicked for item:", currentItem?.id, "type:", currentItem?.type, "isRating:", isRating);
+                  handleRating(3);
+                }}
+                disabled={isRating}
+                className="group p-4 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 title={currentItem.type === "document" ? "Mark as Read" : "Mark as Read"}
               >
                 <CheckCircle className="w-7 h-7 text-white" />

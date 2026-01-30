@@ -111,8 +111,8 @@ export function MainLayout() {
     const formatted = resolveUrl(inputUrl);
     if (!formatted) return;
 
-    if (!newTab && activeTabId) {
-      const activeTab = tabs.find((tab) => tab.id === activeTabId);
+    if (!newTab && activePaneTabId) {
+      const activeTab = tabs.find((tab) => tab.id === activePaneTabId);
       if (activeTab?.type === "web-browser") {
         updateTab(activeTab.id, {
           data: { ...(activeTab.data || {}), initialUrl: formatted },
@@ -150,73 +150,85 @@ export function MainLayout() {
       id: "vimium-dashboard",
       name: "dashboard",
       description: "Go to Dashboard",
-      action: (_args) => addTab({
-        title: "Dashboard",
-        icon: "📊",
-        type: "dashboard",
-        content: DashboardTab,
-        closable: false,
-      }),
+      action: (_args) => {
+        addTab({
+          title: "Dashboard",
+          icon: "📊",
+          type: "dashboard",
+          content: DashboardTab,
+          closable: false,
+        });
+      },
     },
     {
       id: "vimium-documents",
       name: "documents",
       description: "Go to Documents",
-      action: (_args) => addTab({
-        title: "Documents",
-        icon: "📂",
-        type: "documents",
-        content: DocumentsTab,
-        closable: true,
-      }),
+      action: (_args) => {
+        addTab({
+          title: "Documents",
+          icon: "📂",
+          type: "documents",
+          content: DocumentsTab,
+          closable: true,
+        });
+      },
     },
     {
       id: "vimium-queue",
       name: "queue",
       description: "Go to Queue",
-      action: (_args) => addTab({
-        title: "Queue",
-        icon: "📚",
-        type: "queue",
-        content: QueueTab,
-        closable: true,
-      }),
+      action: (_args) => {
+        addTab({
+          title: "Queue",
+          icon: "📚",
+          type: "queue",
+          content: QueueTab,
+          closable: true,
+        });
+      },
     },
     {
       id: "vimium-review",
       name: "review",
       description: "Start Review",
-      action: (_args) => addTab({
-        title: "Review",
-        icon: "🧠",
-        type: "review",
-        content: ReviewTab,
-        closable: true,
-      }),
+      action: (_args) => {
+        addTab({
+          title: "Review",
+          icon: "🧠",
+          type: "review",
+          content: ReviewTab,
+          closable: true,
+        });
+      },
     },
     {
       id: "vimium-analytics",
       name: "analytics",
       description: "Open Statistics",
-      action: (_args) => addTab({
-        title: "Statistics",
-        icon: "📈",
-        type: "analytics",
-        content: AnalyticsTab,
-        closable: true,
-      }),
+      action: (_args) => {
+        addTab({
+          title: "Statistics",
+          icon: "📈",
+          type: "analytics",
+          content: AnalyticsTab,
+          closable: true,
+        });
+      },
     },
     {
       id: "vimium-settings",
       name: "settings",
       description: "Open Settings",
-      action: (_args) => addTab({
-        title: "Settings",
-        icon: "⚙️",
-        type: "settings",
-        content: SettingsTab,
-        closable: true,
-      }),
+      action: (_args) => {
+        addTab({
+          title: "Settings",
+          icon: "⚙️",
+          type: "settings",
+          content: SettingsTab,
+          closable: true,
+        });
+      },
     },
     {
       id: "vimium-close-tab",
@@ -342,8 +354,7 @@ export function MainLayout() {
           </div>
 
           {/* Tabbed Interface - Below toolbar - must grow to fill remaining height */}
-          {/* Add bottom padding on mobile for navigation bar */}
-          <div className="flex-1 min-h-0 pb-0 md:pb-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} data-vimium-scroll>
+          <div className="flex-1 min-h-0" data-vimium-scroll>
             <Tabs />
           </div>
 

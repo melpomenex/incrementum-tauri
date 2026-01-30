@@ -7,6 +7,17 @@ use crate::error::Result;
 use crate::models::QueueItem;
 use chrono::Utc;
 
+/// Configuration for interspersing playlist videos in the queue
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PlaylistInterspersionConfig {
+    /// Whether playlist video interspersion is enabled
+    pub enabled: bool,
+    /// Default interval for playlist videos (every N items)
+    pub default_interval: i32,
+    /// Maximum consecutive playlist videos
+    pub max_consecutive: i32,
+}
+
 /// Get the next queue item
 ///
 /// This uses the QueueSelector with weighted randomization to select the next item
@@ -39,15 +50,10 @@ pub async fn get_queue_items(
     Ok(selector.get_next_items(&queue, count).into_iter().cloned().collect())
 }
 
-/// Get all queue items
-///
-/// This returns all items that should be in the queue, including:
-/// - Learning items that are due
-/// - Documents scheduled for reading (based on next_reading_date)
-/// - Documents without scheduled dates (for initial reading)
-#[tauri::command]
-pub async fn get_queue(
-    repo: State<'_, Repository>,
+/// Internal function to get queue items from a repo reference
+/// Used by other commands that already have State extracted
+async fn get_queue_items_from_repo(
+    repo: &Repository,
 ) -> Result<Vec<QueueItem>> {
     let mut queue_items = Vec::new();
 
@@ -124,6 +130,8 @@ pub async fn get_queue(
             tags: item.tags.clone(),
             category: None, // Could be derived from the extract's category
             progress,
+            source: None,
+            position: None,
         });
     }
 
@@ -172,6 +180,8 @@ pub async fn get_queue(
             tags: extract.tags.clone(),
             category: extract.category.clone(),
             progress: 0, // Extracts don't track progress
+            source: None,
+            position: None,
         });
     }
 
@@ -217,6 +227,8 @@ pub async fn get_queue(
             tags: document.tags.clone(),
             category: document.category.clone(),
             progress,
+            source: None,
+            position: None,
         });
     }
 
@@ -239,6 +251,19 @@ pub async fn get_queue(
     });
 
     Ok(queue_items)
+}
+
+/// Get all queue items
+///
+/// This returns all items that should be in the queue, including:
+/// - Learning items that are due
+/// - Documents scheduled for reading (based on next_reading_date)
+/// - Documents without scheduled dates (for initial reading)
+#[tauri::command]
+pub async fn get_queue(
+    repo: State<'_, Repository>,
+) -> Result<Vec<QueueItem>> {
+    get_queue_items_from_repo(repo.inner()).await
 }
 
 /// Get queued items (items that are due or should be in the reading queue)
@@ -340,6 +365,8 @@ pub async fn get_due_documents_only(
             tags: document.tags.clone(),
             category: document.category.clone(),
             progress,
+            source: None,
+            position: None,
         });
     }
 
@@ -348,4 +375,135 @@ pub async fn get_due_documents_only(
     selector.sort_queue_items(&mut due_documents);
 
     Ok(due_documents)
+}
+
+/// Get queue with playlist videos interspersed
+/// 
+/// This returns the queue with playlist videos inserted at regular intervals
+/// based on each subscription's queue_intersperse_interval setting.
+#[tauri::command]
+pub async fn get_queue_with_playlist_intersperse(
+    randomness: Option<f32>,
+    repo: State<'_, Repository>,
+) -> Result<Vec<QueueItem>> {
+    // Get the base queue
+    let mut queue = get_queue_items_from_repo(repo.inner()).await?;
+    
+    // Get playlist settings
+    let settings = match repo.get_playlist_settings().await {
+        Ok(s) => s,
+        Err(_) => return Ok(queue), // Return base queue if settings fail
+    };
+    
+    // If playlist integration is disabled, return base queue
+    if !settings.enabled {
+        return Ok(queue);
+    }
+    
+    // Get playlist videos that are ready for queue interspersion
+    let playlist_videos = match repo.get_videos_for_queue_interspersion().await {
+        Ok(v) => v,
+        Err(_) => return Ok(queue),
+    };
+    
+    if playlist_videos.is_empty() {
+        return Ok(queue);
+    }
+    
+    // Get subscription info for each video to determine intersperse interval
+    let mut playlist_queue_items: Vec<QueueItem> = Vec::new();
+    
+    for video in playlist_videos {
+        // Get the associated document
+        if let Some(doc_id) = &video.document_id {
+            if let Ok(Some(doc)) = repo.get_document(doc_id).await {
+                // Get subscription to get the intersperse interval
+                if let Ok(Some(sub)) = repo.get_playlist_subscription(&video.subscription_id).await {
+                    // Only include if subscription is active
+                    if sub.is_active {
+                        let progress = match (doc.current_page, doc.total_pages) {
+                            (Some(current), Some(total)) if total > 0 => {
+                                ((current as f64 / total as f64) * 100.0).round() as i32
+                            }
+                            _ => 0,
+                        };
+                        
+                        // Calculate priority based on subscription settings
+                        let priority = calculate_fsrs_document_priority(
+                            doc.next_reading_date,
+                            doc.stability,
+                            doc.difficulty,
+                            sub.priority_rating,
+                        );
+                        
+                        playlist_queue_items.push(QueueItem {
+                            id: video.id.clone(),
+                            document_id: doc.id.clone(),
+                            document_title: doc.title.clone(),
+                            extract_id: None,
+                            learning_item_id: None,
+                            question: None,
+                            answer: None,
+                            cloze_text: None,
+                            item_type: "playlist-video".to_string(),
+                            priority_rating: Some(sub.priority_rating),
+                            priority_slider: None,
+                            priority,
+                            due_date: doc.next_reading_date.map(|d| d.to_rfc3339()),
+                            estimated_time: doc.total_pages.map(|p| p / 60).unwrap_or(10),
+                            tags: vec!["playlist".to_string()],
+                            category: Some("YouTube Playlist".to_string()),
+                            progress,
+                            source: Some(format!("playlist:{}", sub.id)),
+                            position: Some(sub.queue_intersperse_interval),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    // Now intersperse playlist videos into the base queue
+    // Group playlist videos by their intersperse interval
+    let mut result: Vec<QueueItem> = Vec::new();
+    let mut playlist_idx = 0;
+    let mut position_counters: std::collections::HashMap<i32, i32> = std::collections::HashMap::new();
+    
+    for (idx, item) in queue.iter().enumerate() {
+        // Add the regular queue item
+        result.push(item.clone());
+        
+        // Check if we should insert a playlist video
+        // We try to insert at positions that are multiples of the interval
+        if playlist_idx < playlist_queue_items.len() {
+            let playlist_video = &playlist_queue_items[playlist_idx];
+            
+            if let Some(interval) = playlist_video.position {
+                let counter = position_counters.entry(interval).or_insert(0);
+                *counter += 1;
+                
+                // Insert a playlist video every 'interval' items
+                if *counter >= interval {
+                    result.push(playlist_queue_items[playlist_idx].clone());
+                    playlist_idx += 1;
+                    *counter = 0;
+                    
+                    // Mark this video as added to queue
+                    let _ = repo.mark_video_added_to_queue(&playlist_video.id, idx as i32).await;
+                    
+                    // Stop if we've added all playlist videos
+                    if playlist_idx >= playlist_queue_items.len() {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add any remaining regular queue items
+    if result.len() < queue.len() {
+        result.extend(queue[result.len() - playlist_idx..].iter().cloned());
+    }
+    
+    Ok(result)
 }
