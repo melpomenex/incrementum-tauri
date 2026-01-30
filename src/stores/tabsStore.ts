@@ -81,8 +81,8 @@ export interface TabsState {
   closedTabs: Tab[];
 
   // Actions
-  addTab: (tab: Omit<Tab, "id">) => string;
-  addTabInBackground: (tab: Omit<Tab, "id">) => string;
+  addTab: (tab: Omit<Tab, "id">, targetPaneId?: string) => string;
+  addTabInBackground: (tab: Omit<Tab, "id">, targetPaneId?: string) => string;
   closeTab: (tabId: string) => void;
   setActiveTab: (paneId: string, tabId: string) => void;
   updateTab: (tabId: string, updates: Partial<Tab>) => void;
@@ -230,7 +230,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   },
 
   // Add a new tab
-  addTab: (tab) => {
+  addTab: (tab, targetPaneId?) => {
     const id = generateId();
     const newTab: Tab = { ...tab, id };
 
@@ -247,43 +247,75 @@ export const useTabsStore = create<TabsState>((set, get) => ({
         const pane = findPaneContainingTabRecursive(state.rootPane, existingTab.id);
         if (pane) {
           return {
-            activeTabId: existingTab.id,
             rootPane: updatePaneInTree(state.rootPane, pane.id, (p) => ({
               ...(p as TabPane),
               activeTabId: existingTab.id,
             })),
           };
         }
-        return { activeTabId: existingTab.id };
+        return {};
       }
 
-      // Find the first tab pane or create one
-      let targetPaneId: string;
-      const findFirstTabPane = (p: Pane): TabPane | null => {
-        if (p.type === "tabs") return p;
-        if (p.type === "split") {
-          for (const child of p.children) {
-            const found = findFirstTabPane(child);
-            if (found) return found;
+      // Use provided targetPaneId if valid, otherwise find the first tab pane
+      let finalTargetPaneId: string;
+      
+      if (targetPaneId) {
+        // Verify the target pane exists
+        const targetPane = findPaneByIdRecursive(state.rootPane, targetPaneId);
+        if (targetPane && targetPane.type === "tabs") {
+          finalTargetPaneId = targetPaneId;
+        } else {
+          // Fall back to first pane if target is invalid
+          const findFirstTabPane = (p: Pane): TabPane | null => {
+            if (p.type === "tabs") return p;
+            if (p.type === "split") {
+              for (const child of p.children) {
+                const found = findFirstTabPane(child);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+          const firstPane = findFirstTabPane(state.rootPane);
+          if (firstPane) {
+            finalTargetPaneId = firstPane.id;
+          } else {
+            // Create new root pane
+            const newPane = createTabPane([id], id);
+            return {
+              tabs: [...state.tabs, newTab],
+              rootPane: newPane,
+            };
           }
         }
-        return null;
-      };
-      const firstPane = findFirstTabPane(state.rootPane);
-      if (firstPane) {
-        targetPaneId = firstPane.id;
       } else {
-        // Create new root pane
-        const newPane = createTabPane([id], id);
-        return {
-          tabs: [...state.tabs, newTab],
-          rootPane: newPane,
+        // No target provided, find the first tab pane
+        const findFirstTabPane = (p: Pane): TabPane | null => {
+          if (p.type === "tabs") return p;
+          if (p.type === "split") {
+            for (const child of p.children) {
+              const found = findFirstTabPane(child);
+              if (found) return found;
+            }
+          }
+          return null;
         };
+        const firstPane = findFirstTabPane(state.rootPane);
+        if (firstPane) {
+          finalTargetPaneId = firstPane.id;
+        } else {
+          // Create new root pane
+          const newPane = createTabPane([id], id);
+          return {
+            tabs: [...state.tabs, newTab],
+            rootPane: newPane,
+          };
+        }
       }
 
       return {
         tabs: [...state.tabs, newTab],
-        rootPane: updatePaneInTree(state.rootPane, targetPaneId, (p) => ({
+        rootPane: updatePaneInTree(state.rootPane, finalTargetPaneId, (p) => ({
           ...(p as TabPane),
           tabIds: [...(p as TabPane).tabIds, id],
           activeTabId: id,
@@ -296,7 +328,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   },
 
   // Add a new tab in background
-  addTabInBackground: (tab) => {
+  addTabInBackground: (tab, targetPaneId?) => {
     const id = generateId();
     const newTab: Tab = { ...tab, id };
 
@@ -311,33 +343,65 @@ export const useTabsStore = create<TabsState>((set, get) => ({
         return state;
       }
 
-      // Find first tab pane
-      let targetPaneId: string;
-      const findFirstTabPane = (p: Pane): TabPane | null => {
-        if (p.type === "tabs") return p;
-        if (p.type === "split") {
-          for (const child of p.children) {
-            const found = findFirstTabPane(child);
-            if (found) return found;
+      // Use provided targetPaneId if valid, otherwise find the first tab pane
+      let finalTargetPaneId: string;
+      
+      if (targetPaneId) {
+        // Verify the target pane exists
+        const targetPane = findPaneByIdRecursive(state.rootPane, targetPaneId);
+        if (targetPane && targetPane.type === "tabs") {
+          finalTargetPaneId = targetPaneId;
+        } else {
+          // Fall back to first pane if target is invalid
+          const findFirstTabPane = (p: Pane): TabPane | null => {
+            if (p.type === "tabs") return p;
+            if (p.type === "split") {
+              for (const child of p.children) {
+                const found = findFirstTabPane(child);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+          const firstPane = findFirstTabPane(state.rootPane);
+          if (firstPane) {
+            finalTargetPaneId = firstPane.id;
+          } else {
+            const newPane = createTabPane([id], null);
+            return {
+              tabs: [...state.tabs, newTab],
+              rootPane: newPane,
+            };
           }
         }
-        return null;
-      };
-      const firstPane = findFirstTabPane(state.rootPane);
-      if (firstPane) {
-        targetPaneId = firstPane.id;
       } else {
-        const newPane = createTabPane([id], null);
-        return {
-          tabs: [...state.tabs, newTab],
-          rootPane: newPane,
+        // No target provided, find the first tab pane
+        const findFirstTabPane = (p: Pane): TabPane | null => {
+          if (p.type === "tabs") return p;
+          if (p.type === "split") {
+            for (const child of p.children) {
+              const found = findFirstTabPane(child);
+              if (found) return found;
+            }
+          }
+          return null;
         };
+        const firstPane = findFirstTabPane(state.rootPane);
+        if (firstPane) {
+          finalTargetPaneId = firstPane.id;
+        } else {
+          const newPane = createTabPane([id], null);
+          return {
+            tabs: [...state.tabs, newTab],
+            rootPane: newPane,
+          };
+        }
       }
 
-      const targetPane = findPaneByIdRecursive(state.rootPane, targetPaneId) as TabPane;
+      const targetPane = findPaneByIdRecursive(state.rootPane, finalTargetPaneId) as TabPane;
       return {
         tabs: [...state.tabs, newTab],
-        rootPane: updatePaneInTree(state.rootPane, targetPaneId, (p) => ({
+        rootPane: updatePaneInTree(state.rootPane, finalTargetPaneId, (p) => ({
           ...(p as TabPane),
           tabIds: [...(p as TabPane).tabIds, id],
           activeTabId: targetPane.activeTabId,

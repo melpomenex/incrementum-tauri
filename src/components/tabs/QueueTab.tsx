@@ -3,9 +3,11 @@ import { useReviewStore, useTabsStore } from "../../stores";
 import type { QueueItem } from "../../types/queue";
 import { ReviewTab, DocumentViewer } from "./TabRegistry";
 import { QueueScrollPage } from "../../pages/QueueScrollPage";
+import { usePaneId } from "../common/Tabs";
 
 export function QueueTab() {
   const { addTab } = useTabsStore();
+  const paneId = usePaneId();
 
   const handleStartReview = (itemId?: string) => {
     if (itemId) {
@@ -17,7 +19,7 @@ export function QueueTab() {
       type: "review",
       content: ReviewTab,
       closable: true,
-    });
+    }, paneId);
   };
 
   const handleOpenDocument = (item: QueueItem) => {
@@ -28,7 +30,7 @@ export function QueueTab() {
       content: DocumentViewer,
       closable: true,
       data: { documentId: item.documentId },
-    });
+    }, paneId);
   };
 
   const handleOpenScrollMode = () => {
@@ -38,7 +40,7 @@ export function QueueTab() {
       type: "queue-scroll",
       content: QueueScrollPage,
       closable: true,
-    });
+    }, paneId);
   };
 
   return (

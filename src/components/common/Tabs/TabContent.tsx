@@ -1,4 +1,4 @@
-import { Suspense, lazy, ComponentType, useEffect } from "react";
+import { Suspense, lazy, ComponentType, useEffect, createContext, useContext } from "react";
 import { Webview } from "@tauri-apps/api/webview";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { useTabsStore, type Tab } from "../../../stores";
@@ -7,6 +7,18 @@ import { isTauri } from "../../../lib/tauri";
 interface TabContentProps {
   tabs: Tab[];
   activeTabId: string | null;
+  paneId?: string;
+}
+
+// Context to provide pane ID to tab content components
+const PaneIdContext = createContext<string | undefined>(undefined);
+
+/**
+ * Hook to get the current pane ID from within a tab component.
+ * Use this when you need to add tabs to the same pane.
+ */
+export function usePaneId(): string | undefined {
+  return useContext(PaneIdContext);
 }
 
 function TabLoader() {
@@ -39,7 +51,7 @@ function EmptyState() {
   );
 }
 
-export function TabContent({ tabs, activeTabId }: TabContentProps) {
+export function TabContent({ tabs, activeTabId, paneId }: TabContentProps) {
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   useEffect(() => {
@@ -90,7 +102,9 @@ export function TabContent({ tabs, activeTabId }: TabContentProps) {
       <Suspense fallback={<TabLoader />}>
         {/* Pass any tab-specific data as props */}
         <div key={activeTab.id} className="h-full w-full animate-tab-enter">
-          <ContentComponent {...(activeTab.data || {})} />
+          <PaneIdContext.Provider value={paneId}>
+            <ContentComponent {...(activeTab.data || {})} />
+          </PaneIdContext.Provider>
         </div>
       </Suspense>
     </div>

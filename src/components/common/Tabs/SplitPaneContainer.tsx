@@ -384,7 +384,7 @@ function TabPaneView({
       {/* Tab Content */}
       <div className="flex-1 min-h-0 relative">
         {activeTab ? (
-          <TabContent tabs={paneTabs} activeTabId={pane.activeTabId} />
+          <TabContent tabs={paneTabs} activeTabId={pane.activeTabId} paneId={pane.id} />
         ) : (
           <EmptyPaneState />
         )}

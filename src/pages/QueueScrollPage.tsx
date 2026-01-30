@@ -877,7 +877,7 @@ export function QueueScrollPage() {
 
   if (!currentItem) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-background">
+      <div className="h-full w-full flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="text-6xl mb-4">📚</div>
           <h2 className="text-2xl font-semibold text-foreground mb-2">Nothing to Read</h2>
@@ -898,7 +898,7 @@ export function QueueScrollPage() {
   return (
     <div
       ref={containerRef}
-      className="h-screen w-screen overflow-hidden bg-background relative"
+      className="h-full w-full overflow-hidden bg-background relative"
     >
       {/* Content Viewer - Document, Flashcard, or RSS Article */}
       <div className="flex h-full w-full">
