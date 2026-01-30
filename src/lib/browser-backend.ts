@@ -584,10 +584,14 @@ const commandHandlers: Record<string, CommandHandler> = {
                 });
             }
 
-            // If not in memory (page refresh), try IndexedDB by filename (legacy storage)
-            // Assumes filename is part of the virtual path and unique enough for now
-            const filename = filePath.replace('browser-file://', '');
-            const storedFile = await db.getFileByName(filename);
+            // If not in memory (page refresh), try IndexedDB by path first, then by filename
+            let storedFile = await db.getFile(filePath);
+
+            // If not found by path, try by filename (for files stored before path-based storage)
+            if (!storedFile) {
+                const filename = filePath.split('/').pop() || '';
+                storedFile = await db.getFileByName(filename);
+            }
 
             if (storedFile) {
                 return new Promise((resolve, reject) => {
