@@ -52,6 +52,19 @@ vi.mock("../../../stores/documentStore", () => ({
   useDocumentStore: () => mockStore,
 }));
 
+vi.mock("../../../lib/pwa", () => ({
+  getDeviceInfo: () => ({
+    isMobile: false,
+    isTablet: false,
+    isDesktop: true,
+    isPWA: false,
+    isOnline: true,
+    pixelRatio: 1,
+    screenWidth: 1200,
+    screenHeight: 800,
+  }),
+}));
+
 beforeEach(() => {
   window.localStorage.clear();
   mockStore.loadDocuments.mockClear();

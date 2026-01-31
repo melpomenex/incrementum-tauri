@@ -48,6 +48,19 @@ vi.mock("../../../stores/queueStore", () => ({
   useQueueStore: () => mockStore,
 }));
 
+vi.mock("../../../lib/pwa", () => ({
+  getDeviceInfo: () => ({
+    isMobile: false,
+    isTablet: false,
+    isDesktop: true,
+    isPWA: false,
+    isOnline: true,
+    pixelRatio: 1,
+    screenWidth: 1200,
+    screenHeight: 800,
+  }),
+}));
+
 beforeEach(() => {
   mockStore.loadQueue.mockClear();
   mockStore.loadStats.mockClear();

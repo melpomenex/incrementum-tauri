@@ -237,7 +237,7 @@ describe("OCR Commands Integration Tests", () => {
 
       const providers = await getAvailableOCRProviders();
 
-      expect(mockInvoke).toHaveBeenCalledWith("get_available_ocr_providers");
+      expect(mockInvoke).toHaveBeenCalledWith("get_available_ocr_providers", undefined);
       expect(providers).toContain("Tesseract");
       expect(providers).toContain("Marker");
       expect(providers).toContain("Nougat");
@@ -291,7 +291,7 @@ describe("OCR Commands Integration Tests", () => {
 
       const config = await getOCRConfig();
 
-      expect(mockInvoke).toHaveBeenCalledWith("get_ocr_config");
+      expect(mockInvoke).toHaveBeenCalledWith("get_ocr_config", undefined);
       expect(config.default_provider).toBe("tesseract");
       expect(config.tesseract_path).toBe("/usr/bin/tesseract");
     });

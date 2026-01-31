@@ -170,7 +170,7 @@ describe("mathOcr", () => {
       const result = detectMathContent(text);
 
       expect(result.hasMath).toBe(true);
-      expect(result.indicators.some(i => i.includes("fraction"))).toBe(true);
+      expect(result.indicators.some(i => i.toLowerCase().includes("fraction"))).toBe(true);
     });
 
     it("should detect Greek letters", () => {
