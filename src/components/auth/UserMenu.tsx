@@ -2,7 +2,7 @@
  * User Menu Dropdown - Shown when user is authenticated
  */
 
-import { User, Settings, SignOut } from 'lucide-react';
+import { User, Settings, LogOut } from 'lucide-react';
 
 interface UserMenuProps {
   user: { id: string; email: string; subscriptionTier?: string } | null;
@@ -55,7 +55,7 @@ export function UserMenu({ user, onLogout, onOpenSettings }: UserMenuProps) {
           onClick={onLogout}
           className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-muted flex items-center gap-2"
         >
-          <SignOut className="w-4 h-4" />
+          <LogOut className="w-4 h-4" />
           Sign out
         </button>
       </div>

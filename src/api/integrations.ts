@@ -20,6 +20,138 @@ export interface ObsidianConfig {
 }
 
 /**
+ * Conversation message for export
+ */
+export interface ConversationMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp?: number;
+}
+
+/**
+ * Export conversation to Obsidian markdown
+ * Exports all messages in a conversation
+ */
+export async function exportConversationToObsidian(
+  messages: ConversationMessage[],
+  title: string,
+  config: ObsidianConfig,
+  contextInfo?: string
+): Promise<string> {
+  return await invokeCommand<string>("export_conversation_to_obsidian", {
+    messages,
+    title,
+    config,
+    contextInfo,
+  });
+}
+
+/**
+ * Export a single assistant message to Obsidian
+ * Useful for saving individual AI responses
+ */
+export async function exportAssistantMessageToObsidian(
+  message: ConversationMessage,
+  title: string,
+  config: ObsidianConfig,
+  contextInfo?: string
+): Promise<string> {
+  return await invokeCommand<string>("export_assistant_message_to_obsidian", {
+    message,
+    title,
+    config,
+    contextInfo,
+  });
+}
+
+/**
+ * Copy text to clipboard
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    console.error("Failed to copy to clipboard:", error);
+    
+    // Fallback for older browsers
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      return true;
+    } catch {
+      document.body.removeChild(textArea);
+      return false;
+    }
+  }
+}
+
+/**
+ * Generate a shareable markdown representation of a conversation
+ * For copying to clipboard or previewing
+ */
+export function generateConversationMarkdown(
+  messages: ConversationMessage[],
+  title: string,
+  contextInfo?: string
+): string {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString();
+  const timeStr = now.toLocaleTimeString();
+  
+  let markdown = `# ${title}\n\n`;
+  
+  if (contextInfo) {
+    markdown += `**Context:** ${contextInfo}\n\n`;
+  }
+  
+  markdown += `*Exported on ${dateStr} at ${timeStr}*\n\n---\n\n`;
+  
+  for (const message of messages) {
+    const roleLabel = message.role === "user" 
+      ? "## You"
+      : message.role === "assistant"
+      ? "## Assistant"
+      : "## System";
+    
+    markdown += `${roleLabel}\n\n${message.content}\n\n---\n\n`;
+  }
+  
+  return markdown;
+}
+
+/**
+ * Generate markdown for a single message
+ */
+export function generateSingleMessageMarkdown(
+  message: ConversationMessage,
+  title: string,
+  contextInfo?: string
+): string {
+  const now = new Date();
+  
+  let markdown = `# ${title}\n\n`;
+  
+  if (contextInfo) {
+    markdown += `**Context:** ${contextInfo}\n\n`;
+  }
+  
+  markdown += `*Exported on ${now.toLocaleDateString()}*\n\n`;
+  markdown += `## ${message.role === "assistant" ? "AI Response" : message.role === "user" ? "Your Message" : "System Message"}\n\n`;
+  markdown += message.content;
+  
+  return markdown;
+}
+
+/**
  * Export document to Obsidian markdown
  */
 export async function exportToObsidian(
@@ -233,7 +365,7 @@ export async function syncFlashcardsToAnki(
  */
 export async function getAnkiSyncStatus(
   url: string = "http://localhost:8765"
-): Promise<{ required: bool; message: string }> {
+): Promise<{ required: boolean; message: string }> {
   try {
     const response = await fetch(url, {
       method: "POST",

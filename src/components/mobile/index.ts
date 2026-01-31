@@ -5,7 +5,6 @@
  */
 
 export { MobileReadingWrapper } from "./MobileReadingWrapper";
-export { TouchGestureHandler, MobileProgressIndicator, MobilePageSelector } from "./TouchGestureHandler";
 export { MobileNavigation, MobileSettingsPanel, PWastatusIndicator } from "./MobileNavigation";
 export { MobileLayoutWrapper } from "./MobileLayoutWrapper";
 export { PWAInstallPrompt, OfflineIndicator } from "./PWAComponents";

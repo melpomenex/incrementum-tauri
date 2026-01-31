@@ -84,6 +84,7 @@ export default defineConfig(async ({ mode }) => {
 
     // Performance: Code splitting optimization
     build: {
+      sourcemap: false,
       // For PWA, we can use normal code splitting
       // For Tauri, inline everything to avoid CORS issues with dynamic imports
       modulePreload: isPWA || !isProd,
@@ -131,8 +132,9 @@ export default defineConfig(async ({ mode }) => {
       // Force re-optimization in Tauri dev to avoid stale pre-bundles.
       force: isTauriBuild,
       // Include jszip and handle its CommonJS format
-      include: ["jszip"],
+      include: ["jszip", "react", "react-dom"],
       esbuildOptions: {
+        sourcemap: false,
         plugins: [],
       },
     },

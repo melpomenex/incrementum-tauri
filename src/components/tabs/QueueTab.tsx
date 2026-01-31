@@ -1,13 +1,17 @@
 import { ReviewQueueView } from "../review/ReviewQueueView";
+import { MobileQueueView } from "../mobile/MobileQueueView";
 import { useReviewStore, useTabsStore } from "../../stores";
 import type { QueueItem } from "../../types/queue";
 import { ReviewTab, DocumentViewer } from "./TabRegistry";
 import { QueueScrollPage } from "../../pages/QueueScrollPage";
 import { usePaneId } from "../common/Tabs";
+import { getDeviceInfo } from "../../lib/pwa";
 
 export function QueueTab() {
   const { addTab } = useTabsStore();
   const paneId = usePaneId();
+  const deviceInfo = getDeviceInfo();
+  const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
 
   const handleStartReview = (itemId?: string) => {
     if (itemId) {
@@ -42,6 +46,17 @@ export function QueueTab() {
       closable: true,
     }, paneId);
   };
+
+  // Use mobile-optimized view on mobile devices
+  if (isMobile) {
+    return (
+      <MobileQueueView
+        onStartReview={handleStartReview}
+        onOpenDocument={handleOpenDocument}
+        onOpenScrollMode={handleOpenScrollMode}
+      />
+    );
+  }
 
   return (
     <ReviewQueueView

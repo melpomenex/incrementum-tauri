@@ -9,7 +9,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { DocumentViewer } from "../components/viewer/DocumentViewer";
 import { FlashcardScrollItem } from "../components/review/FlashcardScrollItem";
 import { ScrollModeArticleEditor } from "../components/review/ScrollModeArticleEditor";
-import { rateDocument } from "../api/algorithm";
+import { rateDocumentEngaging, getSmartStartPosition } from "../api/algorithm";
 import { getDueItems, type LearningItem } from "../api/learning-items";
 import { getDueExtracts, submitExtractReview } from "../api/extract-review";
 import { createExtract, type Extract } from "../api/extracts";
@@ -40,7 +40,21 @@ interface ScrollItem {
   rssFeed?: RSSFeed;
   learningItem?: LearningItem;
   extract?: Extract;
+  /** Topic/category for variety mixing */
+  category?: string;
+  /** Estimated reading time in minutes */
+  estimatedTime?: number;
+  /** Priority for engagement ordering */
+  engagementScore?: number;
 }
+
+// Session storage keys for smart resume
+const SESSION_KEYS = {
+  LAST_POSITION: "scroll-mode-last-position",
+  SESSION_TIMESTAMP: "scroll-mode-session-time",
+  ITEMS_REVIEWED: "scroll-mode-items-reviewed",
+  RATED_IDS: "scroll-mode-rated-ids",
+} as const;
 
 /**
  * QueueScrollPage - TikTok-style vertical scrolling through document queue, flashcards, and RSS articles
@@ -52,7 +66,8 @@ interface ScrollItem {
  * - Inline rating controls for documents and flashcards
  * - RSS article reading with mark as read
  * - Position indicator
- * - FSRS-based queue ordering for all items
+ * - FSRS-6 Engaging algorithm with variety mixing
+ * - Smart start position (resumes or varies start for engagement)
  */
 export function QueueScrollPage() {
   const { filteredItems: allQueueItems, loadQueue } = useQueueStore();
@@ -79,11 +94,10 @@ export function QueueScrollPage() {
   const contextWindowTokens = settings.ai.maxTokens;
   const aiModel = settings.ai.model;
 
-  // Always start at index 0 for fresh queue on each scroll mode session
-  // Previous logic to restore indices from tab data was causing reviewed items to replay
-  // because the restored index would point to a stale position in a now-different queue
+  // Use smart start position instead of always starting at 0
   const [currentIndex, setCurrentIndex] = useState(0);
   const [renderedIndex, setRenderedIndex] = useState(0);
+  const [smartStartInfo, setSmartStartInfo] = useState<{ isResuming: boolean; reason: string } | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -92,6 +106,7 @@ export function QueueScrollPage() {
   const [dueExtracts, setDueExtracts] = useState<Extract[]>([]);
   const [isRating, setIsRating] = useState(false);
   const [ratedDocumentIds, setRatedDocumentIds] = useState<Set<string>>(new Set());
+  const [itemsReviewedThisSession, setItemsReviewedThisSession] = useState(0);
   const [, setAssistantInputActive] = useState(false);
   const [assistantPosition, setAssistantPosition] = useState<AssistantPosition>(() => {
     const saved = localStorage.getItem("assistant-panel-position");
@@ -144,6 +159,32 @@ export function QueueScrollPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rssContentRef = useRef<HTMLDivElement>(null);
 
+  // Load session state on mount
+  useEffect(() => {
+    const savedRatedIds = sessionStorage.getItem(SESSION_KEYS.RATED_IDS);
+    if (savedRatedIds) {
+      try {
+        setRatedDocumentIds(new Set(JSON.parse(savedRatedIds)));
+      } catch {
+        // ignore parse errors
+      }
+    }
+    
+    const savedItemsReviewed = sessionStorage.getItem(SESSION_KEYS.ITEMS_REVIEWED);
+    if (savedItemsReviewed) {
+      setItemsReviewedThisSession(parseInt(savedItemsReviewed, 10) || 0);
+    }
+  }, []);
+
+  // Save session state when it changes
+  useEffect(() => {
+    sessionStorage.setItem(SESSION_KEYS.RATED_IDS, JSON.stringify(Array.from(ratedDocumentIds)));
+  }, [ratedDocumentIds]);
+
+  useEffect(() => {
+    sessionStorage.setItem(SESSION_KEYS.ITEMS_REVIEWED, String(itemsReviewedThisSession));
+  }, [itemsReviewedThisSession]);
+
   const handleExtractUpdate = useCallback((extractId: string, updates: { content: string; notes?: string }) => {
     setScrollItems(prev => prev.map((item) => (
       item.type === "extract" && item.extract?.id === extractId
@@ -194,27 +235,45 @@ export function QueueScrollPage() {
     return true;
   }), [allQueueItems, documents, ratedDocumentIds]);
 
+  // Smart start position calculation
+  const calculateSmartStart = useCallback(async (totalItems: number) => {
+    if (totalItems === 0) return 0;
+    
+    const lastPositionStr = sessionStorage.getItem(SESSION_KEYS.LAST_POSITION);
+    const lastPosition = lastPositionStr ? parseInt(lastPositionStr, 10) : undefined;
+    
+    try {
+      const response = await getSmartStartPosition({
+        total_items: totalItems,
+        last_session_position: lastPosition,
+        items_reviewed_this_session: itemsReviewedThisSession,
+        // Use timestamp as seed for reproducible variety
+        seed: Date.now(),
+      });
+      
+      setSmartStartInfo({
+        isResuming: response.is_resuming,
+        reason: response.reason,
+      });
+      
+      // Show toast for resuming
+      if (response.is_resuming && lastPosition && lastPosition > 0) {
+        toast.info("Resuming where you left off", `Position ${lastPosition + 1} of ${totalItems}`);
+      }
+      
+      return response.start_position;
+    } catch (error) {
+      console.error("Failed to get smart start position:", error);
+      return 0;
+    }
+  }, [itemsReviewedThisSession, toast]);
+
   // Load queue, documents, and due flashcards/extracts on mount
   // IMPORTANT: Await loadDocuments() to prevent race condition in YouTube filter
-  // CRITICAL: Always start fresh at index 0 to prevent replaying already-reviewed items
+  // Now uses smart start position for variety
   useEffect(() => {
     const loadAllData = async () => {
-      // Reset indices to 0 at the start of each scroll mode session
-      // This ensures we get a fresh queue and don't replay items from a stale index
-      setCurrentIndex(0);
-      setRenderedIndex(0);
       startTimeRef.current = Date.now();
-
-      // Clear any stale tab data that might have old indices
-      if (activeTabId) {
-        updateTab(activeTabId, {
-          data: {
-            currentIndex: 0,
-            renderedIndex: 0,
-            sessionTimestamp: Date.now(), // Track when this session started
-          },
-        });
-      }
 
       // Load documents first and wait for completion
       // This ensures the YouTube filter has all documents loaded before computing
@@ -238,14 +297,36 @@ export function QueueScrollPage() {
     };
     loadAllData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run on mount, not on dependency changes
+  }, []); // Only run on mount
 
-  // Initialize renderedIndex on mount - removed, now handled in loadAllData
-
-
-  // Save current position to tab data for restoration when user returns
+  // Apply smart start position once items are loaded
   useEffect(() => {
-    if (activeTabId && (currentIndex > 0 || renderedIndex > 0)) {
+    if (scrollItems.length > 0 && currentIndex === 0 && !smartStartInfo) {
+      calculateSmartStart(scrollItems.length).then(startPos => {
+        if (startPos > 0) {
+          setCurrentIndex(startPos);
+          setRenderedIndex(startPos);
+          
+          // Update tab data
+          if (activeTabId) {
+            updateTab(activeTabId, {
+              data: {
+                currentIndex: startPos,
+                renderedIndex: startPos,
+                sessionTimestamp: Date.now(),
+              },
+            });
+          }
+        }
+      });
+    }
+  }, [scrollItems.length, currentIndex, smartStartInfo, calculateSmartStart, activeTabId, updateTab]);
+
+  // Save current position to session storage and tab data
+  useEffect(() => {
+    sessionStorage.setItem(SESSION_KEYS.LAST_POSITION, String(currentIndex));
+    
+    if (activeTabId) {
       updateTab(activeTabId, {
         data: {
           currentIndex,
@@ -255,31 +336,123 @@ export function QueueScrollPage() {
     }
   }, [currentIndex, renderedIndex, activeTabId, updateTab]);
 
+  /**
+   * Apply engagement-based variety mixing to the queue
+   * 
+   * This ensures:
+   * - Topic variety (don't cluster same categories)
+   * - Length variety (mix long and short items)
+   * - Discovery injection (surface new items)
+   */
+  const applyVarietyMixing = useCallback((items: ScrollItem[]): ScrollItem[] => {
+    if (items.length <= 3) return items;
+
+    const maxSameCategory = 3; // Max consecutive items from same category
+    const result: ScrollItem[] = [];
+    const categoryCounts: Map<string, number> = new Map();
+    
+    // Sort items by engagement score (higher = more priority)
+    const sorted = [...items].sort((a, b) => 
+      (b.engagementScore ?? 0) - (a.engagementScore ?? 0)
+    );
+
+    for (const item of sorted) {
+      const category = item.category ?? "uncategorized";
+      const currentCount = categoryCounts.get(category) ?? 0;
+      
+      if (currentCount < maxSameCategory) {
+        result.push(item);
+        categoryCounts.set(category, currentCount + 1);
+      } else {
+        // Find a position later in the result where we can insert this
+        // without violating the category constraint
+        let inserted = false;
+        for (let i = result.length - 1; i >= 0; i--) {
+          const itemAtPos = result[i];
+          const catAtPos = itemAtPos.category ?? "uncategorized";
+          if (catAtPos !== category) {
+            // Check if inserting here would violate constraint
+            let consecutiveSame = 0;
+            for (let j = i; j < result.length && consecutiveSame < maxSameCategory; j++) {
+              if ((result[j]?.category ?? "uncategorized") === category) {
+                consecutiveSame++;
+              } else {
+                break;
+              }
+            }
+            if (consecutiveSame < maxSameCategory) {
+              result.splice(i + 1, 0, item);
+              inserted = true;
+              break;
+            }
+          }
+        }
+        
+        if (!inserted) {
+          // Add to end anyway - better to show it than lose it
+          result.push(item);
+        }
+      }
+    }
+
+    return result;
+  }, []);
+
+  // Helper to generate deterministic "random" value from string (0-1 range)
+  // This ensures stable scores across renders while still providing variety
+  const getStableRandom = useCallback((str: string, offset: number = 0): number => {
+    let hash = 0;
+    const combined = str + offset;
+    for (let i = 0; i < combined.length; i++) {
+      const char = combined.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash) / 2147483647; // Normalize to 0-1
+  }, []);
+
   // Update scroll items when queue or flashcards change
   // Interleave: Due flashcards first, then documents, then RSS
   // Skip during rating to prevent race conditions
   useEffect(() => {
     if (isRating) return;
+
     // Create flashcard items from due learning items
     const flashcardItems: ScrollItem[] = dueFlashcards.map((item) => ({
       id: `flashcard-${item.id}`,
       type: "flashcard" as const,
       documentTitle: item.question.substring(0, 50) + (item.question.length > 50 ? "..." : ""),
       learningItem: item,
+      category: item.tags?.[0] ?? "flashcards",
+      estimatedTime: 2, // Flashcards are quick
+      // Use stable random based on item ID to prevent re-render loops
+      engagementScore: 5 + getStableRandom(item.id, 1) * 2,
     }));
 
-    // Create document items
+    // Create document items with engagement scoring
     const docItems: ScrollItem[] = documentQueueItems.map((item) => {
       const doc = documents.find(d => d.id === item.documentId);
       const isImportedWebArticle = !!doc?.filePath
         && /^https?:\/\//.test(doc.filePath)
         && doc?.fileType !== "youtube";
+      
+      // Calculate engagement score based on priority and variety factors
+      const isNew = !doc?.dateLastReviewed;
+      const priority = item.priority ?? 5;
+      const recencyBoost = isNew ? 2 : 0;
+      const baseScore = priority + recencyBoost;
+      // Add stable "randomness" for serendipity (0-1.5 bonus)
+      const serendipityBonus = getStableRandom(item.id, 2) * 1.5;
+      
       return {
         id: item.id,
         type: "document" as const,
         documentId: item.documentId,
         documentTitle: item.documentTitle,
         isImportedWebArticle,
+        category: doc?.category ?? item.tags?.[0] ?? "uncategorized",
+        estimatedTime: item.estimatedTime ?? 10,
+        engagementScore: baseScore + serendipityBonus,
       };
     });
 
@@ -291,6 +464,10 @@ export function QueueScrollPage() {
       documentTitle: item.title,
       rssItem: item,
       rssFeed: feed,
+      category: feed.category ?? "rss",
+      estimatedTime: 5,
+      // Use stable random based on item ID
+      engagementScore: 4 + getStableRandom(item.id, 3),
     }));
 
     // Create extract items
@@ -304,37 +481,37 @@ export function QueueScrollPage() {
         type: "extract" as const,
         documentTitle: title,
         extract: extract,
+        category: extract.category ?? doc?.category ?? "extracts",
+        estimatedTime: 3,
+        // Use stable random based on extract ID
+        engagementScore: 5 + getStableRandom(extract.id, 4) * 1.5,
       };
     });
 
-    // Distribute flashcards and extracts evenly throughout the queue based on percentage setting
+    // Combine all review items (flashcards + extracts)
+    const allReviewItems = [...flashcardItems, ...extractItems];
+    
+    // Calculate target review item count based on percentage setting
     const flashcardPercentage = settings.scrollQueue.flashcardPercentage;
-    const extractsCountAsFlashcards = settings.scrollQueue.extractsCountAsFlashcards;
-
-    // Combine flashcards and extracts for distribution
-    const reviewItems = [...flashcardItems, ...extractItems].sort(() => Math.random() - 0.5);
-
-    // Calculate how many review items to include based on percentage
-    // If percentage is 30%, then for every 100 items, 30 should be review items
     const nonReviewItems = [...docItems, ...rssItems];
     const totalNonReview = nonReviewItems.length;
 
     // Calculate target number of review items based on percentage
-    // formula: review_items / (review_items + non_review_items) = percentage / 100
-    // So: review_items = (percentage * non_review_items) / (100 - percentage)
     let targetReviewCount = 0;
-    if (flashcardPercentage < 100) {
+    if (flashcardPercentage < 100 && flashcardPercentage > 0) {
       targetReviewCount = Math.round((flashcardPercentage * totalNonReview) / (100 - flashcardPercentage));
+    } else if (flashcardPercentage >= 100) {
+      targetReviewCount = allReviewItems.length;
     }
 
-    // Limit review items to the target count
-    const limitedReviewItems = reviewItems.slice(0, targetReviewCount);
+    // Limit review items to available count
+    const limitedReviewItems = allReviewItems.slice(0, targetReviewCount);
 
-    // Distribute review items evenly throughout the queue
-    // This creates a more balanced experience instead of all review items at the start
+    // Distribute review items evenly throughout the queue with variety mixing
     const distributedItems: ScrollItem[] = [];
+    
     if (limitedReviewItems.length > 0 && nonReviewItems.length > 0) {
-      // Calculate the interval for inserting review items
+      // Calculate interval for inserting review items
       const interval = Math.max(1, Math.round(nonReviewItems.length / limitedReviewItems.length));
 
       let reviewIndex = 0;
@@ -354,15 +531,18 @@ export function QueueScrollPage() {
         reviewIndex++;
       }
     } else if (limitedReviewItems.length > 0) {
-      // Only review items, use them all
+      // Only review items
       distributedItems.push(...limitedReviewItems);
     } else {
       // Only non-review items
       distributedItems.push(...nonReviewItems);
     }
 
-    setScrollItems(distributedItems);
-  }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating, settings.scrollQueue]);
+    // Apply variety mixing for engagement
+    const mixedItems = applyVarietyMixing(distributedItems);
+    
+    setScrollItems(mixedItems);
+  }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating, settings.scrollQueue, applyVarietyMixing]);
 
   // Current item (for display during transition)
   const currentItem = scrollItems[currentIndex];
@@ -754,10 +934,22 @@ export function QueueScrollPage() {
 
   // Handle rating (for documents, flashcards, or mark as read for RSS)
   const handleRating = async (rating: number) => {
-    console.log("[QueueScroll] handleRating called:", { rating, currentItem: currentItem?.id, type: currentItem?.type, isRating });
+    console.log("[QueueScroll] handleRating called:", { 
+      rating, 
+      currentItem: currentItem?.id, 
+      type: currentItem?.type, 
+      isRating,
+      documentId: currentItem?.documentId,
+      isNewDocument 
+    });
     
-    if (!currentItem || isRating) {
-      console.log("[QueueScroll] handleRating early return:", { hasCurrentItem: !!currentItem, isRating });
+    if (!currentItem) {
+      console.log("[QueueScroll] handleRating early return: no currentItem");
+      return;
+    }
+    
+    if (isRating) {
+      console.log("[QueueScroll] handleRating early return: already rating");
       return;
     }
 
@@ -765,14 +957,30 @@ export function QueueScrollPage() {
     const ratedItemId = currentItem.id;
 
     try {
-      const timeTaken = Math.round((Date.now() - startTimeRef.current) / 1000);
+      const timeTaken = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+      console.log(`[QueueScroll] Processing rating ${rating} for item type: ${currentItem.type}`);
 
       if (currentItem.type === "document") {
+        if (!currentItem.documentId) {
+          console.error("[QueueScroll] Document item has no documentId!");
+          throw new Error("Document ID is missing");
+        }
+        
         console.log(`[QueueScroll] Rating document ${currentItem.documentId} as ${rating} (time: ${timeTaken}s)`);
-        await rateDocument(currentItem.documentId!, rating, timeTaken);
+        
+        // Use the engaging FSRS-6 scheduler!
+        const result = await rateDocumentEngaging(currentItem.documentId, rating, timeTaken);
+        console.log("[QueueScroll] rateDocumentEngaging result:", result);
 
         // Track rated document to prevent immediate re-appearance
-        setRatedDocumentIds(prev => new Set(prev).add(currentItem.documentId!));
+        setRatedDocumentIds(prev => {
+          const newSet = new Set(prev);
+          newSet.add(currentItem.documentId!);
+          return newSet;
+        });
+
+        // Track items reviewed this session
+        setItemsReviewedThisSession(prev => prev + 1);
 
         // Remove the rated document from scrollItems and reload queue
         setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
@@ -782,6 +990,9 @@ export function QueueScrollPage() {
         console.log(`Rating flashcard ${currentItem.learningItem.id} as ${rating} (time: ${timeTaken}s)`);
         await submitReview(currentItem.learningItem.id, rating, timeTaken);
 
+        // Track items reviewed
+        setItemsReviewedThisSession(prev => prev + 1);
+
         // Remove the rated flashcard from both dueFlashcards and scrollItems
         setDueFlashcards(prev => prev.filter(item => item.id !== currentItem.learningItem!.id));
         setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
@@ -789,6 +1000,10 @@ export function QueueScrollPage() {
         // Mark RSS item as read
         await markItemReadAuto(currentItem.rssFeed.id, currentItem.rssItem.id, true);
         console.log(`Marked RSS item ${currentItem.rssItem.id} as read (time: ${timeTaken}s)`);
+        
+        // Track items reviewed
+        setItemsReviewedThisSession(prev => prev + 1);
+        
         // Reload RSS items to update the list
         const rssUnread = getUnreadItems();
         const rssItems: ScrollItem[] = rssUnread.map(({ feed, item }) => ({
@@ -807,6 +1022,9 @@ export function QueueScrollPage() {
         console.log(`Rating extract ${currentItem.extract.id} as ${rating} (time: ${timeTaken}s)`);
         await submitExtractReview(currentItem.extract.id, rating, timeTaken);
 
+        // Track items reviewed
+        setItemsReviewedThisSession(prev => prev + 1);
+
         // Remove from both dueExtracts and scrollItems
         setDueExtracts(prev => prev.filter(e => e.id !== currentItem.extract!.id));
         setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
@@ -814,13 +1032,24 @@ export function QueueScrollPage() {
 
       // Auto-advance to next item after rating
       setTimeout(() => {
-        goToNext();
-        // Small delay to allow transition to complete before allowing new ratings
-        setTimeout(() => setIsRating(false), 200);
+        // Reset isRating FIRST so goToNext can proceed
+        setIsRating(false);
+        // Small delay to allow state to update before navigating
+        setTimeout(() => {
+          goToNext();
+        }, 50);
       }, 300);
     } catch (error) {
-      console.error("Failed to handle rating:", error);
-      setIsRating(false);
+      console.error("[QueueScroll] Failed to handle rating:", error);
+      toast.error(
+        "Rating failed",
+        error instanceof Error ? error.message : "Please try again"
+      );
+    } finally {
+      // Always reset isRating after a short delay, even on error
+      setTimeout(() => {
+        setIsRating(false);
+      }, 500);
     }
   };
 
@@ -905,6 +1134,15 @@ export function QueueScrollPage() {
       ref={containerRef}
       className="h-full w-full overflow-hidden bg-background relative"
     >
+      {/* Smart Start Indicator */}
+      {smartStartInfo && smartStartInfo.isResuming && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-full text-sm shadow-lg animate-pulse">
+            Resumed from position {currentIndex + 1}
+          </div>
+        </div>
+      )}
+
       {/* Content Viewer - Document, Flashcard, or RSS Article */}
       <div className="flex h-full w-full">
         {!isMobile && isAssistantVisible && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "left" && (
@@ -1353,17 +1591,29 @@ export function QueueScrollPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  console.log("[QueueScroll] Mark as Read clicked for item:", currentItem?.id, "type:", currentItem?.type, "isRating:", isRating);
-                  handleRating(3);
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log("[QueueScroll] Mark as Read clicked:", { 
+                    id: currentItem?.id, 
+                    type: currentItem?.type, 
+                    documentId: currentItem?.documentId,
+                    isRating,
+                    isNewDocument 
+                  });
+                  if (!isRating && currentItem) {
+                    handleRating(3);
+                  } else {
+                    console.log("[QueueScroll] Mark as Read blocked - isRating:", isRating, "hasItem:", !!currentItem);
+                  }
                 }}
                 disabled={isRating}
-                className="group p-4 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                title={currentItem.type === "document" ? "Mark as Read" : "Mark as Read"}
+                className="group relative p-4 rounded-full bg-orange-500/80 backdrop-blur-sm hover:bg-orange-500 hover:scale-110 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                title={currentItem?.type === "document" ? "Mark as Read (Good)" : "Mark as Read"}
               >
                 <CheckCircle className="w-7 h-7 text-white" />
                 <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  Mark as Read
+                  {currentItem?.type === "document" ? "Mark as Read (Good)" : "Mark as Read"}
                 </span>
               </button>
             )}

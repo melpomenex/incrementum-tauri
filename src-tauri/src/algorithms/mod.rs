@@ -14,12 +14,14 @@ pub mod supermemo;
 pub mod queue_selector;
 pub mod document_scheduler;
 pub mod incremental_scheduler;
+pub mod engaging_scheduler;
 
 // Re-exports
 pub use optimizer::calculate_review_statistics;
 pub use queue_selector::QueueSelector;
 pub use document_scheduler::{DocumentScheduler, DocumentSchedulerParams};
 pub use incremental_scheduler::{IncrementalScheduler, IncrementalSchedulerParams};
+pub use engaging_scheduler::{EngagingScheduler, EngagementPreferences, ItemEngagementMeta, EngagingScheduleResult};
 
 #[cfg(test)]
 mod tests;

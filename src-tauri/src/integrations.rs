@@ -253,6 +253,197 @@ fn generate_extract_markdown(extract: &crate::models::Extract) -> String {
     markdown
 }
 
+/// Conversation message for export
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationMessage {
+    pub role: String,
+    pub content: String,
+    pub timestamp: Option<i64>,
+}
+
+/// Export conversation to Obsidian markdown
+pub async fn export_conversation_to_obsidian_internal(
+    messages: &[ConversationMessage],
+    title: &str,
+    config: &ObsidianConfig,
+    context_info: Option<&str>,
+) -> Result<PathBuf, AppError> {
+    let vault_path = PathBuf::from(&config.vault_path);
+    let notes_path = vault_path.join(&config.notes_folder);
+
+    // Create notes folder if it doesn't exist
+    fs::create_dir_all(&notes_path)
+        .map_err(|e| AppError::IntegrationError(format!("Failed to create notes folder: {}", e)))?;
+
+    // Generate filename from title with timestamp
+    let timestamp = chrono::Local::now().format("%Y-%m-%d-%H%M");
+    let filename = format!("{}-{}.md", sanitize_filename(title), timestamp);
+    let file_path = notes_path.join(&filename);
+
+    // Generate markdown content
+    let markdown = generate_conversation_markdown(messages, title, context_info);
+
+    // Write file
+    fs::write(&file_path, markdown)
+        .map_err(|e| AppError::IntegrationError(format!("Failed to write markdown: {}", e)))?;
+
+    Ok(file_path)
+}
+
+/// Export a single assistant message to Obsidian
+pub async fn export_assistant_message_to_obsidian_internal(
+    message: &ConversationMessage,
+    title: &str,
+    config: &ObsidianConfig,
+    context_info: Option<&str>,
+) -> Result<PathBuf, AppError> {
+    let vault_path = PathBuf::from(&config.vault_path);
+    let notes_path = vault_path.join(&config.notes_folder);
+
+    // Create notes folder if it doesn't exist
+    fs::create_dir_all(&notes_path)
+        .map_err(|e| AppError::IntegrationError(format!("Failed to create notes folder: {}", e)))?;
+
+    // Generate filename
+    let timestamp = chrono::Local::now().format("%Y-%m-%d-%H%M");
+    let filename = format!("{}-{}.md", sanitize_filename(title), timestamp);
+    let file_path = notes_path.join(&filename);
+
+    // Generate markdown for single message
+    let markdown = generate_single_message_markdown(message, title, context_info);
+
+    // Write file
+    fs::write(&file_path, markdown)
+        .map_err(|e| AppError::IntegrationError(format!("Failed to write markdown: {}", e)))?;
+
+    Ok(file_path)
+}
+
+/// Generate markdown for conversation
+fn generate_conversation_markdown(
+    messages: &[ConversationMessage],
+    title: &str,
+    context_info: Option<&str>,
+) -> String {
+    let mut markdown = String::new();
+    let now = chrono::Local::now();
+
+    // Frontmatter
+    markdown.push_str("---\n");
+    markdown.push_str(&format!("title: \"{}\"\n", title));
+    markdown.push_str(&format!("created: {}\n", now.format("%Y-%m-%d %H:%M")));
+    markdown.push_str(&format!("source: \"Incrementum AI Assistant\"\n"));
+    if let Some(context) = context_info {
+        markdown.push_str(&format!("context: \"{}\"\n", context.replace('"', "\\\"")));
+    }
+    markdown.push_str("tags:\n  - ai-conversation\n  - incrementum\n");
+    markdown.push_str("---\n\n");
+
+    // Title
+    markdown.push_str(&format!("# {}\n\n", title));
+
+    // Context info if available
+    if let Some(context) = context_info {
+        markdown.push_str("> **Context:** ");
+        markdown.push_str(context);
+        markdown.push_str("\n\n");
+    }
+
+    // Conversation
+    markdown.push_str("## Conversation\n\n");
+
+    for message in messages {
+        let role_label = match message.role.as_str() {
+            "user" => "**You:**",
+            "assistant" => "**Assistant:**",
+            "system" => "**System:**",
+            _ => &format!("**{}:**", message.role),
+        };
+
+        markdown.push_str(role_label);
+        markdown.push_str("\n\n");
+
+        // Format content with blockquote for assistant, code block style for user
+        match message.role.as_str() {
+            "user" => {
+                markdown.push_str(&message.content);
+                markdown.push_str("\n\n");
+            }
+            "assistant" => {
+                // Format assistant response in a callout box
+                markdown.push_str("> [!info] Response\n");
+                for line in message.content.lines() {
+                    if line.trim().is_empty() {
+                        markdown.push_str(">\n");
+                    } else {
+                        markdown.push_str(&format!("> {}\n", line));
+                    }
+                }
+                markdown.push_str("\n");
+            }
+            _ => {
+                markdown.push_str(&message.content);
+                markdown.push_str("\n\n");
+            }
+        }
+    }
+
+    // Footer
+    markdown.push_str("---\n\n");
+    markdown.push_str(&format!("*Exported from [Incrementum](https://github.com/melpomenex/incrementum-tauri) on {}*\n", now.format("%Y-%m-%d %H:%M")));
+
+    markdown
+}
+
+/// Generate markdown for a single message
+fn generate_single_message_markdown(
+    message: &ConversationMessage,
+    title: &str,
+    context_info: Option<&str>,
+) -> String {
+    let mut markdown = String::new();
+    let now = chrono::Local::now();
+
+    // Frontmatter
+    markdown.push_str("---\n");
+    markdown.push_str(&format!("title: \"{}\"\n", title));
+    markdown.push_str(&format!("created: {}\n", now.format("%Y-%m-%d %H:%M")));
+    markdown.push_str(&format!("source: \"Incrementum AI Assistant\"\n"));
+    markdown.push_str(&format!("message-type: \"{}\"\n", message.role));
+    if let Some(context) = context_info {
+        markdown.push_str(&format!("context: \"{}\"\n", context.replace('"', "\\\"")));
+    }
+    markdown.push_str("tags:\n  - ai-response\n  - incrementum\n");
+    markdown.push_str("---\n\n");
+
+    // Title
+    markdown.push_str(&format!("# {}\n\n", title));
+
+    // Context info if available
+    if let Some(context) = context_info {
+        markdown.push_str("> **Context:** ");
+        markdown.push_str(context);
+        markdown.push_str("\n\n");
+    }
+
+    // Message content in callout
+    markdown.push_str("> [!info] AI Response\n");
+    for line in message.content.lines() {
+        if line.trim().is_empty() {
+            markdown.push_str(">\n");
+        } else {
+            markdown.push_str(&format!("> {}\n", line));
+        }
+    }
+    markdown.push_str("\n");
+
+    // Footer
+    markdown.push_str("---\n\n");
+    markdown.push_str(&format!("*Exported from [Incrementum](https://github.com/melpomenex/incrementum-tauri) on {}*\n", now.format("%Y-%m-%d %H:%M")));
+
+    markdown
+}
+
 /// Sync flashcard to Anki
 pub async fn sync_flashcard_to_anki_internal(
     flashcard_id: &str,
@@ -453,6 +644,28 @@ pub async fn sync_to_obsidian(
         extracts: 0,
         flashcards: 0,
     })
+}
+
+#[tauri::command]
+pub async fn export_conversation_to_obsidian(
+    messages: Vec<ConversationMessage>,
+    title: String,
+    config: ObsidianConfig,
+    context_info: Option<String>,
+) -> Result<String, AppError> {
+    let path = export_conversation_to_obsidian_internal(&messages, &title, &config, context_info.as_deref()).await?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn export_assistant_message_to_obsidian(
+    message: ConversationMessage,
+    title: String,
+    config: ObsidianConfig,
+    context_info: Option<String>,
+) -> Result<String, AppError> {
+    let path = export_assistant_message_to_obsidian_internal(&message, &title, &config, context_info.as_deref()).await?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]

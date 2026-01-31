@@ -48,8 +48,14 @@ export function LocalVideoPlayer({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(100);
   const [isMuted, setIsMuted] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [playbackRate, setPlaybackRate] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const key = documentId ? `video-playback-rate-${documentId}` : 'video-playback-rate-default';
+    const saved = localStorage.getItem(key);
+    return saved ? parseFloat(saved) : 1;
+  });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [playError, setPlayError] = useState<string | null>(null);
 
   // Position tracking
   const [positionLoaded, setPositionLoaded] = useState(false);
@@ -68,6 +74,13 @@ export function LocalVideoPlayer({
     startTimeRef.current = startTime;
   }, [startTime]);
 
+  // Persist playback rate to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = documentId ? `video-playback-rate-${documentId}` : 'video-playback-rate-default';
+    localStorage.setItem(key, String(playbackRate));
+  }, [playbackRate, documentId]);
+
   // Load saved position from document
   const loadSavedPosition = useCallback(async () => {
     if (!documentId) {
@@ -85,11 +98,15 @@ export function LocalVideoPlayer({
         src,
       });
       if (savedTime >= 3) {
+        // Update ref immediately so onLoadedMetadata can use it
+        startTimeRef.current = savedTime;
         setStartTime(savedTime);
-        if (videoRef.current) {
+        // Seek immediately if video is already ready
+        if (videoRef.current && videoRef.current.readyState >= 1) {
           videoRef.current.currentTime = savedTime;
+          console.log(`[LocalVideoPlayer] Restored position immediately: ${savedTime}s`);
         }
-        console.log(`[LocalVideoPlayer] Restored position: ${savedTime}s`);
+        console.log(`[LocalVideoPlayer] Saved position set: ${savedTime}s`);
       }
     } catch (error) {
       console.log('[LocalVideoPlayer] Failed to load position:', error);
@@ -251,10 +268,18 @@ export function LocalVideoPlayer({
   }, [isPlaying, volume, playbackRate]);
 
   // Toggle play/pause
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (videoRef.current) {
       if (videoRef.current.paused) {
-        videoRef.current.play();
+        setPlayError(null);
+        try {
+          await videoRef.current.play();
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to play video';
+          console.error('[LocalVideoPlayer] Play error:', errorMessage);
+          setPlayError(errorMessage);
+          toast.error('Playback Error', errorMessage);
+        }
       } else {
         videoRef.current.pause();
       }
@@ -358,6 +383,42 @@ export function LocalVideoPlayer({
     return bars;
   }, [src, title]);
 
+  // Handle scroll to seek
+  const handleScroll = useCallback((e: React.WheelEvent) => {
+    if (!videoRef.current) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Scroll down (positive deltaY) = forward
+    // Scroll up (negative deltaY) = backward
+    const delta = e.deltaY > 0 ? 5 : -5;
+    videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + delta));
+    
+    // Show feedback toast for scroll seek
+    const newTime = videoRef.current.currentTime;
+    const direction = delta > 0 ? 'forward' : 'backward';
+    toast.success(
+      `${formatTime(newTime)}`,
+      `Seeked ${direction} 5 seconds`
+    );
+  }, [duration, toast]);
+
+  // Handle video click to toggle play/pause
+  const handleVideoClick = useCallback((e: React.MouseEvent) => {
+    // Only toggle if clicking directly on the video element, not controls
+    if (e.target === videoRef.current) {
+      togglePlay();
+    }
+  }, []);
+
+  // Handle double click to toggle fullscreen
+  const handleVideoDoubleClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === videoRef.current) {
+      toggleFullscreen();
+    }
+  }, []);
+
   const mediaElement = mediaType === "audio" ? (
     <audio
       ref={videoRef}
@@ -372,7 +433,19 @@ export function LocalVideoPlayer({
             videoRef.current.currentTime = startTimeRef.current;
             console.log("[LocalVideoPlayer] Seeked audio to saved time:", startTimeRef.current);
           }
+          // Apply saved playback rate
+          if (playbackRate !== 1) {
+            videoRef.current.playbackRate = playbackRate;
+            console.log("[LocalVideoPlayer] Applied saved playback rate:", playbackRate);
+          }
         }
+      }}
+      onCanPlay={() => {
+        console.log("[LocalVideoPlayer] Audio can play");
+        setPlayError(null);
+      }}
+      onWaiting={() => {
+        console.log("[LocalVideoPlayer] Audio waiting for data");
       }}
       onPlay={() => setIsPlaying(true)}
       onPause={() => {
@@ -392,12 +465,31 @@ export function LocalVideoPlayer({
           setIsMuted(videoRef.current.muted);
         }
       }}
+      onError={(e) => {
+        const error = videoRef.current?.error;
+        let errorMessage = error
+          ? `Error code ${error.code}: ${error.message}`
+          : 'Unknown audio error';
+        let userFriendlyMessage = errorMessage;
+
+        // Provide codec-specific guidance for audio
+        if (error?.code === 3) {
+          userFriendlyMessage = 'This audio format is not supported by your browser. '
+            + 'Please try converting to MP3, M4A, or WAV format.';
+        } else if (error?.code === 4) {
+          userFriendlyMessage = 'The audio file could not be loaded. It may be corrupted or in an unsupported format.';
+        }
+
+        console.error('[LocalVideoPlayer] Audio error:', errorMessage, e);
+        setPlayError(userFriendlyMessage);
+        toast.error('Audio Error', userFriendlyMessage);
+      }}
     />
   ) : (
     <video
       ref={videoRef}
       src={src}
-      className="w-full max-h-full bg-black"
+      className="w-full max-h-full bg-black cursor-pointer"
       onLoadedMetadata={() => {
         if (videoRef.current) {
           const mediaDuration = videoRef.current.duration;
@@ -407,7 +499,19 @@ export function LocalVideoPlayer({
             videoRef.current.currentTime = startTimeRef.current;
             console.log("[LocalVideoPlayer] Seeked video to saved time:", startTimeRef.current);
           }
+          // Apply saved playback rate
+          if (playbackRate !== 1) {
+            videoRef.current.playbackRate = playbackRate;
+            console.log("[LocalVideoPlayer] Applied saved playback rate:", playbackRate);
+          }
         }
+      }}
+      onCanPlay={() => {
+        console.log("[LocalVideoPlayer] Video can play");
+        setPlayError(null);
+      }}
+      onWaiting={() => {
+        console.log("[LocalVideoPlayer] Video waiting for data");
       }}
       onPlay={() => setIsPlaying(true)}
       onPause={() => {
@@ -427,6 +531,31 @@ export function LocalVideoPlayer({
           setIsMuted(videoRef.current.muted);
         }
       }}
+      onError={(e) => {
+        const error = videoRef.current?.error;
+        let errorMessage = error
+          ? `Error code ${error.code}: ${error.message}`
+          : 'Unknown video error';
+        let userFriendlyMessage = errorMessage;
+
+        // Provide codec-specific guidance
+        if (error?.code === 3) {
+          // MEDIA_ERR_DECODE - codec not supported
+          userFriendlyMessage = 'This video format is not supported by your browser. '
+            + 'Please try converting the video to MP4 (H.264 codec). '
+            + 'Common incompatible formats include HEVC/H.265, AV1, and some MKV files.';
+        } else if (error?.code === 4) {
+          // MEDIA_ERR_SRC_NOT_SUPPORTED
+          userFriendlyMessage = 'The video file could not be loaded. It may be corrupted or in an unsupported format.';
+        }
+
+        console.error('[LocalVideoPlayer] Video error:', errorMessage, e);
+        setPlayError(userFriendlyMessage);
+        toast.error('Video Error', userFriendlyMessage);
+      }}
+      onWheel={handleScroll}
+      onClick={handleVideoClick}
+      onDoubleClick={handleVideoDoubleClick}
     />
   );
 
@@ -441,6 +570,43 @@ export function LocalVideoPlayer({
     >
       {/* Media Element */}
       {mediaElement}
+
+      {/* Error Display */}
+      {playError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+          <div className="text-center p-6 max-w-md">
+            <div className="text-red-500 mb-2">
+              <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Playback Error</h3>
+            <p className="text-sm text-gray-300 mb-4">{playError}</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => {
+                  setPlayError(null);
+                  if (videoRef.current) {
+                    videoRef.current.load();
+                  }
+                }}
+                className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90"
+              >
+                Retry
+              </button>
+              <button
+                onClick={() => setPlayError(null)}
+                className="mt-4 px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:opacity-90"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scroll hint overlay - shows briefly when video loads */}
+      <ScrollHint isPlaying={isPlaying} />
 
       {mediaType === "audio" && (
         <div className="flex-1 w-full flex items-center justify-center px-10 py-12">
@@ -467,7 +633,7 @@ export function LocalVideoPlayer({
       {/* Controls Overlay */}
       <div
         className={cn(
-          "absolute inset-0 flex flex-col justify-between opacity-0 hover:opacity-100 transition-opacity p-4",
+          "absolute inset-0 flex flex-col justify-between opacity-0 hover:opacity-100 transition-opacity px-4 pt-4 pb-6 z-20 pointer-events-none hover:pointer-events-auto",
           mediaType === "audio"
             ? "bg-gradient-to-b from-background/80 via-transparent to-background/80"
             : "bg-gradient-to-b from-black/30 via-transparent to-black/50"
@@ -609,17 +775,62 @@ export function LocalVideoPlayer({
 
       {/* Keyboard Shortcuts Hint */}
       <div className={cn(
-        "absolute top-4 right-4 p-2 rounded text-xs opacity-0 hover:opacity-100 transition-opacity",
+        "absolute top-4 right-4 p-2 rounded text-xs opacity-0 hover:opacity-100 transition-opacity z-30",
         mediaType === "audio" ? "bg-background/90 text-foreground border border-border" : "bg-black/70 text-white"
       )}>
         <div className="font-semibold mb-1">Shortcuts:</div>
         <div>Space/K: Play/Pause</div>
         <div>←/→: 5s</div>
         <div>↑/↓: Volume</div>
+        <div>Scroll: Seek ±5s</div>
+        <div>Click: Play/Pause</div>
+        <div>Dbl Click: Fullscreen</div>
         <div>M: Mute</div>
         <div>F: Fullscreen</div>
         <div>0-9: Jump to %</div>
         <div>&lt;/&gt;: Speed</div>
+      </div>
+    </div>
+  );
+}
+
+// Scroll hint component that shows briefly when video loads
+function ScrollHint({ isPlaying }: { isPlaying: boolean }) {
+  const [visible, setVisible] = useState(true);
+  const [fading, setFading] = useState(false);
+  
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => {
+      setFading(true);
+    }, 2500);
+    const hideTimer = setTimeout(() => {
+      setVisible(false);
+    }, 3000);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(hideTimer);
+    };
+  }, []);
+  
+  if (!visible) return null;
+  
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+      <div 
+        className={cn(
+          "bg-black/60 text-white px-4 py-3 rounded-lg text-sm transition-opacity duration-500",
+          fading && "opacity-0"
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+          <div>
+            <div className="font-medium">Scroll to seek</div>
+            <div className="text-xs text-white/70">Scroll up/down to rewind/forward</div>
+          </div>
+        </div>
       </div>
     </div>
   );

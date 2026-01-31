@@ -16,9 +16,9 @@ export interface ArxivPaper {
   absUrl: string;
   categories: string[];
   comment?: string;
-  journal_ref?: string;
+  journalRef?: string;
   doi?: string;
-  primary_category: string;
+  primaryCategory: string;
 }
 
 /**
@@ -143,7 +143,7 @@ function parseArxivResponse(xmlText: string): ArxivPaper[] {
 
     // Optional fields
     const comment = entry.querySelector("comment")?.textContent;
-    const journal_ref = entry.querySelector("journal_ref")?.textContent;
+    const journalRef = entry.querySelector("journal_ref")?.textContent;
     const doi = entry.querySelector("doi")?.textContent;
 
     papers.push({
@@ -157,9 +157,9 @@ function parseArxivResponse(xmlText: string): ArxivPaper[] {
       absUrl,
       categories,
       comment,
-      journal_ref,
+      journalRef,
       doi,
-      primary_category,
+      primaryCategory,
     });
   });
 

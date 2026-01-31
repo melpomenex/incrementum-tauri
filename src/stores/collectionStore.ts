@@ -106,11 +106,14 @@ export const useCollectionStore = create<CollectionState>()(
         },
 
         ensureDocumentsAssigned: (documents) => {
-          const { activeCollectionId, documentAssignments } = get();
+          const { activeCollectionId, documentAssignments, collections } = get();
           if (!activeCollectionId) return;
           const updates: Record<string, string> = {};
+          const validCollectionIds = new Set(collections.map((c) => c.id));
           documents.forEach((doc) => {
-            if (!documentAssignments[doc.id]) {
+            const assignedCollectionId = documentAssignments[doc.id];
+            // Assign if not assigned, or if assigned to a non-existent collection
+            if (!assignedCollectionId || !validCollectionIds.has(assignedCollectionId)) {
               updates[doc.id] = activeCollectionId;
             }
           });

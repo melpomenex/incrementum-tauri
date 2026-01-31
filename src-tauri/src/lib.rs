@@ -30,6 +30,7 @@ mod screenshot;
 use database::Database;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
+use url::Url;
 
 // Global state for the database
 struct AppState {
@@ -64,10 +65,20 @@ pub fn run() {
         }
     }
 
+    // Fix WebKitGTK video freezing on Linux
+    #[cfg(target_os = "linux")]
+    {
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
+    const LOCALHOST_PORT: u16 = 9527;
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_localhost::Builder::new(LOCALHOST_PORT).build())
         .setup(|app| {
             // Initialize async runtime for database setup
             tauri::async_runtime::block_on(async {
@@ -118,6 +129,13 @@ pub fn run() {
                 tracing_subscriber::fmt::init();
 
                 if let Some(window) = app.get_webview_window("main") {
+                    if !cfg!(debug_assertions) {
+                        if let Ok(url) =
+                            Url::parse(&format!("http://localhost:{LOCALHOST_PORT}/"))
+                        {
+                            let _ = window.navigate(url);
+                        }
+                    }
                     if std::env::var("INCREMENTUM_OPEN_DEVTOOLS").is_ok() {
                         window.open_devtools();
                     }
@@ -204,12 +222,15 @@ pub fn run() {
             // Algorithm commands
             commands::calculate_sm2_next,
             commands::rate_document,
+            commands::rate_document_engaging,
             commands::rate_extract,
             commands::calculate_priority_scores,
             commands::compare_algorithms_command,
             commands::get_algorithm_params,
             commands::get_review_statistics,
             commands::optimize_algorithm_params,
+            commands::get_default_engagement_preferences,
+            commands::get_smart_start_position,
             // AI commands
             commands::get_ai_config,
             commands::set_ai_config,
@@ -263,6 +284,8 @@ pub fn run() {
             integrations::export_to_obsidian,
             integrations::export_extract_to_obsidian,
             integrations::export_flashcards_to_obsidian,
+            integrations::export_conversation_to_obsidian,
+            integrations::export_assistant_message_to_obsidian,
             integrations::import_from_obsidian,
             integrations::sync_to_obsidian,
             integrations::sync_flashcard_to_anki,

@@ -12,12 +12,17 @@ import {
   Loader2,
   PanelLeftClose,
   PanelRightClose,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { chatWithContext } from "../../api/llm";
 import { callIncrementumMCPTool, getIncrementumMCPTools, type MCPTool } from "../../api/mcp";
 import { renderMarkdown } from "../../utils/markdown";
 import { useSettingsStore } from "../../stores";
 import { useLLMProvidersStore } from "../../stores/llmProvidersStore";
+import { ShareMessageDialog } from "./ShareMessageDialog";
+import { copyToClipboard, generateSingleMessageMarkdown, type ConversationMessage } from "../../api/integrations";
 
 export interface AssistantContext {
   type: "document" | "web" | "video" | "general";
@@ -114,8 +119,13 @@ export function AssistantPanel({
   const effectiveProvider = externalSelectedProvider ?? selectedProvider;
   const [isInputHovered, setIsInputHovered] = useState(false);
   const contextWindowTokens = useSettingsStore((state) => state.settings.ai.maxTokens);
+  
+  // Share dialog state
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState<Message | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastContextSignatureRef = useRef<string | null>(null);
 
@@ -127,7 +137,12 @@ export function AssistantPanel({
   ];
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   };
 
   useEffect(() => {
@@ -574,6 +589,55 @@ Available tools: ${toolNames}`;
     onPositionChange?.(newPosition);
   };
 
+  // Handle copying a single message to clipboard
+  const handleCopyMessage = async (message: Message) => {
+    const conversationMessage: ConversationMessage = {
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp,
+    };
+    
+    const title = context?.metadata?.title || 
+                  (context?.type === "document" ? "Document Discussion" : 
+                   context?.type === "web" ? "Web Page Discussion" : 
+                   "AI Conversation");
+    
+    const markdown = generateSingleMessageMarkdown(
+      conversationMessage,
+      title,
+      context ? getContextMessage(context) : undefined
+    );
+    
+    const success = await copyToClipboard(markdown);
+    if (success) {
+      setCopiedMessageId(message.id);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    }
+  };
+
+  // Handle opening share dialog for a single message
+  const handleShareMessage = (message: Message) => {
+    setShareMessage(message);
+    setIsShareDialogOpen(true);
+  };
+
+  // Handle opening share dialog for the whole conversation
+  const handleShareConversation = () => {
+    setShareMessage(null);
+    setIsShareDialogOpen(true);
+  };
+
+  // Convert internal messages to conversation messages for export
+  const getConversationMessages = (): ConversationMessage[] => {
+    return messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+      }));
+  };
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizing) {
@@ -645,6 +709,16 @@ Available tools: ${toolNames}`;
           <h2 className="text-sm font-semibold text-foreground">Assistant</h2>
         </div>
         <div className="flex items-center gap-1">
+          {/* Share Conversation Button */}
+          {messages.length > 0 && (
+            <button
+              onClick={handleShareConversation}
+              className="p-1.5 hover:bg-muted transition-colors rounded mr-1"
+              title="Share conversation"
+            >
+              <Share2 className="w-4 h-4 text-foreground" />
+            </button>
+          )}
           {/* Provider Selector */}
           <div className="flex items-center gap-1 mr-2">
             {providers.map((provider) => (
@@ -699,7 +773,10 @@ Available tools: ${toolNames}`;
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-3 space-y-4"
+      >
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground text-sm py-8">
             <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -710,7 +787,7 @@ Available tools: ${toolNames}`;
           messages.map((message) => (
             <div
               key={message.id}
-              className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"
+              className={`flex flex-col group ${message.role === "user" ? "items-end" : "items-start"
                 }`}
             >
               {/* Message Header */}
@@ -757,6 +834,30 @@ Available tools: ${toolNames}`;
                 )}
               </div>
 
+              {/* Message Actions - only for assistant messages */}
+              {message.role === "assistant" && (
+                <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleCopyMessage(message)}
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    {copiedMessageId === message.id ? (
+                      <Check className="w-3 h-3 text-green-500" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleShareMessage(message)}
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Share/Export"
+                  >
+                    <Share2 className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
               {/* Tool Calls */}
               {message.toolCalls && message.toolCalls.length > 0 && (
                 <div className="mt-2 space-y-1">
@@ -785,7 +886,6 @@ Available tools: ${toolNames}`;
             </div>
           ))
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}
@@ -851,6 +951,23 @@ Available tools: ${toolNames}`;
           </div>
         </div>
       </div>
+
+      {/* Share Dialog */}
+      <ShareMessageDialog
+        isOpen={isShareDialogOpen}
+        onClose={() => setIsShareDialogOpen(false)}
+        messages={getConversationMessages()}
+        singleMessage={shareMessage ? {
+          role: shareMessage.role,
+          content: shareMessage.content,
+          timestamp: shareMessage.timestamp,
+        } : undefined}
+        contextInfo={context ? getContextMessage(context) : undefined}
+        documentTitle={context?.metadata?.title || 
+          (context?.type === "document" ? "Document Discussion" : 
+           context?.type === "web" ? "Web Page Discussion" : 
+           "AI Conversation")}
+      />
 
       {/* Resize Handle - positioned based on panel position */}
       <div

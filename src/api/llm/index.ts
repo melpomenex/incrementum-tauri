@@ -32,7 +32,7 @@ export interface LLMResponse {
 }
 
 export interface LLMContext {
-  type: "document" | "web" | "general";
+  type: "document" | "web" | "general" | "video";
   documentId?: string;
   url?: string;
   selection?: string;

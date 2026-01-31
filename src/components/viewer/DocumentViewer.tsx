@@ -462,6 +462,18 @@ export function DocumentViewer({
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
 
+      // Also sync to PDFViewer's legacy key if it's a PDF
+      if (docId && docType === "pdf") {
+        const legacyPayload = {
+          type: "page", // Unified format often uses 'type'
+          page: state.pageNumber,
+          scrollTop: state.scrollTop,
+          percent: state.scrollPercent,
+          updatedAt
+        };
+        localStorage.setItem(`pdf-position-${docId}`, JSON.stringify(legacyPayload));
+      }
+
       const viewStateKey = docId ? resolveViewStateKey(docId) : null;
       const viewState =
         viewStateOverride ??
@@ -516,6 +528,12 @@ export function DocumentViewer({
       scale?: number;
       dest?: ViewState["dest"];
     }) => {
+      // Don't save scroll state during restoration to prevent overwriting saved position with "Page 1"
+      if (restorationInProgressRef.current || suppressPdfAutoScroll) {
+        console.log("[DocumentViewer] Ignoring scroll update during restoration/suppression");
+        return;
+      }
+
       lastScrollStateRef.current = state;
       onScrollPositionChange?.({
         pageNumber: state.pageNumber,
@@ -912,12 +930,37 @@ export function DocumentViewer({
 
     if (!selectedViewState) {
       let legacyParsed: { scrollPercent?: number; scrollTop?: number; pageNumber?: number; updatedAt?: number } | null = null;
+      // Check DocumentViewer's specific key
       const stored = scrollStorageKey ? localStorage.getItem(scrollStorageKey) : null;
+      // Also check PDFViewer's legacy key as fallback
+      const legacyStored = docId ? localStorage.getItem(`pdf-position-${docId}`) : null;
+
       if (stored) {
         try {
           legacyParsed = JSON.parse(stored);
         } catch {
           legacyParsed = null;
+        }
+      }
+      
+      // If no DocumentViewer state, or if PDFViewer state is newer, use PDFViewer state
+      if (legacyStored) {
+        try {
+          const legacyState = JSON.parse(legacyStored);
+          // If we don't have stored state, or legacy state has a timestamp and it's newer
+          // Note: legacy state might not have updatedAt, so we prioritize 'stored' if it exists unless we're sure
+          if (!legacyParsed || (legacyState.updatedAt && (!legacyParsed.updatedAt || legacyState.updatedAt > legacyParsed.updatedAt))) {
+             // Adapt legacy state format to our needs
+             const adapted = {
+               pageNumber: legacyState.page ?? legacyState.pageNumber ?? 1,
+               scrollTop: legacyState.scrollTop,
+               scrollPercent: legacyState.percent ?? legacyState.scrollPercent,
+               updatedAt: legacyState.updatedAt
+             };
+             legacyParsed = adapted;
+          }
+        } catch {
+          // Ignore parse errors
         }
       }
       const remoteUpdatedAt = currentDocument?.dateModified
@@ -1216,6 +1259,20 @@ export function DocumentViewer({
 
       console.log("[DocumentViewer] Saving to localStorage:", storageKey, payload);
       localStorage.setItem(storageKey, JSON.stringify(payload));
+      
+      // Also sync to PDFViewer's legacy key
+      if (documentId) {
+        // We can't easily check docType here without ref, but we can assume safe to write if we have data
+        const legacyPayload = {
+          type: "page",
+          page: stateToSave.pageNumber,
+          scrollTop: stateToSave.scrollTop,
+          percent: stateToSave.scrollPercent,
+          updatedAt: Date.now()
+        };
+        localStorage.setItem(`pdf-position-${documentId}`, JSON.stringify(legacyPayload));
+      }
+
       const viewStateKey = getViewStateKey({ documentId });
       const viewState = lastViewStateRef.current
         ? { ...lastViewStateRef.current, updatedAt: Date.now() }

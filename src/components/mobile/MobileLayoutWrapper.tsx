@@ -29,7 +29,7 @@ export function MobileLayoutWrapper({ children }: MobileLayoutWrapperProps) {
   // Calculate badge counts
   const dueCount = queueItems.filter(item => {
     if (item.itemType === "document") {
-      const doc = item.dueAt ? new Date(item.dueAt) : null;
+      const doc = item.dueDate ? new Date(item.dueDate) : null;
       return doc && doc <= new Date();
     }
     return false;

@@ -5,6 +5,7 @@ use crate::algorithms::{
     optimizer::{OptimizationParams, OptimizationResult, ParameterOptimizer},
     DocumentScheduler as DocScheduler,
     IncrementalScheduler,
+    EngagingScheduler, EngagementPreferences,
     AlgorithmComparison, SM2Params,
 };
 use crate::commands::review::RepositoryExt;
@@ -161,6 +162,80 @@ pub async fn rate_document(
     })
 }
 
+/// Rate a document using the Engaging FSRS-6 scheduler
+///
+/// This scheduler extends FSRS-6 with engagement features:
+/// - Novelty injection for discovery
+/// - Serendipity factor for surprises
+/// - Streak-friendly scheduling
+#[tauri::command]
+pub async fn rate_document_engaging(
+    request: DocumentRatingRequest,
+    repo: State<'_, Repository>,
+) -> Result<DocumentRatingResponse> {
+    // Get the document
+    let document = repo.get_document(&request.document_id).await?.ok_or_else(|| {
+        crate::error::IncrementumError::NotFound(format!("Document {} not found", request.document_id))
+    })?;
+
+    // Create engaging scheduler with default preferences
+    // TODO: Load user preferences from settings
+    let preferences = EngagementPreferences::default();
+    let mut scheduler = EngagingScheduler::new(preferences);
+
+    let review_rating = ReviewRating::from(request.rating);
+
+    // Get current FSRS state from document
+    let current_stability = document.stability;
+    let current_difficulty = document.difficulty;
+    
+    // Calculate elapsed days since last review
+    let elapsed_days = document.date_last_reviewed
+        .map(|lr| (Utc::now() - lr).num_seconds() as f64 / 86400.0)
+        .unwrap_or(0.0)
+        .max(0.0);
+
+    let review_count = document.reps.unwrap_or(0);
+
+    // Schedule using engaging FSRS-6
+    let result = scheduler.schedule_item(
+        review_rating,
+        current_stability,
+        current_difficulty,
+        elapsed_days,
+        review_count,
+    )?;
+
+    // Update the document with new scheduling data
+    let new_reps = review_count + 1;
+    let new_time_spent = document.total_time_spent.unwrap_or(0) + request.time_taken.unwrap_or(0);
+
+    // Map consecutive count: positive for good streak, negative for hard streak
+    let consecutive_count = if result.engagement_modifier < 1.0 {
+        -((result.engagement_modifier * 10.0) as i32).min(5)
+    } else {
+        ((result.engagement_modifier - 1.0) * 10.0) as i32
+    };
+
+    repo.update_document_scheduling_with_consecutive(
+        &document.id,
+        Some(result.next_review),
+        Some(result.stability),
+        Some(result.difficulty),
+        Some(new_reps),
+        Some(new_time_spent),
+        Some(consecutive_count),
+    ).await?;
+
+    Ok(DocumentRatingResponse {
+        next_review_date: result.next_review.to_rfc3339(),
+        stability: result.stability,
+        difficulty: result.difficulty,
+        interval_days: result.interval_days,
+        scheduling_reason: result.scheduling_reason,
+    })
+}
+
 /// Rate an extract and schedule its next review
 ///
 /// This implements FSRS-based scheduling for extracts.
@@ -225,7 +300,7 @@ pub async fn rate_extract(
     })
 }
 
-/// Calculate priority score for queue items
+/// Calculate priority scores for queue items
 #[tauri::command]
 pub async fn calculate_priority_scores(
     repo: State<'_, Repository>,
@@ -285,6 +360,17 @@ pub async fn compare_algorithms_command(
     Ok(compare_algorithms(&items))
 }
 
+/// Algorithm type selection
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AlgorithmParams {
+    pub algorithm: String,
+    pub stability: Option<f32>,
+    pub difficulty: Option<f32>,
+    pub ease_factor: Option<f64>,
+    pub interval: f64,
+    pub review_count: i32,
+}
+
 /// Get algorithm parameters for an item
 #[tauri::command]
 pub async fn get_algorithm_params(
@@ -312,15 +398,17 @@ pub async fn get_algorithm_params(
     })
 }
 
-/// Algorithm parameters for an item
+/// Review statistics output
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AlgorithmParams {
-    pub algorithm: String,
-    pub stability: Option<f32>,
-    pub difficulty: Option<f32>,
-    pub ease_factor: Option<f64>,
-    pub interval: f64,
-    pub review_count: i32,
+pub struct ReviewStatisticsOutput {
+    pub total_items: i32,
+    pub total_reviews: i32,
+    pub total_lapses: i32,
+    pub avg_interval: f64,
+    pub retention_estimate: f64,
+    pub due_today: i32,
+    pub due_week: i32,
+    pub due_month: i32,
 }
 
 /// Get review statistics for all items
@@ -343,19 +431,6 @@ pub async fn get_review_statistics(
     })
 }
 
-/// Review statistics output
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ReviewStatisticsOutput {
-    pub total_items: i32,
-    pub total_reviews: i32,
-    pub total_lapses: i32,
-    pub avg_interval: f64,
-    pub retention_estimate: f64,
-    pub due_today: i32,
-    pub due_week: i32,
-    pub due_month: i32,
-}
-
 /// Optimize algorithm parameters
 #[tauri::command]
 pub async fn optimize_algorithm_params(
@@ -375,4 +450,75 @@ pub async fn optimize_algorithm_params(
     let result = optimizer.optimize_sm2(&_history, initial_params);
 
     Ok(result)
+}
+
+/// Engagement preferences for scroll mode
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EngagementPreferencesInput {
+    pub novelty_factor: Option<f64>,
+    pub serendipity_rate: Option<f64>,
+    pub variety_preference: Option<f64>,
+    pub max_same_topic_streak: Option<i32>,
+    pub favor_recent_additions: Option<bool>,
+    pub recent_window_hours: Option<i64>,
+}
+
+/// Get default engagement preferences
+#[tauri::command]
+pub async fn get_default_engagement_preferences() -> Result<EngagementPreferences> {
+    Ok(EngagementPreferences::default())
+}
+
+/// Smart start position request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SmartStartRequest {
+    pub total_items: usize,
+    pub last_session_position: Option<usize>,
+    pub items_reviewed_this_session: usize,
+    pub seed: Option<u64>,
+}
+
+/// Smart start position response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SmartStartResponse {
+    pub start_position: usize,
+    pub is_resuming: bool,
+    pub reason: String,
+}
+
+/// Get smart starting position for scroll mode
+///
+/// Returns a varied starting position that considers session continuity
+/// and user engagement patterns
+#[tauri::command]
+pub async fn get_smart_start_position(
+    request: SmartStartRequest,
+) -> Result<SmartStartResponse> {
+    let preferences = EngagementPreferences::default();
+    let mut scheduler = match request.seed {
+        Some(seed) => EngagingScheduler::new(preferences).with_seed(seed),
+        None => EngagingScheduler::new(preferences),
+    };
+
+    let start_position = scheduler.get_smart_start_position(
+        request.total_items,
+        request.last_session_position,
+        request.items_reviewed_this_session,
+    );
+
+    let (is_resuming, reason) = if let Some(last_pos) = request.last_session_position {
+        if request.items_reviewed_this_session < 5 && start_position == last_pos {
+            (true, "Resuming previous session".to_string())
+        } else {
+            (false, "New session with variety".to_string())
+        }
+    } else {
+        (false, "Fresh start with engagement mix".to_string())
+    };
+
+    Ok(SmartStartResponse {
+        start_position,
+        is_resuming,
+        reason,
+    })
 }

@@ -25,7 +25,7 @@ interface TranscriptSyncProps {
 }
 
 export function TranscriptSync({
-  segments,
+  segments = [],
   currentTime,
   onSeek,
   autoScroll = true,
@@ -36,7 +36,7 @@ export function TranscriptSync({
   className = "h-[400px]",
 }: TranscriptSyncProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredSegments, setFilteredSegments] = useState<TranscriptSegment[]>(segments);
+  const [filteredSegments, setFilteredSegments] = useState<TranscriptSegment[]>(segments || []);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeSegmentRef = useRef<HTMLDivElement>(null);
@@ -44,11 +44,12 @@ export function TranscriptSync({
 
   // Filter segments based on search query
   useEffect(() => {
+    const safeSegments = segments || [];
     if (!searchQuery.trim()) {
-      setFilteredSegments(segments);
+      setFilteredSegments(safeSegments);
     } else {
       const query = searchQuery.toLowerCase();
-      const filtered = segments.filter((seg) =>
+      const filtered = safeSegments.filter((seg) =>
         seg.text.toLowerCase().includes(query)
       );
       setFilteredSegments(filtered);
@@ -57,7 +58,8 @@ export function TranscriptSync({
 
   // Find active segment based on current time
   useEffect(() => {
-    const index = segments.findIndex(
+    const safeSegments = segments || [];
+    const index = safeSegments.findIndex(
       (seg) => currentTime >= seg.start && currentTime < seg.end
     );
     if (index !== -1 && index !== activeIndex) {
@@ -187,7 +189,7 @@ export function TranscriptSync({
           </div>
         ) : (
           filteredSegments.map((segment, index) => {
-            const isActive = segments.indexOf(segment) === activeIndex;
+            const isActive = (segments || []).indexOf(segment) === activeIndex;
             const isHighlighted = searchQuery && segment.text.toLowerCase().includes(searchQuery.toLowerCase());
 
             return (

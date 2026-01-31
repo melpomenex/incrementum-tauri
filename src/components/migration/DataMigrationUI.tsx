@@ -10,7 +10,7 @@ import {
   XCircle,
   AlertTriangle,
   RefreshCw,
-  Backup,
+  Archive,
   FolderOpen,
   FileText,
 } from "lucide-react";
@@ -548,7 +548,7 @@ export function DataMigrationUI() {
               disabled={isProcessing}
               className="flex items-center gap-2 px-6 py-3 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 disabled:opacity-50"
             >
-              <Backup className="w-4 h-4" />
+              <Archive className="w-4 h-4" />
               Rollback
             </button>
           )}

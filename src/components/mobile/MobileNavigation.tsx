@@ -42,7 +42,8 @@ interface NavItem {
   badge?: "review" | "rss";
 }
 
-const navItems: NavItem[] = [
+// Primary nav items shown on mobile bottom nav
+const primaryNavItems: NavItem[] = [
   {
     id: "dashboard",
     label: "Home",
@@ -54,14 +55,15 @@ const navItems: NavItem[] = [
     closable: false,
   },
   {
-    id: "documents",
-    label: "Documents",
+    id: "queue",
+    label: "Queue",
     icon: FileText,
-    tabType: "documents",
-    tabTitle: "Documents",
-    tabIcon: "📂",
-    tabContent: DocumentsTab,
+    tabType: "queue",
+    tabTitle: "Queue",
+    tabIcon: "📚",
+    tabContent: QueueTab,
     closable: true,
+    badge: "review",
   },
   {
     id: "review",
@@ -72,8 +74,32 @@ const navItems: NavItem[] = [
     tabIcon: "🧠",
     tabContent: ReviewTab,
     closable: true,
-    badge: "review",
   },
+  {
+    id: "documents",
+    label: "Library",
+    icon: FileText,
+    tabType: "documents",
+    tabTitle: "Documents",
+    tabIcon: "📂",
+    tabContent: DocumentsTab,
+    closable: true,
+  },
+  {
+    id: "more",
+    label: "More",
+    icon: Settings,
+    tabType: "settings",
+    tabTitle: "Settings",
+    tabIcon: "⚙️",
+    tabContent: SettingsTab,
+    closable: true,
+  },
+];
+
+// All nav items for reference (used by more menu)
+const allNavItems: NavItem[] = [
+  ...primaryNavItems,
   {
     id: "rss",
     label: "RSS",
@@ -95,26 +121,6 @@ const navItems: NavItem[] = [
     tabContent: AnalyticsTab,
     closable: true,
   },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: Settings,
-    tabType: "settings",
-    tabTitle: "Settings",
-    tabIcon: "⚙️",
-    tabContent: SettingsTab,
-    closable: true,
-  },
-  {
-    id: "queue",
-    label: "Queue",
-    icon: FileText,
-    tabType: "queue",
-    tabTitle: "Queue",
-    tabIcon: "📚",
-    tabContent: QueueTab,
-    closable: true,
-  },
 ];
 
 interface MobileNavigationProps {
@@ -129,6 +135,7 @@ export function MobileNavigation({
   hidden = false,
 }: MobileNavigationProps) {
   const { tabs, rootPane, addTab, setActiveTab } = useTabsStore();
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   
   // Get active tab ID from the first tab pane
   const activeTabId = useMemo(() => {
@@ -182,8 +189,9 @@ export function MobileNavigation({
   };
 
   return (
+    <>
     <nav className={`mobile-bottom-nav ${hidden ? "hidden" : ""}`} aria-hidden={hidden}>
-      {navItems.map((item) => {
+      {primaryNavItems.map((item) => {
         const active = activeTab?.type === item.tabType;
         const badge =
           item.badge === "review"
@@ -196,7 +204,13 @@ export function MobileNavigation({
           <button
             key={item.id}
             type="button"
-            onClick={() => openTab(item)}
+            onClick={() => {
+              if (item.id === "more") {
+                setShowMoreMenu(true);
+              } else {
+                openTab(item);
+              }
+            }}
             className={`mobile-nav-item ${active ? 'active' : ''}`}
             aria-label={item.label}
             aria-current={active ? "page" : undefined}
@@ -214,6 +228,53 @@ export function MobileNavigation({
         );
       })}
     </nav>
+
+      {/* More Menu Overlay */}
+      {showMoreMenu && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/50"
+          onClick={() => setShowMoreMenu(false)}
+        >
+          <div 
+            className="absolute bottom-20 left-4 right-4 bg-card rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-border">
+              <h3 className="font-semibold text-foreground">More Options</h3>
+            </div>
+            <div className="p-2">
+              {allNavItems.filter(item => !primaryNavItems.find(p => p.id === item.id)).map((item) => {
+                const Icon = item.icon;
+                const badge =
+                  item.badge === "review"
+                    ? dueCount
+                    : item.badge === "rss"
+                    ? unreadCount
+                    : 0;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      openTab(item);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-muted transition-colors"
+                  >
+                    <Icon className="w-5 h-5 text-muted-foreground" />
+                    <span className="flex-1 text-left text-foreground">{item.label}</span>
+                    {badge > 0 && (
+                      <span className="px-2 py-0.5 bg-primary text-primary-foreground text-xs rounded-full">
+                        {badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

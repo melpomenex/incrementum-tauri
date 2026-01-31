@@ -39,6 +39,7 @@ import {
   type ObsidianConfig,
   type AnkiConfig,
 } from "../../api/integrations";
+import { openFolderPicker } from "../../lib/tauri";
 import {
   getStoredYouTubeCookies,
   storeYouTubeCookies,
@@ -415,7 +416,22 @@ export function IntegrationSettings() {
                     placeholder="/home/user/Documents/ObsidianVault"
                     className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
-                  <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const folder = await openFolderPicker({
+                          title: "Select Obsidian Vault Folder",
+                        });
+                        if (folder) {
+                          setObsidianVault(folder);
+                        }
+                      } catch (error) {
+                        console.error("Failed to open folder picker:", error);
+                        showResult(false, "Failed to open folder picker");
+                      }
+                    }}
+                    className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 flex items-center gap-2"
+                  >
                     <FolderOpen className="w-4 h-4" />
                     Browse
                   </button>
@@ -471,6 +487,19 @@ export function IntegrationSettings() {
               >
                 Save Obsidian Configuration
               </button>
+            </div>
+          </div>
+
+          {/* AI Conversation Export Info */}
+          <div className="bg-card border border-border rounded-lg p-6">
+            <h4 className="font-semibold text-foreground mb-2">AI Conversation Export</h4>
+            <p className="text-sm text-muted-foreground mb-4">
+              You can now export AI assistant conversations directly to your Obsidian vault.
+              Look for the share button on assistant messages or in the conversation header.
+            </p>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Info className="w-4 h-4 text-blue-500" />
+              <span>Conversations are exported as Markdown with Obsidian-compatible formatting</span>
             </div>
           </div>
 
