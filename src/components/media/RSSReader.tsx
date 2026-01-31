@@ -13,6 +13,8 @@ import {
   Folder,
   Import,
   Download,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import {
   Feed,
@@ -63,6 +65,7 @@ export function RSSReader() {
   const [preferences, setPreferences] = useState<RssUserPreference | null>(null);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [lastAutoRefresh, setLastAutoRefresh] = useState<Date | null>(null);
+  const [isMobileFullScreen, setIsMobileFullScreen] = useState(false);
 
   // Reference to the auto-refresh interval
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -414,7 +417,7 @@ export function RSSReader() {
     <div className="h-full w-full bg-background">
       <div className="h-full w-full flex flex-col lg:flex-row overflow-hidden rounded-xl border border-border/70 bg-card/60 shadow-[0_0_0_1px_rgba(15,23,42,0.04)]">
         {/* Sidebar */}
-        <div className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-border/70 bg-card/60 flex flex-col min-h-0">
+        <div className={`w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-border/70 bg-card/60 flex-col min-h-0 ${isMobileFullScreen ? "hidden lg:flex" : "flex"}`}>
           {/* Header */}
           <div className="px-4 pt-4 pb-3 border-b border-border/70 bg-gradient-to-b from-muted/30 via-muted/10 to-transparent">
             <div className="flex items-center justify-between mb-3">
@@ -599,7 +602,7 @@ export function RSSReader() {
         {/* Main content */}
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
           {/* Items list */}
-          <div className="w-full lg:w-[420px] border-b lg:border-b-0 lg:border-r border-border/70 flex flex-col min-h-0">
+          <div className={`w-full lg:w-[420px] border-b lg:border-b-0 lg:border-r border-border/70 flex-col min-h-0 ${isMobileFullScreen ? "hidden lg:flex" : "flex"}`}>
             <div className="px-5 pt-4 pb-3 border-b border-border/70 bg-gradient-to-b from-muted/20 via-muted/10 to-transparent">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -734,6 +737,17 @@ export function RSSReader() {
                     <h2 className="text-lg font-semibold text-foreground truncate">{selectedItem.title}</h2>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsMobileFullScreen(!isMobileFullScreen)}
+                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/70 rounded-lg lg:hidden"
+                      title={isMobileFullScreen ? "Show lists" : "Expand article"}
+                    >
+                      {isMobileFullScreen ? (
+                        <Minimize2 className="w-4 h-4" />
+                      ) : (
+                        <Maximize2 className="w-4 h-4" />
+                      )}
+                    </button>
                     {selectedItemFeed && (
                       <button
                         onClick={() => handleToggleFavorite(selectedItemFeed, selectedItem)}

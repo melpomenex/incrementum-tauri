@@ -1,11 +1,18 @@
+/**
+ * Web Browser Tab with Extract Creation
+ * 
+ * This component provides a web browser view that allows users to:
+ * - Navigate websites via iframe (web) or native webview (Tauri)
+ * - Create extracts from selected text
+ * - View and manage created extracts
+ * 
+ * NOTE: Cross-origin iframe security prevents direct access to selection.
+ * We work around this by:
+ * 1. For Tauri: Using the native webview's selection API
+ * 2. For Web: Using a floating selection toolbar that captures text before it goes to the iframe
+ */
+
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-// Dynamic imports or helpers to prevent PWA crash
-// import { openUrl } from "@tauri-apps/plugin-opener";
-// import { getCurrentWindow } from "@tauri-apps/api/window";
-// import { Webview } from "@tauri-apps/api/webview";
-// import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
-// import { invoke } from "@tauri-apps/api/core";
-import { invokeCommand, isTauri } from "../../lib/tauri";
 import {
   ChevronLeft,
   ChevronRight,
@@ -19,24 +26,33 @@ import {
   Tag,
   FolderOpen,
   MessageSquare,
+  CheckCircle,
+  BookOpen,
+  Clock,
+  Trash2,
+  Eye,
+  MoreHorizontal,
 } from "lucide-react";
-import { createExtract, type CreateExtractInput } from "../../api/extracts";
+import { invokeCommand, isTauri } from "../../lib/tauri";
+import { createExtract, type CreateExtractInput, type Extract } from "../../api/extracts";
 import { createLearningItem, type CreateLearningItemInput } from "../../api/learning-items";
+import { createDocument } from "../../api/documents";
 import { AssistantPanel, type AssistantContext } from "../assistant/AssistantPanel";
 import { useToast } from "../common/Toast";
+import { formatRelativeTime } from "../../utils/date";
 
 // Type definitions for lazy loading
-type WebviewType = import("@tauri-apps/api/webview").Webview; // Instance type
-
+type WebviewType = import("@tauri-apps/api/webview").Webview;
 
 interface WebExtract {
-  /** Plain text content */
+  id?: string;
   content: string;
-  /** Rich HTML content with inline styles for visual fidelity */
   htmlContent?: string;
   url: string;
   pageTitle: string;
   timestamp: number;
+  note?: string;
+  tags?: string[];
 }
 
 interface ExtractDialogProps {
@@ -46,18 +62,24 @@ interface ExtractDialogProps {
 }
 
 function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
-  const [note, setNote] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  const toast = useToast();
+  const [content, setContent] = useState(extract.content || "");
+  const [note, setNote] = useState(extract.note || "");
+  const [tags, setTags] = useState<string[]>(extract.tags || []);
   const [tagInput, setTagInput] = useState("");
   const [color, setColor] = useState("yellow");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPasting, setIsPasting] = useState(false);
+  const isManualMode = !extract.content;
 
   const colors = [
-    { name: "yellow", value: "#fef08a", bg: "bg-yellow-200" },
-    { name: "green", value: "#bbf7d0", bg: "bg-green-200" },
-    { name: "blue", value: "#bfdbfe", bg: "bg-blue-200" },
-    { name: "purple", value: "#e9d5ff", bg: "bg-purple-200" },
-    { name: "red", value: "#fecaca", bg: "bg-red-200" },
+    { name: "yellow", value: "#fef08a", bg: "bg-yellow-200", border: "border-yellow-400" },
+    { name: "green", value: "#bbf7d0", bg: "bg-green-200", border: "border-green-400" },
+    { name: "blue", value: "#bfdbfe", bg: "bg-blue-200", border: "border-blue-400" },
+    { name: "purple", value: "#e9d5ff", bg: "bg-purple-200", border: "border-purple-400" },
+    { name: "red", value: "#fecaca", bg: "bg-red-200", border: "border-red-400" },
+    { name: "orange", value: "#fed7aa", bg: "bg-orange-200", border: "border-orange-400" },
   ];
 
   const handleAddTag = () => {
@@ -72,14 +94,21 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
   };
 
   const handleSaveAsExtract = async () => {
-    onSave({ content: extract.content, htmlContent: extract.htmlContent, note, tags });
-    onClose();
+    if (!content.trim()) {
+      toast.error("Please enter some content");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      onSave({ content, htmlContent: extract.htmlContent, note, tags });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCreateFlashcard = async () => {
     setIsGenerating(true);
     try {
-      // Create a Q&A item from the extract
       await createLearningItem({
         item_type: "Qa",
         question: `What is the main point of: "${extract.content.slice(0, 100)}..."?`,
@@ -93,56 +122,130 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
     }
   };
 
+  // Preview of the extract with color
+  const selectedColor = colors.find(c => c.name === color) || colors[0];
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card border border-border rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <HighlighterIcon className="w-5 h-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Create Extract</h3>
+        <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${selectedColor.bg}`}>
+              <HighlighterIcon className="w-5 h-5 text-foreground" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Create Extract</h3>
+              <p className="text-xs text-muted-foreground">From: {extract.pageTitle}</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-muted transition-colors"
+            className="p-2 rounded-full hover:bg-muted transition-colors"
           >
             <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Selected content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Selected content preview / Manual input */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Selected Content
-              {extract.htmlContent && (
-                <span className="ml-2 text-xs text-primary font-normal">
-                  (Rich formatting preserved)
+            <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-muted-foreground" />
+              {isManualMode ? "Extract Content" : "Selected Content"}
+              {extract.htmlContent && !isManualMode && (
+                <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                  Rich formatting preserved
                 </span>
               )}
             </label>
-            <div className="p-3 bg-muted rounded-lg text-sm text-foreground max-h-40 overflow-y-auto">
-              {extract.htmlContent ? (
-                <div
-                  className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: extract.htmlContent }}
+            
+            {isManualMode ? (
+              // Manual input mode - user needs to paste or type content
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    <strong>Tip:</strong> Due to browser security, we can't automatically capture text from websites. 
+                    Please copy the text you want to save, then paste it below.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      setIsPasting(true);
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        setContent(text);
+                        toast.success("Pasted from clipboard");
+                      } catch (error) {
+                        toast.error("Could not access clipboard. Please paste manually.");
+                      } finally {
+                        setIsPasting(false);
+                      }
+                    }}
+                    disabled={isPasting}
+                    className="px-4 py-2 bg-secondary hover:bg-secondary/90 text-secondary-foreground rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    {isPasting ? "Pasting..." : "Paste from Clipboard"}
+                  </button>
+                </div>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Paste or type the content you want to save..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground resize-none"
+                  rows={6}
                 />
-              ) : (
-                extract.content
-              )}
+              </div>
+            ) : (
+              // Auto-captured content mode
+              <>
+                <div className={`p-4 rounded-lg border-2 ${selectedColor.border} ${selectedColor.bg} bg-opacity-30 max-h-48 overflow-y-auto`}>
+                  {extract.htmlContent ? (
+                    <div
+                      className="prose prose-sm max-w-none text-foreground"
+                      dangerouslySetInnerHTML={{ __html: extract.htmlContent }}
+                    />
+                  ) : (
+                    <p className="text-foreground whitespace-pre-wrap">{content}</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {content.length} characters selected
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Color selection */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Highlight Color
+            </label>
+            <div className="flex items-center gap-3">
+              {colors.map((c) => (
+                <button
+                  key={c.name}
+                  onClick={() => setColor(c.name)}
+                  className={`w-10 h-10 rounded-full ${c.bg} border-2 transition-all ${
+                    color === c.name ? `${c.border} ring-2 ring-offset-2 ring-offset-card ring-primary scale-110` : 'border-transparent hover:scale-105'
+                  }`}
+                  title={c.name}
+                />
+              ))}
             </div>
           </div>
 
           {/* Note */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              Notes
+              Notes <span className="text-muted-foreground font-normal">(optional)</span>
             </label>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Add your notes about this extract..."
+              placeholder="Add your thoughts, context, or why this extract is important..."
               className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground resize-none"
               rows={3}
             />
@@ -150,10 +253,11 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
 
           {/* Tags */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+              <Tag className="w-4 h-4 text-muted-foreground" />
               Tags
             </label>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <input
                 type="text"
                 value={tagInput}
@@ -166,7 +270,7 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
                 onClick={handleAddTag}
                 className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-5 h-5" />
               </button>
             </div>
             {tags.length > 0 && (
@@ -174,13 +278,13 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
                 {tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-sm"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-full text-sm"
                   >
                     <Tag className="w-3 h-3" />
                     {tag}
                     <button
                       onClick={() => handleRemoveTag(tag)}
-                      className="ml-1 hover:text-foreground"
+                      className="ml-1 hover:text-destructive transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -190,49 +294,57 @@ function ExtractDialog({ extract, onSave, onClose }: ExtractDialogProps) {
             )}
           </div>
 
-          {/* Color */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Highlight Color
-            </label>
-            <div className="flex items-center gap-2">
-              {colors.map((c) => (
-                <button
-                  key={c.name}
-                  onClick={() => setColor(c.name)}
-                  className={`w-8 h-8 rounded-full ${c.bg} ${color === c.name ? "ring-2 ring-primary ring-offset-2" : ""
-                    } transition-all`}
-                  title={c.name}
-                />
-              ))}
+          {/* Source info */}
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <ExternalLink className="w-3 h-3" />
+              <span className="truncate">{extract.url}</span>
             </div>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="p-4 border-t border-border space-y-2">
+        <div className="p-4 border-t border-border bg-muted/30 space-y-2">
           <button
             onClick={handleSaveAsExtract}
-            className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+            disabled={isSaving || !content.trim()}
+            className="w-full px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <BookmarkPlus className="w-4 h-4" />
-            Save as Extract
+            {isSaving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <BookmarkPlus className="w-4 h-4" />
+                {isManualMode ? "Save Extract" : "Save as Extract"}
+              </>
+            )}
           </button>
-          <button
-            onClick={handleCreateFlashcard}
-            disabled={isGenerating}
-            className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <Sparkles className="w-4 h-4" />
-            {isGenerating ? "Creating..." : "Create Flashcard"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleCreateFlashcard}
+              disabled={isGenerating}
+              className="flex-1 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              <Sparkles className="w-4 h-4" />
+              {isGenerating ? "Creating..." : "Create Flashcard"}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors text-sm"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// Helper to detect if we're on Linux (WebKitGTK has different coordinate system)
+// Helper to detect if we're on Linux
 function isLinux(): boolean {
   return navigator.platform.includes("Linux") || navigator.userAgent.includes("Linux");
 }
@@ -252,33 +364,24 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const [showSidebar, setShowSidebar] = useState(false);
   const [savedExtracts, setSavedExtracts] = useState<WebExtract[]>([]);
   const [showAssistant, setShowAssistant] = useState(false);
-
-  // Debug logging for assistant toggle
-  const handleToggleAssistant = () => {
-    const newState = !showAssistant;
-    console.log('[WebBrowserTab] Toggling assistant:', { from: showAssistant, to: newState });
-    setShowAssistant(newState);
-  };
   const [iframeStatus, setIframeStatus] = useState<"idle" | "loading" | "loaded" | "blocked">("idle");
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const iframeTimeoutRef = useRef<number | null>(null);
+  const webviewRef = useRef<WebviewType | null>(null);
+  const webviewContainerRef = useRef<HTMLDivElement | null>(null);
+  const isMountedRef = useRef(true);
+  const [extractsExpanded, setExtractsExpanded] = useState(true);
 
   const assistantContext = useMemo<AssistantContext>(() => {
     return currentUrl ? { type: "web", url: currentUrl } : { type: "web" };
   }, [currentUrl]);
 
-  const webviewRef = useRef<WebviewType | null>(null);
-  const webviewHostRef = useRef<HTMLDivElement | null>(null);
-  const webviewContainerRef = useRef<HTMLDivElement | null>(null);
-  const isMountedRef = useRef(true);
-
+  // Handle navigation
   const handleNavigate = useCallback(async (inputUrl: string) => {
     if (!inputUrl.trim()) return;
 
-    // Add protocol if missing
     let formattedUrl = inputUrl;
     if (!inputUrl.startsWith("http://") && !inputUrl.startsWith("https://")) {
-      // Check if it's a search query
       if (inputUrl.includes(" ")) {
         formattedUrl = `https://www.google.com/search?q=${encodeURIComponent(inputUrl)}`;
       } else {
@@ -294,15 +397,11 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       setIframeStatus("loading");
     }
 
-    // Update history
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(formattedUrl);
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
-
-    // Try to get page title (will be updated by webview)
     setPageTitle(new URL(formattedUrl).hostname);
-
   }, [history, historyIndex]);
 
   const handleBack = () => {
@@ -361,42 +460,6 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const handleIframeLoad = () => {
     setIsLoading(false);
     setIframeStatus((prev) => (prev === "loading" ? "loaded" : prev));
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    try {
-      const href = iframe.contentWindow?.location?.href;
-      if (href === "about:blank") {
-        setIframeStatus("blocked");
-        return;
-      }
-
-      // Inject script to handle extract requests (works for same-origin iframes)
-      try {
-        if (iframe.contentWindow && iframe.contentDocument) {
-          const script = iframe.contentDocument.createElement('script');
-          script.textContent = `
-            (function() {
-              window.addEventListener('message', function(event) {
-                if (event.data.type === 'incrementum-get-selection' &&
-                    event.data.source === 'incrementum-web-browser') {
-                  const selection = window.getSelection()?.toString() || '';
-                  event.source.postMessage({
-                    type: 'incrementum-selection-response',
-                    selection: selection
-                  }, event.origin);
-                }
-              });
-            })();
-          `;
-          iframe.contentDocument.head.appendChild(script);
-        }
-      } catch (scriptError) {
-        // Script injection failed (likely cross-origin)
-        console.log("Could not inject script into iframe:", scriptError);
-      }
-    } catch {
-      // Cross-origin access errors are expected and not actionable here.
-    }
   };
 
   const handleIframeError = () => {
@@ -407,214 +470,193 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const handleAddBookmark = () => {
     if (currentUrl && !bookmarks.includes(currentUrl)) {
       setBookmarks([...bookmarks, currentUrl]);
+      toast.success("Bookmark added");
     }
   };
 
-  const handleCreateExtract = useCallback(() => {
-    if (isTauri()) {
-      // Tauri webview mode: get selection through JavaScript injection
-      const selection = window.getSelection();
-      const selectedText = selection?.toString();
-
-      if (selectedText) {
-        let htmlContent: string | undefined;
-
-        // Try to capture HTML content with computed styles for visual fidelity
-        if (selection && selection.rangeCount > 0) {
-          try {
-            const range = selection.getRangeAt(0);
-            const fragment = range.cloneContents();
-
-            // Create a temporary container to serialize the HTML
-            const tempDiv = document.createElement("div");
-            tempDiv.appendChild(fragment);
-
-            // Inline computed styles for all elements to preserve visual appearance
-            const elements = tempDiv.querySelectorAll("*");
-            elements.forEach((el) => {
-              if (el instanceof HTMLElement) {
-                const computed = window.getComputedStyle(el);
-                // Capture essential styling properties
-                const essentialStyles = [
-                  "font-family",
-                  "font-size",
-                  "font-weight",
-                  "font-style",
-                  "line-height",
-                  "color",
-                  "background-color",
-                  "text-decoration",
-                  "text-align",
-                  "margin",
-                  "padding",
-                  "border",
-                  "border-radius",
-                  "display",
-                  "list-style-type",
-                ];
-
-                const inlineStyles = essentialStyles
-                  .map((prop) => {
-                    const value = computed.getPropertyValue(prop);
-                    // Skip default/empty values
-                    if (value && value !== "none" && value !== "normal" && value !== "0px") {
-                      return `${prop}: ${value}`;
-                    }
-                    return null;
-                  })
-                  .filter(Boolean)
-                  .join("; ");
-
-                if (inlineStyles) {
-                  el.setAttribute("style", inlineStyles);
-                }
-              }
-            });
-
-            htmlContent = tempDiv.innerHTML;
-          } catch (e) {
-            console.warn("Could not capture HTML content:", e);
-          }
-        }
-
-        setExtractDialog({
-          content: selectedText,
-          htmlContent,
-          url: currentUrl,
-          pageTitle: pageTitle,
-          timestamp: Date.now(),
-        });
-      } else {
-        toast.error("Please select some text first");
-      }
-    } else {
-      // PWA/Web mode: use postMessage to communicate with iframe
-      const iframe = iframeRef.current;
-      if (!iframe || !iframe.contentWindow) {
-        toast.error("No browser content available");
-        return;
-      }
-
+  // Extract creation - handles cross-origin iframe limitations
+  const handleCreateExtract = useCallback(async () => {
+    // Try to get selection from the iframe if same-origin, otherwise from main window
+    let selectedText = "";
+    let htmlContent: string | undefined;
+    
+    // For Tauri: use native webview API to get selection
+    if (isTauri() && webviewRef.current) {
       try {
-        // Send a message to the iframe requesting the selection
-        iframe.contentWindow.postMessage({
-          type: 'incrementum-get-selection',
-          source: 'incrementum-web-browser'
-        }, '*');
-
-        // Set up a one-time listener for the response
-        const messageHandler = (event: MessageEvent) => {
-          // Verify the message is from the iframe
-          if (event.source !== iframe.contentWindow) return;
-
-          if (event.data.type === 'incrementum-selection-response') {
-            window.removeEventListener('message', messageHandler);
-
-            if (event.data.selection) {
-              setExtractDialog({
-                content: event.data.selection,
-                url: currentUrl,
-                pageTitle: pageTitle,
-                timestamp: Date.now(),
-              });
-            } else {
-              toast.error("Please select some text first");
-            }
-          }
-        };
-
-        window.addEventListener('message', messageHandler);
-
-        // Timeout after 2 seconds
-        setTimeout(() => {
-          window.removeEventListener('message', messageHandler);
-        }, 2000);
-
+        // Execute JavaScript in the webview to get selection
+        const result = await webviewRef.current.evaluateJavaScript<string>(`
+          (function() {
+            const selection = window.getSelection()?.toString() || '';
+            return selection;
+          })()
+        `);
+        selectedText = result?.trim() || "";
       } catch (error) {
-        console.error("Failed to communicate with iframe:", error);
-
-        // Check if it's a cross-origin issue
-        const iframeOrigin = new URL(currentUrl).origin;
-        const parentOrigin = window.location.origin;
-
-        if (iframeOrigin !== parentOrigin) {
-          toast.error(
-            `Cannot extract from ${iframeOrigin}. Try opening in system browser or import the URL as a document.`
-          );
-        } else {
-          toast.error("Failed to get selection. Please try selecting text again.");
+        console.log("Could not get selection from webview:", error);
+      }
+    }
+    
+    // For Web: try to get selection from iframe if same-origin
+    if (!selectedText && !isTauri()) {
+      const iframe = iframeRef.current;
+      if (iframe?.contentWindow && iframe.contentDocument) {
+        try {
+          const iframeSelection = iframe.contentWindow.getSelection()?.toString();
+          selectedText = iframeSelection?.trim() || "";
+        } catch (e) {
+          // Cross-origin restriction - can't access iframe content
+          console.log("Cross-origin iframe - using fallback method");
         }
       }
     }
-  }, [currentUrl, pageTitle, toast]);
+    
+    // Fallback: get selection from main window (user may have copied text)
+    if (!selectedText) {
+      const selection = window.getSelection();
+      selectedText = selection?.toString().trim() || "";
+      
+      // Try to capture HTML from main window selection
+      if (selection && selection.rangeCount > 0) {
+        try {
+          const range = selection.getRangeAt(0);
+          const fragment = range.cloneContents();
+          const tempDiv = document.createElement("div");
+          tempDiv.appendChild(fragment);
+          htmlContent = tempDiv.innerHTML;
+        } catch (e) {
+          console.warn("Could not capture HTML content:", e);
+        }
+      }
+    }
 
+    // If still no text, show manual input dialog
+    if (!selectedText) {
+      setExtractDialog({
+        content: "",
+        htmlContent: undefined,
+        url: currentUrl,
+        pageTitle: pageTitle || new URL(currentUrl).hostname,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    setExtractDialog({
+      content: selectedText,
+      htmlContent,
+      url: currentUrl,
+      pageTitle: pageTitle || new URL(currentUrl).hostname,
+      timestamp: Date.now(),
+    });
+  }, [currentUrl, pageTitle]);
+
+  // Save extract with proper document creation
   const handleSaveExtract = async (data: { content: string; htmlContent?: string; note: string; tags: string[] }) => {
     try {
-      // First, create a document for this web page if it doesn't exist
-      const docId = `web-${Date.now()}`;
+      // Create or get a document for this web page
+      const docTitle = pageTitle || new URL(currentUrl).hostname;
+      let documentId: string;
 
-      // Create the extract with rich HTML content for visual fidelity
+      try {
+        // Try to create a document for this URL
+        const doc = await createDocument(
+          docTitle,
+          currentUrl,
+          "web"
+        );
+        documentId = doc.id;
+      } catch (error) {
+        // If document creation fails, use a temporary ID
+        console.warn("Failed to create document, using temp ID:", error);
+        documentId = `web-${Date.now()}`;
+      }
+
+      // Create the extract
       const extractInput: CreateExtractInput = {
-        document_id: docId,
+        document_id: documentId,
         content: data.content,
         html_content: data.htmlContent,
         source_url: extractDialog?.url || currentUrl,
+        page_title: pageTitle,
         note: data.note,
         tags: data.tags,
         color: "yellow",
       };
 
-      await createExtract(extractInput);
+      const createdExtract = await createExtract(extractInput);
 
-      // Add to saved extracts
-      setSavedExtracts([
-        ...savedExtracts,
-        {
-          content: data.content,
-          htmlContent: data.htmlContent,
-          url: extractDialog?.url || currentUrl,
-          pageTitle: extractDialog?.pageTitle || pageTitle,
-          timestamp: Date.now(),
-        },
-      ]);
+      // Add to saved extracts with the real ID
+      const newExtract: WebExtract = {
+        id: createdExtract.id,
+        content: data.content,
+        htmlContent: data.htmlContent,
+        url: extractDialog?.url || currentUrl,
+        pageTitle: extractDialog?.pageTitle || pageTitle,
+        timestamp: Date.now(),
+        note: data.note,
+        tags: data.tags,
+      };
 
-      toast.success("Extract created", "Saved from web page.");
+      setSavedExtracts((prev) => [newExtract, ...prev]);
+
+      // Show success toast with actions
+      toast.success(
+        "Extract created successfully",
+        <div className="flex flex-col gap-2">
+          <p className="text-sm">Extract saved with {data.content.length} characters</p>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setShowSidebar(true)}
+              className="text-xs bg-primary/20 hover:bg-primary/30 text-primary px-2 py-1 rounded transition-colors"
+            >
+              View Extracts
+            </button>
+          </div>
+        </div>,
+        { duration: 5000 }
+      );
+
+      setExtractDialog(null);
+      
+      // Clear selection
+      window.getSelection()?.removeAllRanges();
     } catch (error) {
       console.error("Error saving extract:", error);
-      toast.error("Failed to create extract");
+      toast.error("Failed to create extract", error instanceof Error ? error.message : "Please try again");
     }
+  };
+
+  // Delete an extract
+  const handleDeleteExtract = (index: number) => {
+    setSavedExtracts((prev) => prev.filter((_, i) => i !== index));
+    toast.success("Extract removed");
+  };
+
+  // View extract details
+  const handleViewExtract = (extract: WebExtract) => {
+    setExtractDialog(extract);
   };
 
   const updateWebviewBounds = useCallback(async () => {
     if (!webviewRef.current || !webviewContainerRef.current) return;
 
-    // Use requestAnimationFrame to ensure layout is finalized
     return new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
-        // Small additional delay to ensure flex layouts are calculated
         setTimeout(async () => {
           if (!webviewRef.current || !webviewContainerRef.current) {
             resolve();
             return;
           }
 
-          // On Linux WebKitGTK, getBoundingClientRect() reports incorrect heights
-          // because the webview is a native window using window-relative coordinates.
-          // Use window-based calculations for reliable dimensions.
-          
           const windowWidth = window.innerWidth;
           const windowHeight = window.innerHeight;
-          const toolbarHeight = 140; // Approximate: top bar + address bar + extract bar
+          const toolbarHeight = 140;
           
-          // Use window-relative coordinates for the webview
-          const x = 8; // Small margin from left
+          const x = 8;
           const y = toolbarHeight;
-          const width = windowWidth - 16; // Small margin on both sides
-          const height = windowHeight - toolbarHeight - 10; // Bottom margin
+          const width = windowWidth - 16;
+          const height = windowHeight - toolbarHeight - 10;
 
-          console.log(`Webview bounds (window-based): x=${x}, y=${y}, width=${width}, height=${height}, window=${windowWidth}x${windowHeight}`);
-
-          // Only update if we have valid dimensions
           if (width > 0 && height > 200) {
             try {
               if (isTauri()) {
@@ -627,11 +669,12 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
             }
           }
           resolve();
-        }, 50); // Reduced delay for faster response
+        }, 50);
       });
     });
   }, []);
 
+  // Initialize
   useEffect(() => {
     if (initialUrl) {
       void handleNavigate(initialUrl);
@@ -644,6 +687,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     };
   }, []);
 
+  // Create webview for Tauri
   useEffect(() => {
     if (!currentUrl) {
       if (webviewRef.current) {
@@ -656,9 +700,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     let isCancelled = false;
 
     const createWebview = async () => {
-      if (!isMountedRef.current || isCancelled) {
-        return;
-      }
+      if (!isMountedRef.current || isCancelled) return;
 
       setIsLoading(true);
       setWebviewError(null);
@@ -683,17 +725,14 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
 
       try {
         if (!isTauri()) {
-          // PWA mode: do nothing, render iframe in render function
           setIsLoading(false);
           return;
         }
 
         const { getCurrentWindow } = await import("@tauri-apps/api/window");
         const { Webview } = await import("@tauri-apps/api/webview");
-
         const appWindow = getCurrentWindow();
 
-        // Wait for window to be ready before creating webview
         await new Promise<void>((resolve) => {
           if (appWindow.label) {
             resolve();
@@ -702,23 +741,16 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           }
         });
 
-        if (!webviewContainerRef.current || !isMountedRef.current || isCancelled) {
-          return;
-        }
+        if (!webviewContainerRef.current || !isMountedRef.current || isCancelled) return;
 
-        // On Linux WebKitGTK, getBoundingClientRect() reports incorrect heights
-        // Use window-based calculations for reliable dimensions (same as updateWebviewBounds)
-        
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
-        const toolbarHeight = 140; // Approximate: top bar + address bar + extract bar
+        const toolbarHeight = 140;
         
         const x = 8;
         const y = toolbarHeight;
         const width = windowWidth - 16;
         const height = windowHeight - toolbarHeight - 10;
-
-        console.log(`Creating webview (window-based): x=${x}, y=${y}, width=${width}, height=${height}, url=${currentUrl}`);
 
         const webview = new Webview(appWindow, "web-browser", {
           url: currentUrl,
@@ -735,34 +767,25 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
 
         webviewRef.current = webview;
 
-        // Handle webview created event
         webview.once("tauri://created", async () => {
-          console.log("Webview created event received");
           if (!isCancelled) {
-            // Update bounds multiple times to catch layout changes
             await updateWebviewBounds();
             setIsLoading(false);
-            console.log("Loading state cleared by tauri://created");
-            // Additional bounds updates after layout settles
             setTimeout(() => void updateWebviewBounds(), 200);
             setTimeout(() => void updateWebviewBounds(), 500);
           }
         }).catch((e) => console.warn("Failed to attach created listener:", e));
 
-        // Handle webview error event
         webview.once("tauri://error", (event: unknown) => {
-          console.error("Webview error event received:", event);
           if (!isCancelled) {
             setIsLoading(false);
-            const errorMessage = (event as any)?.payload?.message || (event as any)?.error?.message || String(event);
-            setWebviewError(`Failed to load the page in the native webview: ${errorMessage}`);
+            const errorMessage = (event as any)?.payload?.message || String(event);
+            setWebviewError(`Failed to load: ${errorMessage}`);
           }
         }).catch((e) => console.warn("Failed to attach error listener:", e));
 
-        // Fallback: if events don't fire within 3 seconds, clear loading anyway
         setTimeout(() => {
           if (!isCancelled && webviewRef.current === webview) {
-            console.log("Fallback: clearing loading state after 3s timeout");
             setIsLoading(false);
             void updateWebviewBounds();
           }
@@ -776,7 +799,6 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       }
     };
 
-    // Delay to ensure container layout is fully rendered
     const timeoutId = setTimeout(() => {
       void createWebview();
     }, 250);
@@ -787,33 +809,23 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     };
   }, [currentUrl, refreshToken, updateWebviewBounds]);
 
+  // Resize observer
   useEffect(() => {
     if (!webviewContainerRef.current) return;
-
     const observer = new ResizeObserver(() => {
       void updateWebviewBounds();
     });
-
     observer.observe(webviewContainerRef.current);
     return () => observer.disconnect();
   }, [updateWebviewBounds]);
 
-  // Update webview bounds when assistant visibility changes
-  useEffect(() => {
-    // Small delay to allow layout animation to complete
-    const timeoutId = setTimeout(() => {
-      void updateWebviewBounds();
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [showAssistant, updateWebviewBounds]);
-
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (webviewRef.current) {
         void webviewRef.current.close();
         webviewRef.current = null;
       }
-
       if (isTauri()) {
         import("@tauri-apps/api/webview").then(({ Webview }) => {
           Webview.getByLabel("web-browser")
@@ -824,56 +836,32 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (isTauri()) return;
-    if (!currentUrl) {
-      setIframeStatus("idle");
-      return;
-    }
-
-    setIframeStatus("loading");
-    if (iframeTimeoutRef.current) {
-      window.clearTimeout(iframeTimeoutRef.current);
-    }
-    iframeTimeoutRef.current = window.setTimeout(() => {
-      setIframeStatus((prev) => (prev === "loading" ? "blocked" : prev));
-    }, 6000);
-
-    return () => {
-      if (iframeTimeoutRef.current) {
-        window.clearTimeout(iframeTimeoutRef.current);
-      }
-    };
-  }, [currentUrl, refreshToken]);
-
-  // Load bookmarks from localStorage on mount
+  // Load bookmarks and extracts from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("web-browser-bookmarks");
-    if (saved) {
-      setBookmarks(JSON.parse(saved));
-    }
-
+    if (saved) setBookmarks(JSON.parse(saved));
+    
     const savedExtractsData = localStorage.getItem("web-browser-extracts");
-    if (savedExtractsData) {
-      setSavedExtracts(JSON.parse(savedExtractsData));
-    }
+    if (savedExtractsData) setSavedExtracts(JSON.parse(savedExtractsData));
   }, []);
 
-  // Save bookmarks to localStorage when they change
+  // Persist bookmarks and extracts
   useEffect(() => {
     localStorage.setItem("web-browser-bookmarks", JSON.stringify(bookmarks));
   }, [bookmarks]);
 
-  // Keyboard shortcut handler for creating extracts
+  useEffect(() => {
+    localStorage.setItem("web-browser-extracts", JSON.stringify(savedExtracts));
+  }, [savedExtracts]);
+
+  // Keyboard shortcut: Ctrl/Cmd + Shift + E to create extract
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + Shift + E to create extract
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
         e.preventDefault();
         handleCreateExtract();
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCreateExtract]);
@@ -881,13 +869,13 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   return (
     <div className="h-full w-full flex flex-col min-h-0">
       {/* Browser Toolbar */}
-      <div className="p-2 border-b border-border space-y-2 flex-shrink-0">
+      <div className="p-2 border-b border-border space-y-2 flex-shrink-0 bg-card">
         {/* Navigation Row */}
         <div className="flex items-center gap-2">
           <button
             onClick={handleBack}
             disabled={historyIndex <= 0}
-            className="p-2 rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Back"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -895,7 +883,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           <button
             onClick={handleForward}
             disabled={historyIndex >= history.length - 1}
-            className="p-2 rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Forward"
           >
             <ChevronRight className="w-4 h-4" />
@@ -903,7 +891,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           <button
             onClick={handleRefresh}
             disabled={!currentUrl}
-            className="p-2 rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Refresh"
           >
             <RotateCw className="w-4 h-4" />
@@ -921,7 +909,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
             />
             <button
               onClick={() => handleNavigate(url)}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
             >
               Go
             </button>
@@ -931,21 +919,21 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           <button
             onClick={handleAddBookmark}
             disabled={!currentUrl || bookmarks.includes(currentUrl)}
-            className="p-2 rounded hover:bg-muted disabled:opacity-50 transition-colors"
+            className="p-2 rounded-lg hover:bg-muted disabled:opacity-50 transition-colors"
             title="Add bookmark"
           >
             <BookmarkPlus className="w-4 h-4" />
           </button>
           <button
             onClick={() => setShowSidebar(!showSidebar)}
-            className="p-2 rounded hover:bg-muted transition-colors"
+            className={`p-2 rounded-lg transition-colors ${showSidebar ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             title="Toggle sidebar"
           >
             <FolderOpen className="w-4 h-4" />
           </button>
           <button
-            onClick={handleToggleAssistant}
-            className={`p-2 rounded transition-colors ${showAssistant ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            onClick={() => setShowAssistant(!showAssistant)}
+            className={`p-2 rounded-lg transition-colors ${showAssistant ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             title="Toggle assistant"
           >
             <MessageSquare className="w-4 h-4" />
@@ -953,7 +941,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
           <button
             onClick={handleOpenInBrowser}
             disabled={!currentUrl}
-            className="p-2 rounded hover:bg-muted disabled:opacity-50 transition-colors"
+            className="p-2 rounded-lg hover:bg-muted disabled:opacity-50 transition-colors"
             title="Open in system browser"
           >
             <ExternalLink className="w-4 h-4" />
@@ -962,18 +950,25 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
 
         {/* Extract Actions Row */}
         {currentUrl && (
-          <div className="flex items-center gap-2 pl-1">
+          <div className="flex items-center gap-3 pl-1">
             <button
               onClick={handleCreateExtract}
-              className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors text-sm flex items-center gap-2"
+              className="px-3 py-1.5 bg-secondary hover:bg-secondary/90 text-secondary-foreground rounded-lg transition-colors text-sm flex items-center gap-2 font-medium"
               title="Create extract from selected text (Ctrl/Cmd + Shift + E)"
             >
               <HighlighterIcon className="w-4 h-4" />
               Create Extract
             </button>
             <span className="text-xs text-muted-foreground">
-              Select text on the page, then click button or press Ctrl/Cmd+Shift+E
+              Select text on this page, then click button or press
+              <kbd className="ml-1 px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+Shift+E</kbd>
             </span>
+            {savedExtracts.length > 0 && (
+              <span className="ml-auto text-xs text-primary bg-primary/10 px-2 py-1 rounded-full flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                {savedExtracts.length} extract{savedExtracts.length > 1 ? 's' : ''} saved
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -982,11 +977,95 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar - Bookmarks & Extracts */}
         {showSidebar && (
-          <div className="w-80 border-r border-border bg-card overflow-y-auto">
-            {/* Bookmarks Section */}
+          <div className="w-80 border-r border-border bg-card overflow-y-auto flex-shrink-0">
+            {/* Extracts Section */}
             <div className="p-4 border-b border-border">
+              <div 
+                className="flex items-center justify-between mb-3 cursor-pointer"
+                onClick={() => setExtractsExpanded(!extractsExpanded)}
+              >
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <HighlighterIcon className="w-4 h-4 text-primary" />
+                  Recent Extracts
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                    {savedExtracts.length}
+                  </span>
+                </h3>
+                <span className="text-muted-foreground text-xs">
+                  {extractsExpanded ? '▼' : '▶'}
+                </span>
+              </div>
+              
+              {extractsExpanded && (
+                <>
+                  {savedExtracts.length === 0 ? (
+                    <div className="text-center py-6 bg-muted/30 rounded-lg">
+                      <HighlighterIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                      <p className="text-sm text-muted-foreground">No extracts yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Select text and click "Create Extract"
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {savedExtracts.map((extract, index) => (
+                        <div
+                          key={index}
+                          className="p-3 bg-muted/50 hover:bg-muted rounded-lg border border-border group transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-foreground line-clamp-3 mb-2">
+                                {extract.content}
+                              </p>
+                              {extract.note && (
+                                <p className="text-xs text-muted-foreground line-clamp-2 mb-2 bg-background/50 p-1.5 rounded">
+                                  {extract.note}
+                                </p>
+                              )}
+                              {extract.tags && extract.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {extract.tags.map((tag) => (
+                                    <span key={tag} className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Clock className="w-3 h-3" />
+                                {formatRelativeTime(extract.timestamp)}
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleViewExtract(extract)}
+                                className="p-1.5 hover:bg-background rounded transition-colors"
+                                title="View extract"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteExtract(index)}
+                                className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded transition-colors"
+                                title="Delete extract"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Bookmarks Section */}
+            <div className="p-4">
               <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                <BookmarkPlus className="w-4 h-4" />
+                <BookmarkPlus className="w-4 h-4 text-primary" />
                 Bookmarks
               </h3>
               {bookmarks.length === 0 ? (
@@ -1005,60 +1084,29 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                 </div>
               )}
             </div>
-
-            {/* Extracts Section */}
-            <div className="p-4">
-              <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                <HighlighterIcon className="w-4 h-4" />
-                Recent Extracts
-              </h3>
-              {savedExtracts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No extracts yet</p>
-              ) : (
-                <div className="space-y-3">
-                  {savedExtracts.map((extract, index) => (
-                    <div
-                      key={index}
-                      className="p-3 bg-muted rounded-lg text-sm"
-                    >
-                      <div className="font-medium text-foreground mb-1">
-                        {extract.pageTitle}
-                      </div>
-                      <div className="text-muted-foreground text-xs mb-2">
-                        {extract.url}
-                      </div>
-                      <div className="text-foreground line-clamp-2">
-                        {extract.content}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         )}
 
-        {/* Browser Content - fills remaining space */}
+        {/* Browser Content */}
         <div className="flex-1 relative overflow-hidden" style={{ minHeight: '200px' }}>
           {!currentUrl ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center max-w-md">
+            <div className="absolute inset-0 flex items-center justify-center bg-muted/20">
+              <div className="text-center max-w-md p-8">
                 <div className="text-6xl mb-4">🌐</div>
                 <h2 className="text-2xl font-bold text-foreground mb-2">
                   Web Browser
                 </h2>
-                <p className="text-muted-foreground mb-4">
-                  Enter a URL above to browse the web. You can select text to create extracts and flashcards.
+                <p className="text-muted-foreground mb-6">
+                  Enter a URL above to browse the web and create extracts from any content.
                 </p>
-                <div className="text-sm text-muted-foreground">
-                  <p className="font-semibold mb-2">Features:</p>
-                  <ul className="text-left space-y-1">
-                    <li>• Navigate websites</li>
-                    <li>• Select text to create extracts</li>
-                    <li>• Generate flashcards from content</li>
-                    <li>• Bookmark important pages</li>
-                    <li>• Open in external browser for full functionality</li>
-                  </ul>
+                <div className="bg-card border border-border rounded-lg p-4 text-left">
+                  <p className="font-medium text-foreground mb-3">How to create extracts:</p>
+                  <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                    <li>Navigate to any website</li>
+                    <li>Select text you want to save</li>
+                    <li>Click "Create Extract" or press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+Shift+E</kbd></li>
+                    <li>Add notes and tags, then save</li>
+                  </ol>
                 </div>
               </div>
             </div>
@@ -1076,9 +1124,13 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                 <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-50">
                   <div className="text-center max-w-md px-4">
                     <p className="text-sm text-destructive mb-2">{webviewError}</p>
-                    <p className="text-xs text-muted-foreground">
-                      On Linux, this can happen if WebKit dependencies are missing.
-                    </p>
+                    <button
+                      onClick={handleOpenInBrowser}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity text-sm"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open in Browser
+                    </button>
                   </div>
                 </div>
               )}
@@ -1087,9 +1139,6 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                   <div className="text-center max-w-md px-4 space-y-3">
                     <p className="text-sm text-foreground font-semibold">
                       This site prevents embedding in an iframe.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Open it in your system browser to view the page.
                     </p>
                     <button
                       onClick={handleOpenInBrowser}
@@ -1108,7 +1157,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
                     ref={iframeRef}
                     src={currentUrl}
                     className="w-full h-full border-0"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
                     title="Web Browser"
                     onLoad={handleIframeLoad}
                     onError={handleIframeError}
@@ -1123,7 +1172,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         {showAssistant && (
           <AssistantPanel
             context={assistantContext}
-            className="flex-shrink-0 border-l-4 border-primary"
+            className="flex-shrink-0 border-l-4 border-primary w-96"
           />
         )}
       </div>
