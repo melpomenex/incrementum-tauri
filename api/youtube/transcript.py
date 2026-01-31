@@ -108,19 +108,44 @@ def fetch_transcript(video_id):
         'subtitleslangs': ['en'],
         'skip_download': True,
         'quiet': True,
+        'no_warnings': True,
+        # Speed optimizations
+        'extract_flat': True,
+        'playlist_items': '1:1',
+        # Only get what we need
+        'writeinfojson': False,
+        'writethumbnail': False,
+        'writedescription': False,
+        'writeannotations': False,
+        # Skip unnecessary format extraction
+        'listformats': False,
     }
     
-    if proxy:
-        ydl_opts['proxy'] = proxy
-        print(f"[yt-dlp] Using proxy: {proxy[:30]}...", file=sys.stderr)
-    else:
-        print(f"[yt-dlp] WARNING: No proxy configured!", file=sys.stderr)
-    
+    # Try without proxy first (faster), fall back to proxy if blocked
     video_url = f'https://www.youtube.com/watch?v={video_id}'
-    print(f"[yt-dlp] Extracting: {video_id}", file=sys.stderr)
+    info = None
     
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(video_url, download=False)
+    # First attempt: no proxy (faster)
+    print(f"[yt-dlp] Attempt 1: No proxy", file=sys.stderr)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+    except Exception as e:
+        error = str(e)
+        print(f"[yt-dlp] Attempt 1 failed: {error[:100]}", file=sys.stderr)
+        
+        # If blocked and proxy available, try with proxy
+        if 'Sign in to confirm' in error and proxy:
+            print(f"[yt-dlp] Attempt 2: Using proxy", file=sys.stderr)
+            ydl_opts['proxy'] = proxy
+            ydl_opts['socket_timeout'] = 15  # Shorter timeout for proxy
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+        else:
+            raise
+    
+    if not info:
+        raise Exception("Failed to extract video info")
     
     # Find captions - check all available languages
     subtitles = info.get('subtitles', {})
