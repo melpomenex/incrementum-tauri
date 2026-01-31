@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 // Re-export the shared MemoryState type
@@ -19,6 +20,7 @@ pub struct Extract {
     pub source_url: Option<String>,
     pub page_title: Option<String>,
     pub page_number: Option<i32>,
+    pub selection_context: Option<JsonValue>,
     pub highlight_color: Option<String>,
     pub notes: Option<String>,
     pub progressive_disclosure_level: i32,
@@ -49,6 +51,7 @@ impl Extract {
             source_url: None,
             page_title: None,
             page_number: None,
+            selection_context: None,
             highlight_color: None,
             notes: None,
             progressive_disclosure_level: 0,

@@ -612,6 +612,7 @@ async fn handle_extract_request(
         source_url: Some(payload.url.clone()),
         page_title: Some(payload.title.clone()),
         page_number: None,
+        selection_context: None,
         highlight_color: None,
         notes: payload.context.clone(), // Store context in notes
         progressive_disclosure_level: 0,

@@ -4,6 +4,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import type { PdfSelectionContext } from '../types/selection';
 
 // Database version - increment when schema changes
 const DB_VERSION = 2;
@@ -337,6 +338,7 @@ export interface Extract {
     source_url?: string;
     page_title?: string;
     page_number?: number;
+    selection_context?: PdfSelectionContext;
     highlight_color?: string;
     notes?: string;
     progressive_disclosure_level: number;
@@ -364,6 +366,7 @@ export async function createExtract(ext: Partial<Extract>): Promise<Extract> {
         source_url: ext.source_url,
         page_title: ext.page_title,
         page_number: ext.page_number,
+        selection_context: ext.selection_context,
         highlight_color: ext.highlight_color,
         notes: ext.notes,
         progressive_disclosure_level: ext.progressive_disclosure_level || 0,

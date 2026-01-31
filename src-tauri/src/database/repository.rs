@@ -534,16 +534,20 @@ impl Repository {
         let (stability, difficulty) = extract.memory_state.as_ref()
             .map(|s| (Some(s.stability), Some(s.difficulty)))
             .unwrap_or((None, None));
+        let selection_context_json = match &extract.selection_context {
+            Some(value) => Some(serde_json::to_string(value)?),
+            None => None,
+        };
 
         sqlx::query(
             r#"
             INSERT INTO extracts (
                 id, document_id, content, html_content, source_url, page_title, page_number,
-                highlight_color, notes, progressive_disclosure_level,
+                selection_context, highlight_color, notes, progressive_disclosure_level,
                 max_disclosure_level, date_created, date_modified,
                 tags, category, memory_state_stability, memory_state_difficulty,
                 next_review_date, last_review_date, review_count, reps
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
             "#,
         )
         .bind(&extract.id)
@@ -553,6 +557,7 @@ impl Repository {
         .bind(&extract.source_url)
         .bind(&extract.page_title)
         .bind(extract.page_number)
+        .bind(selection_context_json)
         .bind(&extract.highlight_color)
         .bind(&extract.notes)
         .bind(extract.progressive_disclosure_level)
@@ -587,6 +592,9 @@ impl Repository {
                 let stability: Option<f64> = row.try_get("memory_state_stability").ok();
                 let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
                 let memory_state = Self::parse_memory_state(stability, difficulty);
+                let selection_context_json: Option<String> = row.try_get("selection_context").ok();
+                let selection_context = selection_context_json
+                    .and_then(|json| serde_json::from_str(&json).ok());
 
                 Ok(Some(Extract {
                     id: row.try_get("id")?,
@@ -596,6 +604,7 @@ impl Repository {
                     source_url: row.try_get("source_url").ok(),
                     page_title: row.try_get("page_title")?,
                     page_number: row.try_get("page_number")?,
+                    selection_context,
                     highlight_color: row.try_get("highlight_color")?,
                     notes: row.try_get("notes")?,
                     progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,
@@ -629,6 +638,9 @@ impl Repository {
             let stability: Option<f64> = row.try_get("memory_state_stability").ok();
             let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
             let memory_state = Self::parse_memory_state(stability, difficulty);
+            let selection_context_json: Option<String> = row.try_get("selection_context").ok();
+            let selection_context = selection_context_json
+                .and_then(|json| serde_json::from_str(&json).ok());
 
             extracts.push(Extract {
                 id: row.try_get("id")?,
@@ -638,6 +650,7 @@ impl Repository {
                 source_url: row.try_get("source_url").ok(),
                 page_title: row.try_get("page_title")?,
                 page_number: row.try_get("page_number")?,
+                selection_context,
                 highlight_color: row.try_get("highlight_color")?,
                 notes: row.try_get("notes")?,
                 progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,
@@ -670,6 +683,9 @@ impl Repository {
             let stability: Option<f64> = row.try_get("memory_state_stability").ok();
             let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
             let memory_state = Self::parse_memory_state(stability, difficulty);
+            let selection_context_json: Option<String> = row.try_get("selection_context").ok();
+            let selection_context = selection_context_json
+                .and_then(|json| serde_json::from_str(&json).ok());
 
             extracts.push(Extract {
                 id: row.try_get("id")?,
@@ -679,6 +695,7 @@ impl Repository {
                 source_url: row.try_get("source_url").ok(),
                 page_title: row.try_get("page_title")?,
                 page_number: row.try_get("page_number")?,
+                selection_context,
                 highlight_color: row.try_get("highlight_color")?,
                 notes: row.try_get("notes")?,
                 progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,
@@ -759,6 +776,9 @@ impl Repository {
             let stability: Option<f64> = row.try_get("memory_state_stability").ok();
             let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
             let memory_state = Self::parse_memory_state(stability, difficulty);
+            let selection_context_json: Option<String> = row.try_get("selection_context").ok();
+            let selection_context = selection_context_json
+                .and_then(|json| serde_json::from_str(&json).ok());
 
             extracts.push(Extract {
                 id: row.try_get("id")?,
@@ -768,6 +788,7 @@ impl Repository {
                 source_url: row.try_get("source_url").ok(),
                 page_title: row.try_get("page_title")?,
                 page_number: row.try_get("page_number")?,
+                selection_context,
                 highlight_color: row.try_get("highlight_color")?,
                 notes: row.try_get("notes")?,
                 progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,
@@ -801,6 +822,9 @@ impl Repository {
             let stability: Option<f64> = row.try_get("memory_state_stability").ok();
             let difficulty: Option<f64> = row.try_get("memory_state_difficulty").ok();
             let memory_state = Self::parse_memory_state(stability, difficulty);
+            let selection_context_json: Option<String> = row.try_get("selection_context").ok();
+            let selection_context = selection_context_json
+                .and_then(|json| serde_json::from_str(&json).ok());
 
             extracts.push(Extract {
                 id: row.try_get("id")?,
@@ -810,6 +834,7 @@ impl Repository {
                 source_url: row.try_get("source_url").ok(),
                 page_title: row.try_get("page_title")?,
                 page_number: row.try_get("page_number")?,
+                selection_context,
                 highlight_color: row.try_get("highlight_color")?,
                 notes: row.try_get("notes")?,
                 progressive_disclosure_level: row.try_get("progressive_disclosure_level")?,

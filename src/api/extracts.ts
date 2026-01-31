@@ -1,4 +1,5 @@
 import { invokeCommand } from "../lib/tauri";
+import type { PdfSelectionContext } from "../types/selection";
 
 export interface Extract {
   id: string;
@@ -11,6 +12,7 @@ export interface Extract {
   source_url?: string;
   page_title?: string;
   page_number?: number;
+  selection_context?: PdfSelectionContext;
   highlight_color?: string;
   notes?: string;
   progressive_disclosure_level: number;
@@ -41,6 +43,7 @@ export interface CreateExtractInput {
   category?: string;
   color?: string;
   page_number?: number;
+  selection_context?: PdfSelectionContext;
   max_disclosure_level?: number;
 }
 
@@ -82,6 +85,7 @@ export async function createExtract(input: CreateExtractInput): Promise<Extract>
     category: input.category,
     color: input.color,
     pageNumber: input.page_number,
+    selectionContext: input.selection_context,
   });
 }
 

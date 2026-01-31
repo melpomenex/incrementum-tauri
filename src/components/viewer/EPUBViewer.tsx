@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type MouseEvent } from "react";
+import type { PdfSelectionContext } from "../../types/selection";
 import ePub from "epubjs";
 import { cn } from "../../utils";
 import { useThemeStore } from "../common/ThemeSystem";
@@ -13,7 +14,7 @@ interface EPUBViewerProps {
   fileName: string;
   documentId?: string;
   onLoad?: (toc: any[]) => void;
-  onSelectionChange?: (text: string) => void;
+  onSelectionChange?: (text: string, context?: PdfSelectionContext | null) => void;
   onContextTextChange?: (text: string) => void;
 }
 

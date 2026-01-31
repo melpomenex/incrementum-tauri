@@ -1,6 +1,24 @@
 /* PDF Viewer Text Layer Styles */
 /* Based on PDF.js text layer implementation */
 
+/* Container for each page - must be positioned relative for absolute children */
+[data-pdf-page] {
+  position: relative;
+}
+
+/* Text layer container - sits above the canvas */
+.textLayerContainer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+/* The text layer div created by PDF.js TextLayerBuilder */
 .textLayer {
   position: absolute;
   text-align: initial;
@@ -19,6 +37,70 @@
   z-index: 1;
 }
 
+/* Text spans in the layer - transparent color but selectable */
+.textLayer span,
+.textLayer > span {
+  color: transparent !important;
+  background: transparent !important;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  pointer-events: auto;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+
+/* BR elements */
+.textLayer br {
+  color: transparent;
+  background: transparent;
+  position: absolute;
+  white-space: pre;
+}
+
+/* === SELECTION HIGHLIGHTING - VISIBLE BLUE === */
+.textLayer span::selection {
+  background: rgba(59, 130, 246, 0.6) !important;
+  background-color: rgba(59, 130, 246, 0.6) !important;
+  color: transparent !important;
+}
+
+.textLayer span::-moz-selection {
+  background: rgba(59, 130, 246, 0.6) !important;
+  background-color: rgba(59, 130, 246, 0.6) !important;
+  color: transparent !important;
+}
+
+/* Global selection for text layer */
+.textLayer ::selection {
+  background: rgba(59, 130, 246, 0.6) !important;
+  background-color: rgba(59, 130, 246, 0.6) !important;
+  color: transparent !important;
+}
+
+.textLayer ::-moz-selection {
+  background: rgba(59, 130, 246, 0.6) !important;
+  background-color: rgba(59, 130, 246, 0.6) !important;
+  color: transparent !important;
+}
+
+/* Ensure BR doesn't show selection */
+.textLayer br::selection,
+.textLayer br::-moz-selection {
+  background: transparent !important;
+}
+
+/* Marked content (for structure) */
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+  display: block;
+}
+
+/* End of content marker */
 .textLayer .endOfContent {
   display: block;
   position: absolute;
@@ -28,41 +110,32 @@
   bottom: 0;
   cursor: default;
   user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
 }
 
 .textLayer.selecting .endOfContent {
   top: 0;
 }
 
-.textLayer :is(span, br) {
-  color: transparent;
-  position: absolute;
-  white-space: pre;
-  cursor: text;
-  transform-origin: 0% 0%;
+/* Canvas sits below the text layer */
+[data-pdf-page] canvas {
+  position: relative;
+  z-index: 1;
 }
 
-.textLayer span.markedContent {
-  top: 0;
-  height: 0;
-  display: block;
+/* Ensure page containers handle pointer events correctly */
+[data-pdf-page] {
+  pointer-events: auto;
 }
 
-/* Text selection highlight color */
-.textLayer ::selection {
-  background: rgba(0, 100, 255, 0.3);
+/* Global selection fallback */
+::selection {
+  background: rgba(59, 130, 246, 0.4);
 }
 
-.textLayer br::selection {
-  background: transparent;
-}
-
-.textLayer ::-moz-selection {
-  background: rgba(0, 100, 255, 0.3);
-}
-
-.textLayer br::-moz-selection {
-  background: transparent;
+::-moz-selection {
+  background: rgba(59, 130, 246, 0.4);
 }
 
 /* End of text layer styles */

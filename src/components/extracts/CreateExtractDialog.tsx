@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Tag as TagIcon, FolderOpen, Lightbulb, Bold, Italic, Code, List, Layers, Eye, BookOpen } from "lucide-react";
 import { createExtract, CreateExtractInput, Extract } from "../../api/extracts";
+import type { PdfSelectionContext } from "../../types/selection";
 import { generateLearningItemsFromExtract } from "../../api/learning-items";
 import { ClozeCreatorPopup } from "./ClozeCreatorPopup";
 import { QACreatorPopup } from "./QACreatorPopup";
@@ -11,6 +12,7 @@ interface CreateExtractDialogProps {
   documentId: string;
   selectedText?: string;
   pageNumber?: number;
+  selectionContext?: PdfSelectionContext | null;
   isOpen: boolean;
   onClose: () => void;
   onCreate?: (extract: Extract) => void;
@@ -51,6 +53,7 @@ export function CreateExtractDialog({
   documentId,
   selectedText = "",
   pageNumber = 0,
+  selectionContext = null,
   isOpen,
   onClose,
   onCreate,
@@ -162,6 +165,7 @@ export function CreateExtractDialog({
         tags: tags.length > 0 ? tags : undefined,
         color: highlightColor,
         page_number: pageNumber || undefined,
+        selection_context: selectionContext || undefined,
         max_disclosure_level: progressiveLevel > 0 ? progressiveLevel : undefined,
       };
 

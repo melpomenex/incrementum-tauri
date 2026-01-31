@@ -13,6 +13,7 @@ import { ExtractsList } from "../extracts/ExtractsList";
 import { LearningCardsList } from "../learning/LearningCardsList";
 import { useToast } from "../common/Toast";
 import { CreateExtractDialog } from "../extracts/CreateExtractDialog";
+import type { PdfSelectionContext } from "../../types/selection";
 import type { Extract } from "../../api/extracts";
 import { QueueNavigationControls } from "../queue/QueueNavigationControls";
 import { HoverRatingControls } from "../review/HoverRatingControls";
@@ -363,6 +364,7 @@ export function DocumentViewer({
 
   // Extract creation state
   const [selectedText, setSelectedText] = useState("");
+  const [selectionContext, setSelectionContext] = useState<PdfSelectionContext | null>(null);
   const [isExtractDialogOpen, setIsExtractDialogOpen] = useState(false);
   const [isConvertingToHtml, setIsConvertingToHtml] = useState(false);
   const lastSelectionRef = useRef("");
@@ -370,13 +372,21 @@ export function DocumentViewer({
   const lastLoadedDocumentIdRef = useRef<string | null>(null); // Track successfully loaded documents
 
   const MAX_SELECTION_CHARS = 10000;
-  const updateSelection = useCallback((rawText: string | null | undefined) => {
+  const updateSelection = useCallback((rawText: string | null | undefined, context?: PdfSelectionContext | null) => {
     const text = rawText?.trim() ?? "";
     if (text && text.length > 0 && text.length <= MAX_SELECTION_CHARS) {
       setSelectedText(text);
       lastSelectionRef.current = text;
+      if (context) {
+        setSelectionContext(context);
+      } else if (context === undefined) {
+        setSelectionContext(null);
+      }
     } else {
       setSelectedText("");
+      if (context === null || context === undefined) {
+        setSelectionContext(null);
+      }
       // Don't clear lastSelectionRef on empty selection - preserve it for the toolbar button
       // The floating action button is controlled by selectedText state, so it will hide appropriately
     }
@@ -385,6 +395,7 @@ export function DocumentViewer({
   const clearTextSelection = useCallback(() => {
     setSelectedText("");
     lastSelectionRef.current = "";
+    setSelectionContext(null);
     // Clear the browser's text selection
     window.getSelection()?.removeAllRanges();
   }, []);
@@ -1204,7 +1215,17 @@ export function DocumentViewer({
   useEffect(() => {
     const handleSelection = () => {
       const selection = window.getSelection();
-      updateSelection(selection?.toString());
+      if (!selection) return;
+      const anchorElement = selection.anchorNode instanceof Element
+        ? selection.anchorNode
+        : selection.anchorNode?.parentElement;
+      const focusElement = selection.focusNode instanceof Element
+        ? selection.focusNode
+        : selection.focusNode?.parentElement;
+      if (anchorElement?.closest(".textLayer") || focusElement?.closest(".textLayer")) {
+        return;
+      }
+      updateSelection(selection.toString(), undefined);
     };
 
     document.addEventListener("mouseup", handleSelection);
@@ -1981,7 +2002,8 @@ export function DocumentViewer({
       <CreateExtractDialog
         documentId={currentDocument.id}
         selectedText={selectedText}
-        pageNumber={pageNumber}
+        pageNumber={selectionContext?.pages[0]?.pageNumber ?? pageNumber}
+        selectionContext={selectionContext}
         isOpen={isExtractDialogOpen}
         onClose={() => {
           setIsExtractDialogOpen(false);

@@ -926,6 +926,14 @@ pub const MIGRATIONS: &[Migration] = &[
         ALTER TABLE documents ADD COLUMN consecutive_count INTEGER;
         "#,
     ),
+
+    // Migration 029: Add selection context to extracts
+    Migration::new(
+        "029_add_extract_selection_context",
+        r#"
+        ALTER TABLE extracts ADD COLUMN selection_context TEXT;
+        "#,
+    ),
 ];
 
 /// Get the migrations directory path

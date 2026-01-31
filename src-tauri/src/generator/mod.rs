@@ -200,6 +200,7 @@ mod tests {
             source_url: None,
             page_title: None,
             page_number: None,
+            selection_context: None,
             highlight_color: None,
             notes: None,
             progressive_disclosure_level: 0,

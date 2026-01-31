@@ -38,6 +38,7 @@ pub async fn create_extract(
     category: Option<String>,
     color: Option<String>,
     page_number: Option<i32>,
+    selection_context: Option<serde_json::Value>,
     max_disclosure_level: Option<i32>,
     repo: State<'_, Repository>,
 ) -> Result<Extract> {
@@ -49,6 +50,7 @@ pub async fn create_extract(
     extract.category = category;
     extract.highlight_color = color;
     extract.page_number = page_number;
+    extract.selection_context = selection_context;
     if let Some(level) = max_disclosure_level {
         extract.max_disclosure_level = level;
     }

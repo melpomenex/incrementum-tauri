@@ -543,6 +543,11 @@ fn parse_extract_row(row: &sqlx::sqlite::SqliteRow) -> Result<Extract> {
         (Some(stability), Some(difficulty)) => Some(MemoryState { stability, difficulty }),
         _ => None,
     };
+    let selection_context = row
+        .try_get::<Option<String>, _>("selection_context")
+        .ok()
+        .flatten()
+        .and_then(|json| serde_json::from_str(&json).ok());
 
     Ok(Extract {
         id: row.try_get("id")?,
@@ -552,6 +557,7 @@ fn parse_extract_row(row: &sqlx::sqlite::SqliteRow) -> Result<Extract> {
         source_url: row.try_get::<Option<String>, _>("source_url").ok().flatten(),
         page_title: row.try_get::<Option<String>, _>("page_title").unwrap_or(None),
         page_number: row.try_get::<Option<i32>, _>("page_number").unwrap_or(None),
+        selection_context,
         highlight_color: row.try_get::<Option<String>, _>("highlight_color").unwrap_or(None),
         notes: row.try_get::<Option<String>, _>("notes").unwrap_or(None),
         progressive_disclosure_level: row.try_get::<i64, _>("progressive_disclosure_level").unwrap_or(0) as i32,
