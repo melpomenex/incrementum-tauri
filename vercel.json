@@ -2,11 +2,6 @@
     "buildCommand": "npm run build:pwa",
     "outputDirectory": "dist",
     "framework": "vite",
-    "functions": {
-        "api/youtube/transcript.py": {
-            "maxDuration": 30
-        }
-    },
     "rewrites": [
         {
             "source": "/api/youtube/transcript",
