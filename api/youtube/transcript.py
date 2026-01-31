@@ -104,11 +104,11 @@ def _format_cookie_header(cookies):
     if not cookies:
         env_cookie = os.environ.get('YOUTUBE_COOKIES') or os.environ.get('YOUTUBE_COOKIE')
         if env_cookie:
-            return env_cookie
+            cookies = env_cookie
     if not cookies:
         return None
     if isinstance(cookies, str):
-        return cookies
+        return ' '.join(cookies.split())
     if isinstance(cookies, dict):
         return '; '.join(f"{k}={v}" for k, v in cookies.items())
     if isinstance(cookies, list):
