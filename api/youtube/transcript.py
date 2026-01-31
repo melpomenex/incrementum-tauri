@@ -1,41 +1,40 @@
 """
 Vercel Serverless Function for fetching YouTube transcripts using yt-dlp
-Python version for better reliability on Vercel
-
-RESIDENTIAL PROXY CONFIGURATION:
-Set DECODO_PROXY_URL or RESIDENTIAL_PROXY_URL environment variable
 """
 
 import os
+import sys
 import json
 import re
-from urllib.parse import urlparse, parse_qs
-from http.server import BaseHTTPRequestHandler
-from typing import Optional, Dict, List, Any
-import subprocess
-import tempfile
 
-# Try to import yt-dlp, fallback to pip install if not available
+# Log startup info
+print(f"[yt-dlp API] Starting up...", file=sys.stderr)
+print(f"[yt-dlp API] Python version: {sys.version}", file=sys.stderr)
+
+# Try to import yt-dlp
 try:
     import yt_dlp
-except ImportError:
-    # yt-dlp will be installed via requirements.txt
+    print(f"[yt-dlp API] yt-dlp version: {yt_dlp.version.__version__}", file=sys.stderr)
+    YT_DLP_AVAILABLE = True
+except ImportError as e:
+    print(f"[yt-dlp API] ERROR: Failed to import yt_dlp: {e}", file=sys.stderr)
+    YT_DLP_AVAILABLE = False
     yt_dlp = None
 
 
-def get_proxy_url() -> Optional[str]:
+def get_proxy_url():
     """Get proxy URL from environment variables"""
     return os.environ.get('DECODO_PROXY_URL') or os.environ.get('RESIDENTIAL_PROXY_URL')
 
 
-def get_proxy_status() -> Dict[str, Any]:
+def get_proxy_status():
     """Get proxy status (masks credentials)"""
     proxy_url = get_proxy_url()
     if not proxy_url:
         return {"configured": False, "url": None}
     
-    # Mask credentials in URL
     try:
+        from urllib.parse import urlparse
         parsed = urlparse(proxy_url)
         if parsed.username and parsed.password:
             masked = f"{parsed.scheme}://***:***@{parsed.hostname}:{parsed.port}"
@@ -46,7 +45,7 @@ def get_proxy_status() -> Dict[str, Any]:
     return {"configured": True, "url": "configured"}
 
 
-def extract_video_id(url: str) -> Optional[str]:
+def extract_video_id(url):
     """Extract video ID from YouTube URL"""
     patterns = [
         r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})',
@@ -63,7 +62,7 @@ def extract_video_id(url: str) -> Optional[str]:
     return None
 
 
-def parse_timestamp_to_seconds(timestamp: str) -> float:
+def parse_timestamp_to_seconds(timestamp):
     """Convert timestamp to seconds"""
     parts = timestamp.split(':')
     if len(parts) == 3:
@@ -78,7 +77,7 @@ def parse_timestamp_to_seconds(timestamp: str) -> float:
     return float(parts[0])
 
 
-def parse_vtt(content: str) -> List[Dict[str, Any]]:
+def parse_vtt(content):
     """Parse WebVTT content to segments"""
     segments = []
     lines = content.split('\n')
@@ -86,7 +85,6 @@ def parse_vtt(content: str) -> List[Dict[str, Any]]:
     current_start = 0
     current_end = 0
     current_text = ''
-    in_cue = False
     
     for line in lines:
         stripped = line.strip()
@@ -109,8 +107,7 @@ def parse_vtt(content: str) -> List[Dict[str, Any]]:
             current_start = parse_timestamp_to_seconds(timestamp_match.group(1))
             current_end = parse_timestamp_to_seconds(timestamp_match.group(2))
             current_text = ''
-            in_cue = True
-        elif in_cue and stripped:
+        elif stripped:
             # Caption text - remove HTML tags
             text = re.sub(r'<[^>]+>', '', stripped)
             if current_text:
@@ -128,38 +125,7 @@ def parse_vtt(content: str) -> List[Dict[str, Any]]:
     return segments
 
 
-def parse_srt(content: str) -> List[Dict[str, Any]]:
-    """Parse SRT content to segments"""
-    segments = []
-    blocks = content.split('\n\n')
-    
-    for block in blocks:
-        lines = block.strip().split('\n')
-        if len(lines) < 3:
-            continue
-        
-        timestamp_line = lines[1]
-        match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2},\d{3})', timestamp_line)
-        
-        if not match:
-            continue
-        
-        start = parse_timestamp_to_seconds(match.group(1).replace(',', '.'))
-        end = parse_timestamp_to_seconds(match.group(2).replace(',', '.'))
-        text = ' '.join(lines[2:])
-        text = re.sub(r'<[^>]+>', '', text).strip()
-        
-        if text:
-            segments.append({
-                'text': text,
-                'start': start,
-                'duration': end - start
-            })
-    
-    return segments
-
-
-def get_best_caption_track(subtitles: Dict, automatic_captions: Dict) -> Optional[Dict]:
+def get_best_caption_track(subtitles, automatic_captions):
     """Get best caption track based on priority"""
     subtitle_priorities = ['en-US', 'en-CA', 'en']
     auto_caption_priorities = ['en-orig', 'en-US', 'en-CA', 'en']
@@ -215,18 +181,21 @@ def get_best_caption_track(subtitles: Dict, automatic_captions: Dict) -> Optiona
     return None
 
 
-def fetch_transcript_with_ytdlp(video_id: str) -> Dict[str, Any]:
+def fetch_transcript(video_id):
     """Fetch transcript using yt-dlp"""
+    if not YT_DLP_AVAILABLE:
+        raise Exception("yt_dlp module is not available")
+    
     proxy_url = get_proxy_url()
     video_url = f'https://www.youtube.com/watch?v={video_id}'
     
-    print(f'[yt-dlp] Fetching transcript for {video_id}{" (with proxy)" if proxy_url else ""}')
+    print(f'[yt-dlp] Fetching transcript for {video_id}', file=sys.stderr)
     
     # yt-dlp options
     ydl_opts = {
         'writesubtitles': True,
         'writeautomaticsub': True,
-        'subtitleslangs': ['en', 'en-US', 'en-CA', 'en-GB'],
+        'subtitleslangs': ['en', 'en-US', 'en-CA'],
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
@@ -234,6 +203,7 @@ def fetch_transcript_with_ytdlp(video_id: str) -> Dict[str, Any]:
     
     if proxy_url:
         ydl_opts['proxy'] = proxy_url
+        print(f'[yt-dlp] Using proxy', file=sys.stderr)
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -248,33 +218,27 @@ def fetch_transcript_with_ytdlp(video_id: str) -> Dict[str, Any]:
         if not track:
             raise Exception('No compatible caption track found')
         
-        print(f'[yt-dlp] Using caption track: {track["name"]} ({track["ext"]})')
+        print(f'[yt-dlp] Using caption track: {track["name"]} ({track["ext"]})', file=sys.stderr)
         
         # Download caption content
-        import urllib.request
+        try:
+            from urllib.request import Request, urlopen
+            req = Request(track['url'])
+            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+            
+            with urlopen(req, timeout=30) as response:
+                content = response.read().decode('utf-8')
+        except Exception as e:
+            print(f'[yt-dlp] Failed to download captions: {e}', file=sys.stderr)
+            raise Exception(f'Failed to download captions: {e}')
         
-        req = urllib.request.Request(track['url'])
-        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0.36')
-        
-        with urllib.request.urlopen(req, timeout=30) as response:
-            content = response.read().decode('utf-8')
-        
-        # Parse based on format
-        if track['ext'] in ['vtt', 'webvtt']:
-            segments = parse_vtt(content)
-        elif track['ext'] == 'srt':
-            segments = parse_srt(content)
-        else:
-            # Try VTT first, then SRT
-            try:
-                segments = parse_vtt(content)
-            except:
-                segments = parse_srt(content)
+        # Parse VTT
+        segments = parse_vtt(content)
         
         if not segments:
             raise Exception('No transcript segments found')
         
-        print(f'[yt-dlp] Successfully parsed {len(segments)} segments')
+        print(f'[yt-dlp] Successfully parsed {len(segments)} segments', file=sys.stderr)
         
         return {
             'segments': segments,
@@ -284,7 +248,7 @@ def fetch_transcript_with_ytdlp(video_id: str) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        print(f'[yt-dlp] Error: {e}')
+        print(f'[yt-dlp] Error: {e}', file=sys.stderr)
         error_msg = str(e)
         
         if 'Video unavailable' in error_msg:
@@ -297,59 +261,82 @@ def fetch_transcript_with_ytdlp(video_id: str) -> Dict[str, Any]:
         raise
 
 
-class handler(BaseHTTPRequestHandler):
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
+class handler:
+    """Vercel serverless function handler"""
     
-    def do_GET(self):
-        # Enable CORS
-        self.send_header('Access-Control-Allow-Origin', '*')
-        
-        parsed_path = urlparse(self.path)
-        query_params = parse_qs(parsed_path.query)
-        
-        # Health check endpoint
-        if query_params.get('status', [''])[0] == 'true':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
-            response = {
-                'success': True,
-                'proxy': get_proxy_status(),
-                'method': 'yt-dlp-python',
-                'message': 'Using yt-dlp Python API' + (' with proxy' if get_proxy_url() else ' without proxy')
-            }
-            self.wfile.write(json.dumps(response).encode())
-            return
-        
-        # Get video ID from query params
-        video_id = query_params.get('videoId', [''])[0]
-        url = query_params.get('url', [''])[0]
-        
-        if not video_id and url:
-            video_id = extract_video_id(url)
-        
-        if not video_id:
-            self.send_response(400)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({
-                'success': False,
-                'error': 'Missing or invalid videoId or url parameter'
-            }).encode())
-            return
-        
+    def __init__(self):
+        pass
+    
+    def __call__(self, environ, start_response):
+        """WSGI entry point"""
         try:
-            result = fetch_transcript_with_ytdlp(video_id)
+            from urllib.parse import parse_qs
             
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
+            # Get query string
+            query_string = environ.get('QUERY_STRING', '')
+            query_params = parse_qs(query_string)
+            
+            # Get path
+            path = environ.get('PATH_INFO', '')
+            
+            # Handle CORS preflight
+            if environ.get('REQUEST_METHOD') == 'OPTIONS':
+                status = '200 OK'
+                headers = [
+                    ('Content-Type', 'application/json'),
+                    ('Access-Control-Allow-Origin', '*'),
+                    ('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'),
+                    ('Access-Control-Allow-Headers', 'Content-Type'),
+                ]
+                start_response(status, headers)
+                return [json.dumps({'success': True}).encode()]
+            
+            # Only handle GET
+            if environ.get('REQUEST_METHOD') != 'GET':
+                status = '405 Method Not Allowed'
+                headers = [('Content-Type', 'application/json')]
+                start_response(status, headers)
+                return [json.dumps({'success': False, 'error': 'Method not allowed'}).encode()]
+            
+            # Health check endpoint
+            if query_params.get('status', [''])[0] == 'true':
+                response = {
+                    'success': True,
+                    'proxy': get_proxy_status(),
+                    'method': 'yt-dlp-python',
+                    'yt_dlp_installed': YT_DLP_AVAILABLE,
+                    'message': 'Using yt-dlp Python API'
+                }
+                status = '200 OK'
+                headers = [
+                    ('Content-Type', 'application/json'),
+                    ('Access-Control-Allow-Origin', '*'),
+                ]
+                start_response(status, headers)
+                return [json.dumps(response).encode()]
+            
+            # Get video ID
+            video_id = query_params.get('videoId', [''])[0]
+            url = query_params.get('url', [''])[0]
+            
+            if not video_id and url:
+                video_id = extract_video_id(url)
+            
+            if not video_id:
+                status = '400 Bad Request'
+                headers = [('Content-Type', 'application/json')]
+                start_response(status, headers)
+                return [json.dumps({'success': False, 'error': 'Missing or invalid videoId'}).encode()]
+            
+            # Check if yt-dlp is available
+            if not YT_DLP_AVAILABLE:
+                status = '500 Internal Server Error'
+                headers = [('Content-Type', 'application/json')]
+                start_response(status, headers)
+                return [json.dumps({'success': False, 'error': 'yt-dlp is not installed'}).encode()]
+            
+            # Fetch transcript
+            result = fetch_transcript(video_id)
             
             response = {
                 'success': True,
@@ -360,49 +347,48 @@ class handler(BaseHTTPRequestHandler):
                 'title': result.get('title'),
                 'duration': result.get('duration')
             }
-            self.wfile.write(json.dumps(response).encode())
+            
+            status = '200 OK'
+            headers = [
+                ('Content-Type', 'application/json'),
+                ('Access-Control-Allow-Origin', '*'),
+            ]
+            start_response(status, headers)
+            return [json.dumps(response).encode()]
             
         except Exception as e:
-            print(f'Transcript fetch error: {e}')
+            print(f'[yt-dlp API] Error: {e}', file=sys.stderr)
             error_message = str(e)
             
-            # Determine appropriate status code and error response
             if 'YOUTUBE_BOT_DETECTED' in error_message:
-                self.send_response(503)
+                status = '503 Service Unavailable'
                 response = {
                     'success': False,
-                    'error': 'YouTube has detected automated access and is requiring verification.',
+                    'error': 'YouTube bot detection triggered',
                     'code': 'YOUTUBE_BOT_DETECTED',
-                    'message': 'Please configure a residential proxy (DECODO_PROXY_URL) in Vercel environment variables.'
+                    'message': 'Configure DECODO_PROXY_URL in Vercel'
                 }
-            elif 'No captions available' in error_message or 'No compatible caption' in error_message:
-                self.send_response(404)
+            elif 'No captions' in error_message or 'No compatible' in error_message:
+                status = '404 Not Found'
                 response = {
                     'success': False,
                     'error': error_message,
                     'code': 'NO_CAPTIONS'
                 }
-            elif 'unavailable' in error_message or 'private' in error_message:
-                self.send_response(404)
-                response = {
-                    'success': False,
-                    'error': error_message,
-                    'code': 'VIDEO_UNAVAILABLE'
-                }
-            elif 'age-restricted' in error_message:
-                self.send_response(403)
-                response = {
-                    'success': False,
-                    'error': error_message,
-                    'code': 'AGE_RESTRICTED'
-                }
             else:
-                self.send_response(500)
+                status = '500 Internal Server Error'
                 response = {
                     'success': False,
                     'error': error_message
                 }
             
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(response).encode())
+            headers = [
+                ('Content-Type', 'application/json'),
+                ('Access-Control-Allow-Origin', '*'),
+            ]
+            start_response(status, headers)
+            return [json.dumps(response).encode()]
+
+
+# Create handler instance
+app = handler()

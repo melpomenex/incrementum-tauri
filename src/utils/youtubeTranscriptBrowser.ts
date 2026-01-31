@@ -247,7 +247,9 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
     if (!contentType?.includes('application/json')) {
-      throw new Error('API returned non-JSON response (likely HTML error page)');
+      const text = await response.text();
+      console.error('[YouTubeTranscript] API returned non-JSON:', text.substring(0, 200));
+      throw new Error(`API returned ${response.status}: Server error (check Vercel logs)`);
     }
 
     const data = await response.json();
