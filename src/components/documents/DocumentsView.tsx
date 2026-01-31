@@ -1184,12 +1184,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
       <ArxivImportDialog
         isOpen={showArxivImport}
         onClose={() => setShowArxivImport(false)}
+        onOpenDocument={onOpenDocument}
       />
 
       {/* Web Article Import Dialog */}
       <WebArticleImportDialog
         isOpen={showWebArticleImport}
         onClose={() => setShowWebArticleImport(false)}
+        onOpenDocument={onOpenDocument}
       />
     </div>
   );

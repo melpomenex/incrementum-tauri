@@ -2,6 +2,8 @@
  * ArXiv paper import functionality
  */
 
+import { fetchUrlContent, readDocumentFile } from "./documents";
+
 /**
  * ArXiv paper metadata
  */
@@ -24,7 +26,23 @@ export interface ArxivPaper {
 /**
  * ArXiv API namespace
  */
-const ARXIV_API = "http://export.arxiv.org/api/query";
+const ARXIV_API = "https://export.arxiv.org/api/query";
+
+/**
+ * Helper to fetch XML content with CORS proxy support
+ */
+async function fetchXmlWithCors(url: string): Promise<string> {
+  try {
+    // Use backend fetchUrlContent to handle CORS via proxies
+    // This works in both Tauri (direct) and Browser (proxies)
+    const fetched = await fetchUrlContent(url);
+    const base64Content = await readDocumentFile(fetched.file_path);
+    return atob(base64Content);
+  } catch (error) {
+    console.error("Failed to fetch ArXiv data:", error);
+    throw new Error(`Failed to fetch ArXiv data: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 /**
  * Search ArXiv for papers
@@ -39,12 +57,7 @@ export async function searchArxiv(
       searchQuery
     )}&start=0&max_results=${maxResults}`;
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`ArXiv API error: ${response.statusText}`);
-    }
-
-    const xmlText = await response.text();
+    const xmlText = await fetchXmlWithCors(url);
     return parseArxivResponse(xmlText);
   } catch (error) {
     console.error("Failed to search ArXiv:", error);
@@ -58,13 +71,7 @@ export async function searchArxiv(
 export async function getArxivPaper(paperId: string): Promise<ArxivPaper | null> {
   try {
     const url = `${ARXIV_API}?id_list=${encodeURIComponent(paperId)}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`ArXiv API error: ${response.statusText}`);
-    }
-
-    const xmlText = await response.text();
+    const xmlText = await fetchXmlWithCors(url);
     const papers = parseArxivResponse(xmlText);
     return papers[0] || null;
   } catch (error) {
@@ -85,12 +92,7 @@ export async function getArxivCategoryPapers(
       category
     )}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`ArXiv API error: ${response.statusText}`);
-    }
-
-    const xmlText = await response.text();
+    const xmlText = await fetchXmlWithCors(url);
     return parseArxivResponse(xmlText);
   } catch (error) {
     console.error("Failed to fetch ArXiv category papers:", error);
@@ -294,7 +296,16 @@ export function isPaperSaved(paperId: string): boolean {
  */
 export async function importArxivPaper(
   paper: ArxivPaper
-): Promise<{ success: boolean; documentId?: string; error?: string }> {
+): Promise<{ 
+  success: boolean; 
+  filePath?: string;
+  title?: string;
+  authors?: string[];
+  summary?: string;
+  categories?: string[];
+  published?: string;
+  error?: string 
+}> {
   try {
     const { fetchUrlContent } = await import("./documents");
     

@@ -24,10 +24,12 @@ import {
 import { cn } from "../../utils";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useToast } from "../common/Toast";
+import type { Document } from "../../types/document";
 
 interface WebArticleImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenDocument?: (doc: Document) => void;
 }
 
 interface ArticlePreview {
@@ -44,7 +46,7 @@ interface ArticlePreview {
   favicon?: string;
 }
 
-export function WebArticleImportDialog({ isOpen, onClose }: WebArticleImportDialogProps) {
+export function WebArticleImportDialog({ isOpen, onClose, onOpenDocument }: WebArticleImportDialogProps) {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -53,9 +55,10 @@ export function WebArticleImportDialog({ isOpen, onClose }: WebArticleImportDial
   const [tags, setTags] = useState<string[]>(["article", "web"]);
   const [newTag, setNewTag] = useState("");
   const [importSuccess, setImportSuccess] = useState(false);
+  const [importedDoc, setImportedDoc] = useState<Document | null>(null);
 
   const { importFromUrl, loadDocuments } = useDocumentStore();
-  const toast = useToast();
+  const { success: showSuccess, error: showError } = useToast();
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -104,6 +107,9 @@ export function WebArticleImportDialog({ isOpen, onClose }: WebArticleImportDial
       // Use the store's importFromUrl to fetch and create
       const doc = await importFromUrl(processedUrl);
       
+      // Store the imported document
+      setImportedDoc(doc);
+      
       // Create preview from the imported document
       const wordCount = doc.content?.split(/\s+/).length || 0;
       
@@ -126,11 +132,11 @@ export function WebArticleImportDialog({ isOpen, onClose }: WebArticleImportDial
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch article";
       setError(message);
-      toast.showToast(message, "error");
+      showError("Fetch failed", message);
     } finally {
       setIsLoading(false);
     }
-  }, [url, importFromUrl, toast]);
+  }, [url, importFromUrl, showError]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -152,39 +158,33 @@ export function WebArticleImportDialog({ isOpen, onClose }: WebArticleImportDial
   };
 
   const handleImport = async () => {
-    if (!preview) return;
+    if (!preview || !importedDoc) return;
 
     setIsImporting(true);
     setError(null);
 
     try {
-      // The document was already created during fetch, just update tags if needed
-      const { documents, updateDocument } = useDocumentStore.getState();
-      
-      // Find the most recently added document (should be the one we just imported)
-      const importedDoc = documents
-        .filter(d => d.filePath.includes(preview.url) || d.title === preview.title)
-        .sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())[0];
-      
-      if (importedDoc) {
-        // Update with user-selected tags
-        await updateDocument(importedDoc.id, { tags });
-      }
+      // Update the imported document with user-selected tags
+      const { updateDocument } = useDocumentStore.getState();
+      await updateDocument(importedDoc.id, { tags });
       
       // Reload to get latest state
       await loadDocuments();
 
       setImportSuccess(true);
-      toast.showToast(`"${preview.title.substring(0, 50)}..." imported successfully`, "success");
+      showSuccess("Article imported", `"${preview.title.substring(0, 50)}..." has been added to your library`);
 
-      // Close dialog after a brief delay
+      // Close dialog and open the document
       setTimeout(() => {
         onClose();
-      }, 1500);
+        if (onOpenDocument) {
+          onOpenDocument(importedDoc);
+        }
+      }, 800);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Import failed";
       setError(message);
-      toast.showToast(message, "error");
+      showError("Import failed", message);
     } finally {
       setIsImporting(false);
     }

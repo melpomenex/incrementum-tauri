@@ -4,7 +4,7 @@
  */
 
 import { Document } from '../types/document';
-import { fetchUrlContent } from '../api/documents';
+import { fetchUrlContent, readDocumentFile } from '../api/documents';
 
 /**
  * Fetch content from a URL and create a document
@@ -116,7 +116,7 @@ export async function importFromUrl(url: string): Promise<Omit<Document, 'id'>> 
     }
 
     // Create document object
-    const document: Omit<Document, 'id'> = {
+    const newDoc: Omit<Document, 'id'> = {
       title: title,
       filePath: fetched.file_path,
       fileType: fileType,
@@ -140,7 +140,7 @@ export async function importFromUrl(url: string): Promise<Omit<Document, 'id'>> 
       },
     };
 
-    return document;
+    return newDoc;
   } catch (error) {
     throw new Error(`Failed to import from URL: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -245,12 +245,11 @@ async function fetchArxivMetadata(arxivId: string): Promise<ArxivMetadata> {
   const apiUrl = `https://export.arxiv.org/api/query?id_list=${arxivId}`;
 
   try {
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      throw new Error(`Arxiv API error: ${response.status}`);
-    }
+    // Use backend fetchUrlContent to handle CORS via proxies
+    const fetched = await fetchUrlContent(apiUrl);
+    const base64Content = await readDocumentFile(fetched.file_path);
+    const text = atob(base64Content);
 
-    const text = await response.text();
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(text, 'text/xml');
 

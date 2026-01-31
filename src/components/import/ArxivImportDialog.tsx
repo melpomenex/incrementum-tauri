@@ -42,13 +42,15 @@ import {
 } from "../../api/arxiv";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useToast } from "../common/Toast";
+import type { Document } from "../../types/document";
 
 interface ArxivImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenDocument?: (doc: Document) => void;
 }
 
-export function ArxivImportDialog({ isOpen, onClose }: ArxivImportDialogProps) {
+export function ArxivImportDialog({ isOpen, onClose, onOpenDocument }: ArxivImportDialogProps) {
   const [papers, setPapers] = useState<ArxivPaper[]>([]);
   const [selectedPaper, setSelectedPaper] = useState<ArxivPaper | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,21 +64,7 @@ export function ArxivImportDialog({ isOpen, onClose }: ArxivImportDialogProps) {
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   const { importFromArxiv, loadDocuments } = useDocumentStore();
-  const toast = useToast();
-
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (isOpen) {
-      setPapers([]);
-      setSelectedPaper(null);
-      setSearchQuery("");
-      setSelectedCategory(null);
-      setError(null);
-      setImportError(null);
-      setImportSuccess(null);
-      setSavedPapers(getSavedPapers());
-    }
-  }, [isOpen]);
+  const { success: showSuccess, error: showError } = useToast();
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -114,6 +102,23 @@ export function ArxivImportDialog({ isOpen, onClose }: ArxivImportDialogProps) {
     }
   }, []);
 
+  // Reset state and load default category when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setPapers([]);
+      setSelectedPaper(null);
+      setSearchQuery("");
+      setImportError(null);
+      setImportSuccess(null);
+      setSavedPapers(getSavedPapers());
+      
+      // Load default category (AI)
+      if (POPULAR_CATEGORIES.length > 0) {
+        handleCategorySelect(POPULAR_CATEGORIES[0].id);
+      }
+    }
+  }, [isOpen, handleCategorySelect]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -137,22 +142,26 @@ export function ArxivImportDialog({ isOpen, onClose }: ArxivImportDialogProps) {
 
     try {
       // Use the store's importFromArxiv method which handles everything
-      await importFromArxiv(paper.id);
+      const doc = await importFromArxiv(paper.id);
       
       // Reload documents to show the new import
       await loadDocuments();
 
       setImportSuccess(paper.id);
-      toast.showToast(`"${paper.title.substring(0, 50)}..." imported successfully`, "success");
+      showSuccess("Paper imported", `"${paper.title.substring(0, 50)}..." has been added to your library`);
       
-      // Close dialog after a brief delay
+      // Close dialog and open the document
       setTimeout(() => {
         onClose();
-      }, 1500);
+        // Open the document if callback provided
+        if (onOpenDocument && doc) {
+          onOpenDocument(doc);
+        }
+      }, 800);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Import failed";
       setImportError(message);
-      toast.showToast(message, "error");
+      showError("Import failed", message);
     } finally {
       setIsImporting(false);
     }
