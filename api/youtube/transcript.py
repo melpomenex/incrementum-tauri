@@ -7,9 +7,10 @@ import json
 import re
 from http.server import BaseHTTPRequestHandler
 
-# Debug: Log all environment variables
+# Debug: Log Python version only (avoid leaking secrets)
 print(f"[yt-dlp DEBUG] Python version: {sys.version}", file=sys.stderr)
-print(f"[yt-dlp DEBUG] All env vars: {dict(os.environ)}", file=sys.stderr)
+
+DEBUG_YT = os.environ.get('YT_DEBUG') == '1'
 
 # Try to import yt-dlp
 try:
@@ -27,8 +28,9 @@ def get_proxy_url():
     decodo = os.environ.get('DECODO_PROXY_URL')
     residential = os.environ.get('RESIDENTIAL_PROXY_URL')
     
-    print(f"[yt-dlp DEBUG] DECODO_PROXY_URL: {'SET' if decodo else 'NOT SET'}", file=sys.stderr)
-    print(f"[yt-dlp DEBUG] RESIDENTIAL_PROXY_URL: {'SET' if residential else 'NOT SET'}", file=sys.stderr)
+    if DEBUG_YT:
+        print(f"[yt-dlp DEBUG] DECODO_PROXY_URL: {'SET' if decodo else 'NOT SET'}", file=sys.stderr)
+        print(f"[yt-dlp DEBUG] RESIDENTIAL_PROXY_URL: {'SET' if residential else 'NOT SET'}", file=sys.stderr)
     
     return decodo or residential
 
@@ -211,6 +213,9 @@ def fetch_transcript_direct(video_id, proxy=None, cookies_header=None):
                 'start': start,
                 'duration': duration
             })
+
+    if not segments:
+        raise Exception('No transcript segments found')
     
     if not segments:
         raise Exception('No transcript segments found')
@@ -253,7 +258,7 @@ def get_best_caption_track(info):
     """Pick best caption track from yt-dlp info"""
     subtitle_priorities = ['en-US', 'en-CA', 'en-GB', 'en']
     auto_priorities = ['en-orig', 'en-US', 'en-CA', 'en-GB', 'en']
-    format_priorities = ['vtt', 'srt', 'ttml']
+    format_priorities = ['vtt', 'srt']
 
     caption_track = None
     subtitles = info.get('subtitles') or {}
@@ -287,6 +292,9 @@ def get_best_caption_track(info):
 
     for track in caption_track:
         if track.get('protocol') != 'm3u8_native':
+            # Skip unsupported formats
+            if track.get('ext') in ('ttml', 'srv1', 'srv2', 'srv3'):
+                continue
             return track
 
     return None
@@ -294,6 +302,7 @@ def get_best_caption_track(info):
 def fetch_transcript(video_id, cookies_header=None):
     """Fetch transcript using multiple methods"""
     proxy = get_proxy_url()
+    force_proxy = os.environ.get('YT_FORCE_PROXY') == '1'
     
     # Method 1: Direct API (fastest)
     print(f"[yt-dlp] Method 1: Direct API (no proxy)", file=sys.stderr)
@@ -304,7 +313,7 @@ def fetch_transcript(video_id, cookies_header=None):
         print(f"[yt-dlp] Method 1 failed: {error[:80]}", file=sys.stderr)
         
         # If blocked and proxy available, try with proxy
-        if 'bot' in error.lower() and proxy:
+        if 'bot' in error.lower() and proxy and (force_proxy or not cookies_header):
             print(f"[yt-dlp] Method 2: Direct API with proxy", file=sys.stderr)
             try:
                 return fetch_transcript_direct(video_id, proxy=proxy, cookies_header=cookies_header)
@@ -312,20 +321,20 @@ def fetch_transcript(video_id, cookies_header=None):
                 print(f"[yt-dlp] Method 2 failed: {str(e2)[:80]}", file=sys.stderr)
     
     # Method 3: yt-dlp with proxy (last resort)
-    if YT_DLP_AVAILABLE and proxy:
+    if YT_DLP_AVAILABLE and proxy and (force_proxy or not cookies_header):
         print(f"[yt-dlp] Method 3: yt-dlp with proxy", file=sys.stderr)
         ydl_opts = {
             'writesubtitles': True,
             'writeautomaticsub': True,
             'subtitleslangs': ['en', 'en-US', 'en-CA', 'en-GB'],
-            'subtitlesformat': 'vtt/srt/ttml',
+            'subtitlesformat': 'vtt/srt',
             'skip_download': True,
             'quiet': True,
             'no_warnings': True,
             'no_playlist': True,
             'ignore_no_formats_error': True,
             'proxy': proxy,
-            'socket_timeout': 25,
+            'socket_timeout': 12,
         }
         if cookies_header:
             ydl_opts['http_headers'] = {
@@ -354,6 +363,13 @@ def fetch_transcript(video_id, cookies_header=None):
         else:
             with urlopen(req, timeout=30) as resp:
                 content = resp.read().decode('utf-8')
+
+        if DEBUG_YT:
+            snippet = content[:200].replace('\n', ' ')
+            print(f"[yt-dlp DEBUG] Track ext={track.get('ext')} bytes={len(content)} snippet={snippet}", file=sys.stderr)
+
+        if '<html' in content[:500].lower() or 'consent.youtube.com' in content:
+            raise Exception('Transcript download returned HTML (bot/consent)')
 
         if track.get('ext') in ('vtt', 'webvtt'):
             segments = parse_vtt(content)
@@ -514,6 +530,8 @@ class handler(BaseHTTPRequestHandler):
         try:
             cookies_header = _format_cookie_header(cookies)
             result = fetch_transcript(video_id, cookies_header=cookies_header)
+            if not result.get('segments'):
+                raise Exception('No transcript segments found')
             self.send_json(200, {
                 'success': True,
                 'videoId': video_id,
