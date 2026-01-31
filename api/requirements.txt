@@ -1,1 +1,2 @@
 yt-dlp==2025.1.26
+yt-dlp-transcripts==0.1.1

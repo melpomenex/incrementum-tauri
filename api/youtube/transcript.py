@@ -21,6 +21,14 @@ except ImportError as e:
     print(f"[yt-dlp] ERROR: Failed to import yt_dlp: {e}", file=sys.stderr)
     YT_DLP_AVAILABLE = False
 
+# Try to import yt-dlp-transcripts
+try:
+    from yt_dlp_transcripts import get_video_info as ytdlp_get_video_info
+    YT_DLP_TRANSCRIPTS_AVAILABLE = True
+except ImportError as e:
+    print(f"[yt-dlp] ERROR: Failed to import yt_dlp_transcripts: {e}", file=sys.stderr)
+    YT_DLP_TRANSCRIPTS_AVAILABLE = False
+
 
 def get_proxy_url():
     """Get proxy URL from environment variables"""
@@ -299,11 +307,80 @@ def get_best_caption_track(info):
 
     return None
 
+
+def _split_transcript_text(transcript_text):
+    """Split plain transcript text into pseudo-segments"""
+    lines = [line.strip() for line in transcript_text.split('\n') if line.strip()]
+    if len(lines) <= 1:
+        # Fallback: split into sentences if no line breaks
+        lines = re.split(r'(?<=[.!?])\s+', transcript_text.strip())
+        lines = [line.strip() for line in lines if line.strip()]
+    return lines
+
+
+def fetch_transcript_with_ytdlp_transcripts(video_id, proxy=None, cookies_header=None):
+    """Fetch transcript using yt-dlp-transcripts library"""
+    if not YT_DLP_TRANSCRIPTS_AVAILABLE:
+        raise Exception('yt-dlp-transcripts not installed')
+
+    video_url = f'https://www.youtube.com/watch?v={video_id}'
+    env_backup = {}
+
+    # Configure proxy for underlying HTTP requests
+    if proxy:
+        for key in ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
+            env_backup[key] = os.environ.get(key)
+            os.environ[key] = proxy
+
+    # Provide cookies to downstream libs if they read env
+    if cookies_header:
+        env_backup['YOUTUBE_COOKIES'] = os.environ.get('YOUTUBE_COOKIES')
+        os.environ['YOUTUBE_COOKIES'] = cookies_header
+
+    try:
+        info = ytdlp_get_video_info(video_url)
+    finally:
+        for key, value in env_backup.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    transcript_text = (info or {}).get('transcript') or ''
+    if not transcript_text.strip():
+        raise Exception('No transcript available')
+
+    lines = _split_transcript_text(transcript_text)
+    segments = []
+    start = 0.0
+    for line in lines:
+        segments.append({
+            'text': line,
+            'start': start,
+            'duration': 0.1
+        })
+        start += 0.1
+
+    return {
+        'segments': segments,
+        'language': 'en',
+        'title': (info or {}).get('title'),
+        'duration': (info or {}).get('duration')
+    }
+
 def fetch_transcript(video_id, cookies_header=None):
     """Fetch transcript using multiple methods"""
     proxy = get_proxy_url()
     force_proxy = os.environ.get('YT_FORCE_PROXY') == '1'
-    
+
+    # Method 0: yt-dlp-transcripts with proxy (requested)
+    if proxy and YT_DLP_TRANSCRIPTS_AVAILABLE:
+        try:
+            print(f"[yt-dlp] Method 0: yt-dlp-transcripts with proxy", file=sys.stderr)
+            return fetch_transcript_with_ytdlp_transcripts(video_id, proxy=proxy, cookies_header=cookies_header)
+        except Exception as e:
+            print(f"[yt-dlp] Method 0 failed: {str(e)[:80]}", file=sys.stderr)
+
     # Method 1: Direct API (fastest)
     print(f"[yt-dlp] Method 1: Direct API (no proxy)", file=sys.stderr)
     try:
