@@ -250,9 +250,12 @@ def fetch_transcript(video_id, cookies_header=None):
             'writesubtitles': True,
             'writeautomaticsub': True,
             'subtitleslangs': ['en'],
+            'subtitlesformat': 'vtt/srt/ttml',
             'skip_download': True,
             'quiet': True,
             'no_warnings': True,
+            'no_playlist': True,
+            'ignore_no_formats_error': True,
             'proxy': proxy,
             'socket_timeout': 25,
         }
