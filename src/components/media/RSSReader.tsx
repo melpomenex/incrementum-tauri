@@ -418,6 +418,7 @@ export function RSSReader() {
   }, [preferences]);
 
   return (
+    <>
     <div className="h-full w-full bg-background">
       <div className="h-full w-full flex flex-col lg:flex-row overflow-hidden rounded-xl border border-border/70 bg-card/60 shadow-[0_0_0_1px_rgba(15,23,42,0.04)]">
         {/* Sidebar */}
@@ -870,6 +871,6 @@ export function RSSReader() {
         </div>
       </div>
     )}
-  </>
+    </>
   );
 }
