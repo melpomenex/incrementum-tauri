@@ -51,11 +51,16 @@ def extract_video_id(url):
 
 
 def parse_timestamp(ts):
-    """Convert timestamp to seconds"""
+    """Convert timestamp to seconds (supports HH:MM:SS.mmm or MM:SS.mmm)"""
     parts = ts.split(':')
     if len(parts) == 3:
         return float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
     return float(parts[0]) * 60 + float(parts[1])
+
+
+def _parse_vtt_timestamp(hh, mm, ss_ms):
+    hours = int(hh) if hh is not None else 0
+    return hours * 3600 + int(mm) * 60 + float(ss_ms)
 
 
 def parse_vtt(content):
@@ -68,7 +73,7 @@ def parse_vtt(content):
         if not line or line == 'WEBVTT' or line.startswith('NOTE'):
             continue
         
-        match = re.match(r'(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})', line)
+        match = re.match(r'(?:(\d{2}):)?(\d{2}):(\d{2}\.\d{3})\s+-->\s+(?:(\d{2}):)?(\d{2}):(\d{2}\.\d{3})', line)
         if match:
             if cur_text and (not segments or cur_text != segments[-1]['text']):
                 segments.append({
@@ -76,9 +81,9 @@ def parse_vtt(content):
                     'start': cur_start,
                     'duration': cur_end - cur_start
                 })
-            
-            cur_start = parse_timestamp(match.group(1))
-            cur_end = parse_timestamp(match.group(2))
+
+            cur_start = _parse_vtt_timestamp(match.group(1), match.group(2), match.group(3))
+            cur_end = _parse_vtt_timestamp(match.group(4), match.group(5), match.group(6))
             cur_text = ''
         elif line:
             txt = re.sub(r'<[^>]+>', '', line)
@@ -96,6 +101,10 @@ def parse_vtt(content):
 
 def _format_cookie_header(cookies):
     """Format cookies for Cookie header"""
+    if not cookies:
+        env_cookie = os.environ.get('YOUTUBE_COOKIES') or os.environ.get('YOUTUBE_COOKIE')
+        if env_cookie:
+            return env_cookie
     if not cookies:
         return None
     if isinstance(cookies, str):
@@ -143,9 +152,11 @@ def fetch_transcript_direct(video_id, proxy=None, cookies_header=None):
             raise Exception('Rate limited by YouTube')
         raise
     
-    # Check for bot detection
+    # Check for bot detection / consent
     if 'Sign in to confirm' in html_content:
         raise Exception('Sign in to confirm you\'re not a bot')
+    if 'consent.youtube.com' in html_content or 'Before you continue to YouTube' in html_content:
+        raise Exception('YouTube consent required')
     
     # Extract caption tracks from ytInitialPlayerResponse
     import re
@@ -201,6 +212,9 @@ def fetch_transcript_direct(video_id, proxy=None, cookies_header=None):
                 'duration': duration
             })
     
+    if not segments:
+        raise Exception('No transcript segments found')
+
     return {
         'segments': segments,
         'language': track.get('languageCode', 'en'),
@@ -272,11 +286,19 @@ def fetch_transcript(video_id, cookies_header=None):
         
         track = next((t for t in track_list if t.get('ext') == 'vtt'), track_list[0])
         
-        from urllib.request import Request, urlopen
+        from urllib.request import Request, urlopen, ProxyHandler, build_opener
         req = Request(track['url'])
         req.add_header('User-Agent', 'Mozilla/5.0')
-        with urlopen(req, timeout=30) as resp:
-            content = resp.read().decode('utf-8')
+        if cookies_header:
+            req.add_header('Cookie', cookies_header)
+        if proxy:
+            proxy_handler = ProxyHandler({'http': proxy, 'https': proxy})
+            opener = build_opener(proxy_handler)
+            with opener.open(req, timeout=30) as resp:
+                content = resp.read().decode('utf-8')
+        else:
+            with urlopen(req, timeout=30) as resp:
+                content = resp.read().decode('utf-8')
         
         segments = parse_vtt(content)
         
@@ -445,6 +467,13 @@ class handler(BaseHTTPRequestHandler):
                     'success': False,
                     'error': 'YouTube bot detection - proxy may not be working',
                     'code': 'YOUTUBE_BOT_DETECTED',
+                    'proxy_was_configured': bool(get_proxy_url())
+                })
+            elif 'consent' in error.lower():
+                self.send_json(503, {
+                    'success': False,
+                    'error': 'YouTube requires consent; cookies are needed',
+                    'code': 'YOUTUBE_CONSENT_REQUIRED',
                     'proxy_was_configured': bool(get_proxy_url())
                 })
             elif 'No captions' in error:
