@@ -970,54 +970,93 @@ fn get_migrations_dir() -> Result<PathBuf> {
 
 /// Split SQL into individual statements, respecting CREATE TRIGGER ... BEGIN ... END blocks
 fn split_sql_statements(sql: &str) -> Vec<String> {
+    eprintln!("=== split_sql_statements called, SQL length: {} ===", sql.len());
+    let first_500 = sql.chars().take(500).collect::<String>();
+    eprintln!("First 500 chars:\n{}", first_500);
     let mut statements = Vec::new();
+    let mut in_trigger = false;
+    let mut trigger_depth: usize = 0;
+    let mut current_stmt = String::new();
 
-    // For triggers with BEGIN...END blocks, use regex to keep them together
-    let trigger_regex = Regex::new(
-        r"(?i)(CREATE\s+(TEMP|TEMPORARY\s+)?TRIGGER[^;]*?BEGIN.*?END;)"
-    ).unwrap();
+    for line in sql.lines() {
+        let trimmed = line.trim();
 
-    // First, extract all triggers as complete statements
-    let mut remaining = sql;
-    while let Some(mat) = trigger_regex.find(remaining) {
-        // Process everything before the trigger
-        let before = &remaining[..mat.start()];
-        for stmt in before.split(';') {
-            let stmt = stmt.trim();
-            if !stmt.is_empty() {
-                // Check if this is only comments (no actual SQL)
-                let without_comments = stmt.lines()
-                    .filter(|line| !line.trim().starts_with("--"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if !without_comments.trim().is_empty() {
+        // Check if this line starts a CREATE TRIGGER
+        if trimmed.to_uppercase().starts_with("CREATE TRIGGER") {
+            // Save any accumulated statement before starting trigger
+            if !current_stmt.is_empty() {
+                let stmt = current_stmt.trim();
+                if !stmt.is_empty() {
                     statements.push(stmt.to_string());
                 }
+                current_stmt.clear();
+            }
+            in_trigger = true;
+            trigger_depth = 0;
+            current_stmt.push_str(line);
+        } else if in_trigger {
+            current_stmt.push('\n');
+            current_stmt.push_str(line);
+
+            // Track BEGIN/END depth
+            trigger_depth = trigger_depth.saturating_add(line.matches("BEGIN").count())
+                .saturating_sub(line.matches("END").count());
+
+            // Check if trigger ends (END; at depth 0)
+            if trimmed.ends_with("END;") && trigger_depth == 0 {
+                in_trigger = false;
+                let trigger_sql = current_stmt.trim();
+                if !trigger_sql.is_empty() {
+                    statements.push(trigger_sql.to_string());
+                }
+                current_stmt.clear();
+            }
+        } else {
+            // Regular statement - accumulate until semicolon
+            // Add newline between lines to preserve structure
+            if !current_stmt.is_empty() {
+                current_stmt.push('\n');
+            }
+            current_stmt.push_str(line);
+
+            // Check for statement terminator (semicolon at end of line)
+            if trimmed.ends_with(';') {
+                let stmt = current_stmt.trim();
+                if !stmt.is_empty() {
+                    eprintln!("Processing statement ending with ';', length: {}", stmt.len());
+                    eprintln!("Raw statement (first 200 chars): {}", stmt.chars().take(200).collect::<String>());
+                    // Remove inline SQL comments (-- comments) from the statement
+                    let cleaned: String = stmt.lines()
+                        .filter(|l| !l.trim().starts_with("--"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    eprintln!("After cleaning, length: {}, first 200 chars: {}", cleaned.len(), cleaned.chars().take(200).collect::<String>());
+                    if !cleaned.trim().is_empty() {
+                        eprintln!("Adding regular statement: {} chars, first 80 chars: {}", cleaned.len(), cleaned.chars().take(80).collect::<String>());
+                        statements.push(cleaned);
+                    } else {
+                        eprintln!("Skipping empty statement after cleaning");
+                    }
+                }
+                current_stmt.clear();
             }
         }
-
-        // Add the trigger as a single statement
-        statements.push(mat.as_str().trim().to_string());
-
-        // Move past this trigger
-        remaining = &remaining[mat.end()..];
     }
 
-    // Process any remaining non-trigger statements
-    for stmt in remaining.split(';') {
-        let stmt = stmt.trim();
-        if !stmt.is_empty() {
-            // Check if this is only comments (no actual SQL)
-            let without_comments = stmt.lines()
-                .filter(|line| !line.trim().starts_with("--"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            if !without_comments.trim().is_empty() {
-                statements.push(stmt.to_string());
-            }
+    // Handle any remaining content
+    let stmt = current_stmt.trim();
+    if !stmt.is_empty() {
+        let cleaned: String = stmt.lines()
+            .filter(|l| !l.trim().starts_with("--"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !cleaned.trim().is_empty() {
+            eprintln!("Adding remaining statement: {} chars, first 80 chars: {}", cleaned.len(), cleaned.chars().take(80).collect::<String>());
+            statements.push(cleaned);
         }
     }
 
+    eprintln!("=== Total statements extracted: {} ===", statements.len());
     statements
 }
 

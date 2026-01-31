@@ -252,6 +252,13 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
   const [showSidebar, setShowSidebar] = useState(false);
   const [savedExtracts, setSavedExtracts] = useState<WebExtract[]>([]);
   const [showAssistant, setShowAssistant] = useState(false);
+
+  // Debug logging for assistant toggle
+  const handleToggleAssistant = () => {
+    const newState = !showAssistant;
+    console.log('[WebBrowserTab] Toggling assistant:', { from: showAssistant, to: newState });
+    setShowAssistant(newState);
+  };
   const [iframeStatus, setIframeStatus] = useState<"idle" | "loading" | "loaded" | "blocked">("idle");
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const iframeTimeoutRef = useRef<number | null>(null);
@@ -937,8 +944,8 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
             <FolderOpen className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setShowAssistant((prev) => !prev)}
-            className="p-2 rounded hover:bg-muted transition-colors"
+            onClick={handleToggleAssistant}
+            className={`p-2 rounded transition-colors ${showAssistant ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             title="Toggle assistant"
           >
             <MessageSquare className="w-4 h-4" />
@@ -1032,7 +1039,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         )}
 
         {/* Browser Content - fills remaining space */}
-        <div className="flex-1 relative overflow-hidden w-full" style={{ minHeight: '200px' }}>
+        <div className="flex-1 relative overflow-hidden" style={{ minHeight: '200px' }}>
           {!currentUrl ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-md">
@@ -1116,7 +1123,7 @@ export function WebBrowserTab({ initialUrl }: { initialUrl?: string }) {
         {showAssistant && (
           <AssistantPanel
             context={assistantContext}
-            className="flex-shrink-0"
+            className="flex-shrink-0 border-l-4 border-primary"
           />
         )}
       </div>

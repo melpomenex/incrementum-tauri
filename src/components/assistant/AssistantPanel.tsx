@@ -85,6 +85,11 @@ export function AssistantPanel({
     const saved = localStorage.getItem(ASSISTANT_POSITION_KEY);
     return saved === "left" ? "left" : "right";
   });
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[AssistantPanel] Mounted/Updated', { isCollapsed, width, position, className });
+  }, [isCollapsed, width, position, className]);
   const [isResizing, setIsResizing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
