@@ -650,6 +650,9 @@ export function QueueScrollPage() {
             documentId: assistantItem.documentId,
             content: trimmed || undefined,
             contextWindowTokens: maxTokens,
+            metadata: {
+              title: title || undefined,
+            },
           });
         }
         return;
@@ -668,6 +671,9 @@ export function QueueScrollPage() {
             documentId: `extract:${assistantItem.extract.id}`,
             content: trimmed || undefined,
             contextWindowTokens: maxTokens,
+            metadata: {
+              title: assistantItem.documentTitle || undefined,
+            },
           });
         }
         return;
@@ -684,6 +690,9 @@ export function QueueScrollPage() {
             url: assistantItem.rssItem?.link || `rss:${assistantItem.rssItem?.id}`,
             content: trimmed || undefined,
             contextWindowTokens: maxTokens,
+            metadata: {
+              title: assistantItem.rssItem?.title || undefined,
+            },
           });
         }
         return;
@@ -983,7 +992,7 @@ export function QueueScrollPage() {
         setItemsReviewedThisSession(prev => prev + 1);
 
         // Remove the rated document from scrollItems and reload queue
-        setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
+        advanceAfterRemoval(ratedItemId);
         void loadQueue();
       } else if (currentItem.type === "flashcard" && currentItem.learningItem) {
         // Rate flashcard using FSRS
@@ -995,7 +1004,7 @@ export function QueueScrollPage() {
 
         // Remove the rated flashcard from both dueFlashcards and scrollItems
         setDueFlashcards(prev => prev.filter(item => item.id !== currentItem.learningItem!.id));
-        setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
+        advanceAfterRemoval(ratedItemId);
       } else if (currentItem.type === "rss" && currentItem.rssItem && currentItem.rssFeed) {
         // Mark RSS item as read
         await markItemReadAuto(currentItem.rssFeed.id, currentItem.rssItem.id, true);
@@ -1016,7 +1025,21 @@ export function QueueScrollPage() {
         const docItems = scrollItems.filter(item => item.type === "document");
         const flashcardItems = scrollItems.filter(item => item.type === "flashcard");
         const extractItems = scrollItems.filter(item => item.type === "extract");
-        setScrollItems([...flashcardItems, ...extractItems, ...docItems, ...rssItems]);
+        const nextItems = [...flashcardItems, ...extractItems, ...docItems, ...rssItems];
+        setScrollItems(nextItems);
+        if (nextItems.length === 0) {
+          setCurrentIndex(0);
+          setRenderedIndex(0);
+        } else {
+          const nextIndex = Math.min(currentIndex, nextItems.length - 1);
+          setIsTransitioning(true);
+          setCurrentIndex(nextIndex);
+          startTimeRef.current = Date.now();
+          setTimeout(() => {
+            setRenderedIndex(nextIndex);
+            setIsTransitioning(false);
+          }, 300);
+        }
       } else if (currentItem.type === "extract" && currentItem.extract) {
         // Rate extract
         console.log(`Rating extract ${currentItem.extract.id} as ${rating} (time: ${timeTaken}s)`);
@@ -1027,17 +1050,12 @@ export function QueueScrollPage() {
 
         // Remove from both dueExtracts and scrollItems
         setDueExtracts(prev => prev.filter(e => e.id !== currentItem.extract!.id));
-        setScrollItems(prev => prev.filter(item => item.id !== ratedItemId));
+        advanceAfterRemoval(ratedItemId);
       }
 
-      // Auto-advance to next item after rating
+      // Allow transition to complete, then release rating lock
       setTimeout(() => {
-        // Reset isRating FIRST so goToNext can proceed
         setIsRating(false);
-        // Small delay to allow state to update before navigating
-        setTimeout(() => {
-          goToNext();
-        }, 50);
       }, 300);
     } catch (error) {
       console.error("[QueueScroll] Failed to handle rating:", error);
@@ -1177,6 +1195,7 @@ export function QueueScrollPage() {
                 context={assistantContext}
                 className="assistant-panel"
                 onInputHoverChange={setAssistantInputActive}
+                appendContextMessages={false}
                 position={assistantPosition}
                 onPositionChange={(newPosition) => {
                   setAssistantPosition(newPosition);
@@ -1252,10 +1271,25 @@ export function QueueScrollPage() {
                 </div>
 
                 {/* RSS Article Content */}
-                <div
-                  className="prose prose-lg max-w-none text-foreground reading-prose"
-                  dangerouslySetInnerHTML={{ __html: renderedItem.rssItem?.content || renderedItem.rssItem?.description || "" }}
-                />
+                {(renderedItem.rssItem?.content || renderedItem.rssItem?.description) ? (
+                  <div
+                    className="prose prose-lg max-w-none text-foreground reading-prose"
+                    dangerouslySetInnerHTML={{ __html: renderedItem.rssItem?.content || renderedItem.rssItem?.description || "" }}
+                  />
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No content available for this article.</p>
+                    <a
+                      href={renderedItem.rssItem?.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-4 text-primary hover:underline"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Read on original site
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           ) : renderedItem?.type === "extract" && renderedItem.extract ? (
@@ -1282,6 +1316,7 @@ export function QueueScrollPage() {
                 context={assistantContext}
                 className="assistant-panel"
                 onInputHoverChange={setAssistantInputActive}
+                appendContextMessages={false}
                 position={assistantPosition}
                 onPositionChange={(newPosition) => {
                   setAssistantPosition(newPosition);

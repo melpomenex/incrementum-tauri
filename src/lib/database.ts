@@ -593,6 +593,7 @@ export interface StoredFile {
 export async function storeFile(file: File, filePath?: string): Promise<StoredFile> {
     // Use the filePath as the id if provided (for browser-file:// paths)
     const fileId = filePath || uuidv4();
+    console.log(`[IndexedDB] Storing file:`, { fileId, name: file.name, size: file.size, type: file.type });
     const storedFile: StoredFile = {
         id: fileId,
         filename: file.name,
@@ -600,14 +601,20 @@ export async function storeFile(file: File, filePath?: string): Promise<StoredFi
         blob: file,
         created_at: new Date().toISOString(),
     };
-    return put(STORES.files, storedFile);
+    const result = await put(STORES.files, storedFile);
+    console.log(`[IndexedDB] File stored successfully:`, fileId);
+    return result;
 }
 
 export async function getFile(id: string): Promise<StoredFile | null> {
-    return getById<StoredFile>(STORES.files, id);
+    console.log(`[IndexedDB] Looking up file by id:`, id);
+    const result = await getById<StoredFile>(STORES.files, id);
+    console.log(`[IndexedDB] File lookup by id result:`, result ? `found (${result.blob?.size} bytes)` : 'not found');
+    return result;
 }
 
 export async function getFileByName(filename: string): Promise<StoredFile | null> {
+    console.log(`[IndexedDB] Looking up file by name:`, filename);
     const database = await openDatabase();
     return new Promise((resolve, reject) => {
         const tx = database.transaction(STORES.files, 'readonly');
@@ -617,6 +624,7 @@ export async function getFileByName(filename: string): Promise<StoredFile | null
             const request = store.getAll();
             request.onsuccess = () => {
                 const match = request.result.find((f: StoredFile) => f.filename === filename) || null;
+                console.log(`[IndexedDB] File lookup by name (fallback) result:`, match ? `found (${match.blob?.size} bytes)` : 'not found');
                 resolve(match);
             };
             request.onerror = () => reject(request.error);
@@ -624,7 +632,11 @@ export async function getFileByName(filename: string): Promise<StoredFile | null
         }
         const index = store.index('by_filename');
         const request = index.get(filename);
-        request.onsuccess = () => resolve(request.result || null);
+        request.onsuccess = () => {
+            const result = request.result || null;
+            console.log(`[IndexedDB] File lookup by name result:`, result ? `found (${result.blob?.size} bytes)` : 'not found');
+            resolve(result);
+        };
         request.onerror = () => reject(request.error);
     });
 }

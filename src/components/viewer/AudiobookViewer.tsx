@@ -66,6 +66,12 @@ interface SleepTimer {
   endTime: number;
 }
 
+interface MultiPartInfo {
+  totalParts: number;
+  partFiles: string[];
+  partDurations: number[];
+}
+
 export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -79,6 +85,11 @@ export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps)
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [buffered, setBuffered] = useState(0);
+  
+  // Multi-part handling
+  const [multiPartInfo, setMultiPartInfo] = useState<MultiPartInfo | null>(null);
+  const [currentPartIndex, setCurrentPartIndex] = useState(0);
+  const [partSources, setPartSources] = useState<string[]>([]);
   
   // Audiobook data
   const [metadata, setMetadata] = useState<Partial<AudiobookMetadata>>({});
@@ -97,9 +108,14 @@ export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps)
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sleepTimer, setSleepTimer] = useState<SleepTimer | null>(null);
   
+  // Debug fileContent
+  useEffect(() => {
+    console.log('[AudiobookViewer] fileContent:', fileContent ? fileContent.substring(0, 100) + '...' : 'undefined');
+  }, [fileContent]);
+
   // Load audiobook data
   useEffect(() => {
-    const loadAudiobookData = () => {
+    const loadAudiobookData = async () => {
       const data = localStorage.getItem(`audiobook-${document.id}`);
       if (data) {
         try {
@@ -107,6 +123,12 @@ export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps)
           setMetadata(parsed.metadata || {});
           setChapters(parsed.chapters || []);
           setTranscript(parsed.transcript || null);
+          
+          // Check for multi-part info
+          if (parsed.multiPart) {
+            setMultiPartInfo(parsed.multiPart);
+            setPartSources(parsed.multiPart.partFiles);
+          }
         } catch {
           // Invalid data
         }
@@ -186,19 +208,55 @@ export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps)
   };
   
   const handleEnded = () => {
+    // Check if this is a multi-part book and there are more parts
+    if (multiPartInfo && currentPartIndex < multiPartInfo.partFiles.length - 1) {
+      const nextPartIndex = currentPartIndex + 1;
+      setCurrentPartIndex(nextPartIndex);
+      // Load next part - audio element will auto-play if it was playing
+      if (audioRef.current) {
+        audioRef.current.src = partSources[nextPartIndex] || "";
+        audioRef.current.load();
+        audioRef.current.play().catch(() => {
+          setIsPlaying(false);
+        });
+      }
+      showInfo("Next part", `Playing part ${nextPartIndex + 1} of ${multiPartInfo.partFiles.length}`);
+      return;
+    }
+    
     setIsPlaying(false);
     showInfo("Audiobook finished", "You've reached the end");
   };
   
+  // Go to specific part (for multi-part books)
+  const goToPart = (partIndex: number) => {
+    if (!multiPartInfo || partIndex < 0 || partIndex >= multiPartInfo.partFiles.length) return;
+    
+    setCurrentPartIndex(partIndex);
+    if (audioRef.current) {
+      audioRef.current.src = partSources[partIndex] || "";
+      audioRef.current.load();
+      audioRef.current.play().catch(() => {
+        setIsPlaying(false);
+      });
+    }
+  };
+  
   // Playback controls
   const togglePlay = () => {
+    console.log('[AudiobookViewer] togglePlay:', { isPlaying, src: audioRef.current?.src, readyState: audioRef.current?.readyState });
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        audioRef.current.play();
+        console.log('[AudiobookViewer] Attempting to play...');
+        audioRef.current.play().catch(err => {
+          console.error('[AudiobookViewer] Play error:', err);
+        });
       }
       setIsPlaying(!isPlaying);
+    } else {
+      console.warn('[AudiobookViewer] No audio ref');
     }
   };
   
@@ -412,10 +470,10 @@ export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps)
       "flex flex-col bg-background h-full",
       isFullscreen && "fixed inset-0 z-50"
     )}>
-      {/* Audio element */}
+      {/* Audio element - use fileContent (blob URL) when available, otherwise fall back to partSources */}
       <audio
         ref={audioRef}
-        src={fileContent}
+        src={fileContent || (multiPartInfo ? partSources[currentPartIndex] || "" : "")}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={handleEnded}
@@ -442,6 +500,29 @@ export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps)
                 <X className="h-4 w-4" />
               </button>
             </div>
+            
+            {/* Part selector for multi-part books */}
+            {showChapters && multiPartInfo && (
+              <div className="border-b border-border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground mb-2">Select Part:</p>
+                <div className="grid grid-cols-5 gap-1">
+                  {multiPartInfo.partFiles.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => goToPart(idx)}
+                      className={cn(
+                        "px-2 py-1.5 text-xs rounded transition-colors",
+                        currentPartIndex === idx
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted hover:bg-muted/80"
+                      )}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             
             <div className="flex-1 overflow-y-auto">
               {showChapters && chapters.map((chapter, idx) => (
@@ -539,6 +620,16 @@ export function AudiobookViewer({ document, fileContent }: AudiobookViewerProps)
               <p className="text-muted-foreground text-center mb-2">
                 {metadata.author || document.metadata?.author}
               </p>
+              
+              {/* Multi-part indicator */}
+              {multiPartInfo && (
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <span className="text-xs text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                    Part {currentPartIndex + 1} of {multiPartInfo.partFiles.length}
+                  </span>
+                </div>
+              )}
+              
               {currentChapter && (
                 <p className="text-sm text-primary text-center">
                   {currentChapter.title}

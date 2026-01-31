@@ -1118,6 +1118,7 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
             position={assistantPosition}
             onPositionChange={setAssistantPosition}
             onWidthChange={setPanelWidth}
+            appendContextMessages={false}
             className="h-full"
           />
         </div>

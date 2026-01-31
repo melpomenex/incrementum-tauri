@@ -23,6 +23,12 @@ import {
     getAvailableLanguages,
 } from '../utils/youtubeTranscriptBrowser';
 import {
+    getQueueSession,
+    wasItemViewed,
+    getRecentlyViewedIds,
+    type QueueSession,
+} from './queueSession';
+import {
     fetchPlaylistInfo,
     importPlaylistVideos,
     isYouTubeApiEnabled,
@@ -235,6 +241,75 @@ function intervalFromDue(now: Date, due: Date, scheduledDays?: number): number {
         return scheduledDays ?? 0;
     }
     return Math.max(0, delta);
+}
+
+/**
+ * Priority-based interval adjustment
+ * 
+ * Higher priority = shorter interval (review sooner)
+ * Lower priority = longer interval (review later)
+ * 
+ * Priority slider: 0-100 (default 50)
+ * - 0-20: Very low priority (1.5x interval)
+ * - 21-40: Low priority (1.2x interval)
+ * - 41-60: Normal priority (1.0x interval - no change)
+ * - 61-80: High priority (0.75x interval)
+ * - 81-100: Very high priority (0.5x interval)
+ */
+function applyPriorityMultiplier(intervalDays: number, prioritySlider: number): number {
+    // Default to normal priority if not set
+    const priority = prioritySlider ?? 50;
+    
+    let multiplier: number;
+    if (priority <= 20) {
+        multiplier = 1.5;
+    } else if (priority <= 40) {
+        multiplier = 1.2;
+    } else if (priority <= 60) {
+        multiplier = 1.0;
+    } else if (priority <= 80) {
+        multiplier = 0.75;
+    } else {
+        multiplier = 0.5;
+    }
+    
+    return intervalDays * multiplier;
+}
+
+/**
+ * Bounded interval for "Hard" ratings
+ * 
+ * Prevents "Hard" from pushing items too far into the future
+ * while still respecting the priority
+ */
+function applyHardRatingBound(intervalDays: number, prioritySlider: number): number {
+    // Max interval for "Hard" rating depends on priority
+    // High priority items: max 7 days even on "Hard"
+    // Normal priority: max 14 days
+    // Low priority: max 21 days
+    const priority = prioritySlider ?? 50;
+    
+    let maxInterval: number;
+    if (priority >= 80) {
+        maxInterval = 7;
+    } else if (priority >= 60) {
+        maxInterval = 14;
+    } else if (priority >= 40) {
+        maxInterval = 21;
+    } else {
+        maxInterval = 30;
+    }
+    
+    return Math.min(intervalDays, maxInterval);
+}
+
+function getPriorityLabel(prioritySlider?: number): string {
+    const priority = prioritySlider ?? 50;
+    if (priority >= 81) return 'Very High';
+    if (priority >= 61) return 'High';
+    if (priority >= 41) return 'Normal';
+    if (priority >= 21) return 'Low';
+    return 'Very Low';
 }
 
 function buildCardFromDocument(doc: db.Document, now: Date): Card {
@@ -517,14 +592,18 @@ const commandHandlers: Record<string, CommandHandler> = {
         const filePath = args.filePath as string;
         const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'Untitled';
         const fileType = fileName.split('.').pop()?.toLowerCase() || 'pdf';
+        console.log(`[Browser] import_document:`, { filePath, fileName, fileType });
         let extractedContent = '';
 
         // Check if this is a virtual browser file path
         if (filePath.startsWith('browser-file://')) {
             const file = getBrowserFile(filePath);
+            console.log(`[Browser] Looking up file in browser store:`, file ? `found (${file.size} bytes)` : 'not found');
             if (file) {
                 // Store the file blob in IndexedDB with the filePath as key
+                console.log(`[Browser] Storing file in IndexedDB...`);
                 await db.storeFile(file, filePath);
+                console.log(`[Browser] File stored in IndexedDB`);
 
                 // Extract text content from PDFs and EPUBs
                 if (fileType === 'pdf' || fileType === 'epub') {
@@ -549,6 +628,7 @@ const commandHandlers: Record<string, CommandHandler> = {
             file_type: fileType,
             content: extractedContent || undefined,
         });
+        console.log(`[Browser] Document created:`, doc.id, doc.file_path, doc.file_type);
         return toCamelCase(doc);
     },
 
@@ -565,6 +645,7 @@ const commandHandlers: Record<string, CommandHandler> = {
     read_document_file: async (args) => {
         // In browser mode, return the file from IndexedDB if stored
         const filePath = args.filePath as string;
+        console.log('[Browser] read_document_file:', filePath);
 
         // If it's a browser-file:// path, try to find it in the file store first (IndexedDB)
         if (filePath.startsWith('browser-file://')) {
@@ -573,10 +654,12 @@ const commandHandlers: Record<string, CommandHandler> = {
 
             const file = getBrowserFile(filePath);
             if (file) {
+                console.log('[Browser] Found file in memory store:', file.name, 'size:', file.size);
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = () => {
                         const base64 = (reader.result as string).split(',')[1];
+                        console.log('[Browser] Read file from memory, base64 length:', base64?.length);
                         resolve(base64);
                     };
                     reader.onerror = reject;
@@ -585,12 +668,16 @@ const commandHandlers: Record<string, CommandHandler> = {
             }
 
             // If not in memory (page refresh), try IndexedDB by path first, then by filename
+            console.log('[Browser] File not in memory, checking IndexedDB...');
             let storedFile = await db.getFile(filePath);
+            console.log('[Browser] IndexedDB lookup by path result:', storedFile ? `found (${storedFile.blob?.size} bytes)` : 'not found');
 
             // If not found by path, try by filename (for files stored before path-based storage)
             if (!storedFile) {
                 const filename = filePath.split('/').pop() || '';
+                console.log('[Browser] Trying lookup by filename:', filename);
                 storedFile = await db.getFileByName(filename);
+                console.log('[Browser] IndexedDB lookup by filename result:', storedFile ? `found (${storedFile.blob?.size} bytes)` : 'not found');
             }
 
             if (storedFile) {
@@ -598,6 +685,7 @@ const commandHandlers: Record<string, CommandHandler> = {
                     const reader = new FileReader();
                     reader.onload = () => {
                         const base64 = (reader.result as string).split(',')[1];
+                        console.log('[Browser] Read file from IndexedDB, base64 length:', base64?.length);
                         resolve(base64);
                     };
                     reader.onerror = reject;
@@ -777,8 +865,56 @@ const commandHandlers: Record<string, CommandHandler> = {
     get_due_documents_only: async () => {
         const docs = await db.getDocuments();
         const now = new Date().toISOString();
-        const dueDocs = docs.filter((doc) => !doc.next_reading_date || doc.next_reading_date <= now);
-        return dueDocs.map((doc) => ({
+        const session = getQueueSession();
+        
+        // Smart filtering:
+        // 1. Include items that are due (next_reading_date <= now)
+        // 2. Include new items (no next_reading_date)
+        // 3. Exclude items viewed in this session (unless overdue by > 1 day)
+        
+        const SMART_FILTER = true; // Can be made configurable
+        const RECENT_VIEW_EXCLUDE_COUNT = 5; // Exclude last 5 viewed items
+        
+        const recentlyViewed = SMART_FILTER 
+            ? new Set(getRecentlyViewedIds(RECENT_VIEW_EXCLUDE_COUNT))
+            : new Set<string>();
+        
+        const dueDocs = docs.filter((doc) => {
+            const isNew = !doc.next_reading_date;
+            const isDue = doc.next_reading_date && doc.next_reading_date <= now;
+            
+            if (!isNew && !isDue) {
+                return false; // Not due and not new
+            }
+            
+            // Check if recently viewed (unless overdue by more than 1 day)
+            if (SMART_FILTER && recentlyViewed.has(doc.id)) {
+                const isOverdue = doc.next_reading_date && 
+                    (new Date(now).getTime() - new Date(doc.next_reading_date).getTime()) > (24 * 60 * 60 * 1000);
+                if (!isOverdue) {
+                    return false; // Skip recently viewed, not overdue items
+                }
+            }
+            
+            return true;
+        });
+        
+        // Sort by priority (higher priority first), then by due date
+        const sortedDocs = dueDocs.sort((a, b) => {
+            // Priority slider: higher = more urgent
+            const priorityA = a.priority_slider ?? 50;
+            const priorityB = b.priority_slider ?? 50;
+            if (priorityA !== priorityB) {
+                return priorityB - priorityA; // Descending priority
+            }
+            
+            // Then by due date (earlier = more urgent)
+            const dueA = a.next_reading_date || '9999-12-31';
+            const dueB = b.next_reading_date || '9999-12-31';
+            return dueA.localeCompare(dueB);
+        });
+        
+        return sortedDocs.map((doc) => ({
             id: doc.id,
             document_id: doc.id,
             document_title: doc.title || 'Untitled',
@@ -966,8 +1102,26 @@ const commandHandlers: Record<string, CommandHandler> = {
         const card = buildCardFromDocument(doc, now);
         const next = scheduler.next(card, now, grade);
         const nextCard = next.card;
-        const nextReviewDateIso = nextCard.due.toISOString();
-        const intervalDays = intervalFromDue(now, nextCard.due, nextCard.scheduled_days);
+        
+        // Calculate base interval from FSRS
+        let intervalDays = intervalFromDue(now, nextCard.due, nextCard.scheduled_days);
+        
+        // Apply bounds for "Hard" rating (rating = 2)
+        if (request.rating === 2) {
+            intervalDays = applyHardRatingBound(intervalDays, doc.priority_slider);
+        }
+        
+        // Apply priority multiplier
+        intervalDays = applyPriorityMultiplier(intervalDays, doc.priority_slider);
+        
+        // Ensure minimum interval of 1 day for non-"Again" ratings
+        if (request.rating !== 1) {
+            intervalDays = Math.max(1, intervalDays);
+        }
+        
+        // Calculate actual due date based on adjusted interval
+        const nextDue = new Date(now.getTime() + intervalDays * DAY_MS);
+        const nextReviewDateIso = nextDue.toISOString();
 
         // Update document with new scheduling data
         const newTimeSpent = (doc.total_time_spent || 0) + (request.time_taken || 0);
@@ -981,12 +1135,14 @@ const commandHandlers: Record<string, CommandHandler> = {
             date_last_reviewed: now.toISOString(),
         });
 
+        const priorityLabel = getPriorityLabel(doc.priority_slider);
+        
         return {
             next_review_date: nextReviewDateIso,
             stability: nextCard.stability,
             difficulty: nextCard.difficulty,
             interval_days: intervalDays,
-            scheduling_reason: `FSRS: Rating ${request.rating} → ${intervalDays.toFixed(2)} days`,
+            scheduling_reason: `${priorityLabel} priority: ${intervalDays.toFixed(1)} days`,
         };
     },
 

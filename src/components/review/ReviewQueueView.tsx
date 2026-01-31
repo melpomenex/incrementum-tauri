@@ -39,6 +39,8 @@ import {
 } from "./SessionCustomizeModal";
 import { postponeItem } from "../../api/queue";
 import { useToast } from "../common/Toast";
+import { getSessionStats, clearQueueSession } from "../../lib/queueSession";
+import { RotateCcw } from "lucide-react";
 
 type QueueMode = "reading" | "review";
 
@@ -108,6 +110,17 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
   const [selectedFileType, setSelectedFileType] = useState<string>("all");
   const searchRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
+  
+  // Session stats for smart queue
+  const [sessionStats, setSessionStats] = useState(() => getSessionStats());
+  
+  const handleClearSession = () => {
+    clearQueueSession();
+    setSessionStats(getSessionStats());
+    // Reload queue to show all items again
+    loadQueue();
+    toast.success("Session cleared", "All items are now available in the queue again");
+  };
 
   // Debug: Check if scroll mode is available
   useEffect(() => {
@@ -493,6 +506,23 @@ export function ReviewQueueView({ onStartReview, onOpenDocument, onOpenScrollMod
               >
                 <Target className="w-3 h-3" />
                 Due All
+              </button>
+            </div>
+          )}
+          
+          {/* Session Status - Shows if smart filtering is active */}
+          {sessionStats.totalViewed > 0 && queueMode === "reading" && queueFilterMode === "due-today" && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-md">
+              <span className="text-xs text-amber-700">
+                {sessionStats.totalViewed} viewed this session
+                {sessionStats.unratedCount > 0 && ` (${sessionStats.unratedCount} unrated)`}
+              </span>
+              <button
+                onClick={handleClearSession}
+                className="p-1 hover:bg-amber-500/20 rounded transition-colors"
+                title="Clear session to see all items again"
+              >
+                <RotateCcw className="w-3 h-3 text-amber-700" />
               </button>
             </div>
           )}

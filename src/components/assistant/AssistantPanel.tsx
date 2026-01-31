@@ -70,6 +70,7 @@ interface AssistantPanelProps {
   onPositionChange?: (position: AssistantPosition) => void;
   selectedProvider?: "openai" | "anthropic" | "ollama" | "openrouter";
   onProviderChange?: (provider: "openai" | "anthropic" | "ollama" | "openrouter") => void;
+  appendContextMessages?: boolean;
 }
 
 const ASSISTANT_POSITION_KEY = "assistant-panel-position";
@@ -85,6 +86,7 @@ export function AssistantPanel({
   onPositionChange,
   selectedProvider: externalSelectedProvider,
   onProviderChange,
+  appendContextMessages = true,
 }: AssistantPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [width, setWidth] = useState(() => {
@@ -182,7 +184,7 @@ export function AssistantPanel({
 
   // Add context message when context changes
   useEffect(() => {
-    if (context) {
+    if (context && appendContextMessages) {
       const signature = `${context.type}:${context.documentId ?? ""}:${context.url ?? ""}`;
       if (lastContextSignatureRef.current === signature) {
         return;
@@ -200,10 +202,18 @@ export function AssistantPanel({
 
   const getContextMessage = (ctx: AssistantContext): string => {
     switch (ctx.type) {
-      case "document":
-        return `📄 Viewing document${ctx.documentId ? ` (ID: ${ctx.documentId})` : ""}${ctx.position?.pageNumber ? ` • Page ${ctx.position.pageNumber}` : ""}${typeof ctx.position?.scrollPercent === "number" ? ` • ${ctx.position.scrollPercent.toFixed(1)}%` : ""}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
-      case "web":
-        return `🌐 Browsing: ${ctx.url || "Unknown page"}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
+      case "document": {
+        const title = ctx.metadata?.title;
+        const base = title
+          ? `📄 ${title}`
+          : `📄 Viewing document${ctx.documentId ? ` (ID: ${ctx.documentId})` : ""}`;
+        return `${base}${ctx.position?.pageNumber ? ` • Page ${ctx.position.pageNumber}` : ""}${typeof ctx.position?.scrollPercent === "number" ? ` • ${ctx.position.scrollPercent.toFixed(1)}%` : ""}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
+      }
+      case "web": {
+        const title = ctx.metadata?.title;
+        const base = title ? `🌐 ${title}` : `🌐 Browsing: ${ctx.url || "Unknown page"}`;
+        return `${base}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
+      }
       case "video":
         return `🎬 Watching video: ${ctx.metadata?.title || ctx.metadata?.videoId || "Unknown"}${typeof ctx.position?.currentTime === "number" ? ` • ${formatDuration(ctx.position.currentTime)}` : ""}${ctx.metadata?.duration ? ` / ${formatDuration(ctx.metadata.duration)}` : ""}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
       default:

@@ -159,8 +159,31 @@ function parseRSSItem(item: Element): FeedItem | null {
   }
 
   // Extract content from content:encoded if available
-  const contentEl = item.querySelector("content\\:encoded");
-  const content = contentEl?.textContent || description;
+  // Try multiple approaches to handle namespaced elements
+  let content = description;
+  
+  // Approach 1: Try the escaped colon selector
+  const contentEl1 = item.querySelector("content\\:encoded");
+  if (contentEl1?.textContent) {
+    content = contentEl1.textContent;
+  } else {
+    // Approach 2: Try with namespace prefix handling
+    const contentEl2 = item.querySelector("encoded");
+    if (contentEl2?.textContent) {
+      content = contentEl2.textContent;
+    } else {
+      // Approach 3: Iterate all child nodes to find content:encoded
+      for (const child of Array.from(item.children)) {
+        if (child.tagName.toLowerCase().includes("encoded") || 
+            child.tagName === "content:encoded") {
+          if (child.textContent) {
+            content = child.textContent;
+            break;
+          }
+        }
+      }
+    }
+  }
 
   return {
     id: guid || generateItemId(link, pubDate),

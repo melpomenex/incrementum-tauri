@@ -18,6 +18,8 @@ import type { PdfSelectionContext } from "../../types/selection";
 import type { Extract } from "../../api/extracts";
 import { QueueNavigationControls } from "../queue/QueueNavigationControls";
 import { HoverRatingControls } from "../review/HoverRatingControls";
+import { PriorityControl } from "./PriorityControl";
+import { markItemViewed } from "../../lib/queueSession";
 import { useQueueNavigation } from "../../hooks/useQueueNavigation";
 import { cn } from "../../utils";
 import * as documentsApi from "../../api/documents";
@@ -48,7 +50,7 @@ type ViewMode = "document" | "extracts" | "cards";
 type DocumentType = "pdf" | "epub" | "markdown" | "html" | "youtube" | "video" | "audio";
 
 const DOCUMENT_TYPES: DocumentType[] = ["pdf", "epub", "markdown", "html", "youtube", "video", "audio"];
-const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "ogg", "flac", "opus"]);
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "m4b", "aac", "ogg", "flac", "opus"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "mkv", "avi", "m4v"]);
 
 const normalizeDocumentType = (value?: string): DocumentType | undefined => {
@@ -166,6 +168,7 @@ export function DocumentViewer({
   const [fileData, setFileData] = useState<Uint8Array | null>(null);
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
   const mediaSrcRef = useRef<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pagesRendered, setPagesRendered] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode ?? "document");
@@ -303,6 +306,7 @@ export function DocumentViewer({
       case "wav":
         return "audio/wav";
       case "m4a":
+      case "m4b": // Audiobook format (MP4 container with chapters)
         return "audio/mp4";
       case "aac":
         return "audio/aac";
@@ -658,7 +662,13 @@ export function DocumentViewer({
       }
     } else if (inferredType === "video" || inferredType === "audio") {
       try {
+        console.log(`[DocumentViewer] Loading ${inferredType} file:`, doc.filePath);
+        setMediaError(null);
         const base64Data = await documentsApi.readDocumentFile(doc.filePath);
+        console.log(`[DocumentViewer] Got base64 data, length:`, base64Data?.length || 0);
+        if (!base64Data || base64Data.length === 0) {
+          throw new Error(`File not found or empty. The file may need to be re-imported.`);
+        }
         const binaryString = atob(base64Data);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
@@ -667,11 +677,14 @@ export function DocumentViewer({
         const mimeType = inferredType === "audio"
           ? getAudioMimeType(doc.filePath)
           : getVideoMimeType(doc.filePath);
+        console.log(`[DocumentViewer] Creating blob with MIME type:`, mimeType, `size:`, bytes.byteLength);
         const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
         mediaSrcRef.current = blobUrl;
         setMediaSrc(blobUrl);
       } catch (error) {
-        console.error("Failed to load video file:", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[DocumentViewer] Failed to load ${inferredType} file:`, error);
+        setMediaError(errorMessage);
       } finally {
         setIsLoading(false);
       }
@@ -759,6 +772,9 @@ export function DocumentViewer({
 
       // Reset timer when document changes
       startTimeRef.current = Date.now();
+
+      // Mark as viewed in session (for smart queue filtering)
+      markItemViewed(documentId, false);
 
       const doc = documents.find((d) => d.id === documentId);
       if (doc) {
@@ -1547,6 +1563,9 @@ export function DocumentViewer({
       console.log(`DocumentViewer: Rating document ${documentId} as ${rating} (time: ${timeTaken}s)`);
 
       await rateDocument(documentId, rating, timeTaken);
+      
+      // Mark as rated in session
+      markItemViewed(documentId, true);
 
       // Reset timer
       startTimeRef.current = Date.now();
@@ -1724,6 +1743,14 @@ export function DocumentViewer({
               {Math.round(currentDocument.progressPercent)}%
             </span>
           )}
+          
+          {/* Priority Control */}
+          <PriorityControl
+            documentId={currentDocument.id}
+            prioritySlider={currentDocument.prioritySlider}
+            priorityRating={currentDocument.priorityRating}
+            variant="compact"
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -2024,21 +2051,79 @@ export function DocumentViewer({
             onSelectionChange={updateSelection}
             onContextTextChange={onPdfContextTextChange}
           />
-        ) : docType === "audio" && mediaSrc ? (
-          <AudiobookViewer
-            document={currentDocument}
-            fileContent={mediaSrc}
-          />
-        ) : docType === "video" && mediaSrc ? (
-          <div className="h-full w-full bg-black">
-            <LocalVideoPlayer
-              src={mediaSrc}
-              documentId={currentDocument.id}
-              title={currentDocument.title}
-              className="h-full w-full"
-              mediaType="video"
+        ) : docType === "audio" ? (
+          mediaSrc ? (
+            <AudiobookViewer
+              document={currentDocument}
+              fileContent={mediaSrc}
             />
-          </div>
+          ) : mediaError ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center max-w-md px-4">
+                <div className="text-6xl mb-4">🎧</div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">
+                  Could not load audiobook
+                </h3>
+                <p className="text-muted-foreground mb-4">
+                  {mediaError}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The file may have been removed or needs to be re-imported.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="text-6xl mb-4">🎧</div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">
+                  Loading audiobook...
+                </h3>
+                <p className="text-muted-foreground">
+                  Please wait while the audio file is being loaded
+                </p>
+              </div>
+            </div>
+          )
+        ) : docType === "video" ? (
+          mediaSrc ? (
+            <div className="h-full w-full bg-black">
+              <LocalVideoPlayer
+                src={mediaSrc}
+                documentId={currentDocument.id}
+                title={currentDocument.title}
+                className="h-full w-full"
+                mediaType="video"
+              />
+            </div>
+          ) : mediaError ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center max-w-md px-4">
+                <div className="text-6xl mb-4">🎬</div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">
+                  Could not load video
+                </h3>
+                <p className="text-muted-foreground mb-4">
+                  {mediaError}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The file may have been removed or needs to be re-imported.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="text-6xl mb-4">🎬</div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">
+                  Loading video...
+                </h3>
+                <p className="text-muted-foreground">
+                  Please wait while the video file is being loaded
+                </p>
+              </div>
+            </div>
+          )
         ) : docType === "markdown" ? (
           <div className="reading-surface min-h-full">
             <MarkdownViewer document={currentDocument} content={currentDocument.content} />
