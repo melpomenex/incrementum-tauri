@@ -44,6 +44,8 @@ import { CreateExtractDialog } from "../extracts/CreateExtractDialog";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { summarizeContent } from "../../api/ai";
 import { isTauri } from "../../lib/tauri";
+import { trimToTokenWindow } from "../../utils/tokenizer";
+import { AssistantPanel, type AssistantContext } from "../assistant/AssistantPanel";
 
 interface RSSScrollItem {
   feed: Feed;
@@ -179,7 +181,7 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     const saved = localStorage.getItem("rss-assistant-visible");
     return saved !== "false";
   });
-  const [assistantContext, setAssistantContext] = useState<string>("");
+  const [assistantContext, setAssistantContext] = useState<AssistantContext | undefined>(undefined);
   
   // Panel resize state
   const [panelWidth, setPanelWidth] = useState(() => {
@@ -241,6 +243,48 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
   useEffect(() => {
     sessionStorage.setItem(RSS_SCROLL_POSITION_KEY, String(currentIndex));
   }, [currentIndex]);
+
+  // Auto-update assistant context when article changes
+  useEffect(() => {
+    let cancelled = false;
+    const item = scrollItems[renderedIndex];
+
+    if (!item) {
+      setAssistantContext(undefined);
+      return;
+    }
+
+    const buildContext = async () => {
+      const maxTokens = settings?.ai?.maxTokens && settings.ai.maxTokens > 0
+        ? settings.ai.maxTokens
+        : 2000;
+      const aiModel = settings?.ai?.model;
+
+      const rawContent = item.item.content || item.item.description || "";
+      const plainText = htmlToText(rawContent);
+
+      const title = item.item.title ? `Title: ${item.item.title}` : null;
+      const content = [title, plainText].filter(Boolean).join("\n\n");
+      const trimmed = content ? await trimToTokenWindow(content, maxTokens, aiModel) : undefined;
+
+      if (!cancelled) {
+        setAssistantContext({
+          type: "web",
+          url: item.item.link || `rss:${item.item.id}`,
+          content: trimmed || undefined,
+          contextWindowTokens: maxTokens,
+          metadata: {
+            title: item.item.title,
+          },
+        });
+      }
+    };
+
+    void buildContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [renderedIndex, scrollItems, settings?.ai?.maxTokens, settings?.ai?.model]);
 
   // Save auto-read mode preference
   useEffect(() => {
@@ -625,7 +669,6 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     setSummaryText("");
     setDisplayedSummary("");
     setShowSummary(true);
-    setAssistantContext(content);
 
     // Check if we're in Tauri mode
     if (!isTauri()) {
@@ -1047,6 +1090,39 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
         </div>
       )}
 
+      {/* Assistant Panel - when summaryMode === "assistant" */}
+      {showSummary && summaryMode === "assistant" && isAssistantVisible && (
+        <div
+          className={cn(
+            "fixed top-28 bottom-24 z-10 bg-card border border-border rounded-lg shadow-2xl overflow-hidden flex flex-col transition-all duration-300",
+            assistantPosition === "left" ? "left-4" : "right-4"
+          )}
+          style={{ width: `${panelWidth}px` }}
+        >
+          {/* Resize handle */}
+          <div
+            className={cn(
+              "absolute top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/20 transition-colors group",
+              assistantPosition === "left" ? "right-0" : "left-0"
+            )}
+            onMouseDown={handleResizeStart}
+          >
+            <div className={cn(
+              "absolute top-1/2 -translate-y-1/2 w-1 h-8 bg-border group-hover:bg-primary/50 rounded",
+              assistantPosition === "left" ? "right-0" : "left-0"
+            )} />
+          </div>
+
+          <AssistantPanel
+            context={assistantContext}
+            position={assistantPosition}
+            onPositionChange={setAssistantPosition}
+            onWidthChange={setPanelWidth}
+            className="h-full"
+          />
+        </div>
+      )}
+
       {/* Bottom control bar */}
       <div
         className={cn(
@@ -1078,6 +1154,22 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
             title="Move summary panel"
           >
             {assistantPosition === "left" ? "→ Right" : "← Left"}
+          </button>
+        )}
+
+        {/* Summary mode toggle (only when summary is shown) */}
+        {showSummary && (
+          <button
+            onClick={() => setSummaryMode(summaryMode === "terminal" ? "assistant" : "terminal")}
+            className={cn(
+              "px-3 py-2 rounded-lg transition-colors text-sm",
+              summaryMode === "assistant"
+                ? "bg-primary text-primary-foreground"
+                : "bg-black/70 text-white hover:bg-black/80"
+            )}
+            title="Switch summary mode"
+          >
+            {summaryMode === "assistant" ? "AI Chat" : "Terminal"}
           </button>
         )}
       </div>

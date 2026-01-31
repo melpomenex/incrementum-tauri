@@ -48,18 +48,19 @@ jobs:
         if: runner.os == 'Windows'
         run: echo "RUST_MIN_STACK=33554432" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Force bundled SQLite (Windows)
-        if: runner.os == 'Windows'
-        run: echo "LIBSQLITE3_SYS_BUNDLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Install SQLite via vcpkg (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
           if (-not $vcpkgRoot) { $vcpkgRoot = "C:\\vcpkg" }
+          $libPath = "$vcpkgRoot\\installed\\x64-windows\\lib"
+          $includePath = "$vcpkgRoot\\installed\\x64-windows\\include"
           echo "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "VCPKG_DEFAULT_TRIPLET=x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "SQLITE3_LIB_DIR=$libPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "SQLITE3_INCLUDE_DIR=$includePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "LIB=$libPath;$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & "$vcpkgRoot\\vcpkg.exe" install sqlite3:x64-windows
 
       - name: Sync node version and setup cache
@@ -190,7 +191,7 @@ jobs:
       - name: Install Arch dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf npm nodejs rust ttf-dejavu
+          pacman -S --noconfirm --needed base-devel git webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf npm nodejs rust ttf-dejavu
 
       - name: Install frontend dependencies
         run: npm ci

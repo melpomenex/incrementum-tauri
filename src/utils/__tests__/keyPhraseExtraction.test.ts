@@ -188,7 +188,7 @@ describe("keyPhraseExtraction", () => {
       const text = `First sentence. Middle sentence 1. Middle sentence 2. Middle sentence 3. Last sentence.`;
       const summary = extractSummary(text, { maxSentences: 2 });
 
-      expect(summary.length).toBeGreaterThan(0);
+      expect(summary.length).toBeLessThanOrEqual(2);
     });
 
     it("should use key phrases for scoring", () => {

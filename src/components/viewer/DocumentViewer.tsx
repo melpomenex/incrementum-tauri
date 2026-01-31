@@ -9,6 +9,7 @@ import { MarkdownViewer } from "./MarkdownViewer";
 import { EPUBViewer } from "./EPUBViewer";
 import { YouTubeViewer } from "./YouTubeViewer";
 import { LocalVideoPlayer } from "./LocalVideoPlayer";
+import { AudiobookViewer } from "./AudiobookViewer";
 import { ExtractsList } from "../extracts/ExtractsList";
 import { LearningCardsList } from "../learning/LearningCardsList";
 import { useToast } from "../common/Toast";
@@ -2023,14 +2024,19 @@ export function DocumentViewer({
             onSelectionChange={updateSelection}
             onContextTextChange={onPdfContextTextChange}
           />
-        ) : (docType === "video" || docType === "audio") && mediaSrc ? (
-          <div className={cn("h-full w-full", docType === "audio" ? "bg-background" : "bg-black")}>
+        ) : docType === "audio" && mediaSrc ? (
+          <AudiobookViewer
+            document={currentDocument}
+            fileContent={mediaSrc}
+          />
+        ) : docType === "video" && mediaSrc ? (
+          <div className="h-full w-full bg-black">
             <LocalVideoPlayer
               src={mediaSrc}
               documentId={currentDocument.id}
               title={currentDocument.title}
               className="h-full w-full"
-              mediaType={docType === "audio" ? "audio" : "video"}
+              mediaType="video"
             />
           </div>
         ) : docType === "markdown" ? (

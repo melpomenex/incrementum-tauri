@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText, Filter, Globe, FileText as FileTextIcon } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText, Filter, Globe, FileText as FileTextIcon, BookAudio } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useCollectionStore } from "../../stores/collectionStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
 import { ArxivImportDialog } from "../import/ArxivImportDialog";
 import { WebArticleImportDialog } from "../import/WebArticleImportDialog";
+import { AudiobookImportDialog } from "../import/AudiobookImportDialog";
 import { EmptyDocuments, EmptySearch } from "../common/EmptyState";
 import { DocumentCardSkeleton, DocumentGridSkeleton } from "../common/Skeleton";
 import type { Document } from "../../types/document";
@@ -69,6 +70,7 @@ function getDocumentCoverUrl(doc: Document): string | null {
 function getCoverFallbackIcon(fileType: Document["fileType"]) {
   if (fileType === "youtube") return Youtube;
   if (fileType === "pdf") return FileText;
+  if (fileType === "audio") return BookAudio;
   return BookOpen;
 }
 
@@ -140,6 +142,7 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   const [showAnnaArchiveSearch, setShowAnnaArchiveSearch] = useState(false);
   const [showArxivImport, setShowArxivImport] = useState(false);
   const [showWebArticleImport, setShowWebArticleImport] = useState(false);
+  const [showAudiobookImport, setShowAudiobookImport] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
@@ -562,6 +565,14 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
             >
               <Globe className="w-4 h-4" />
               Web Article
+            </button>
+            <button
+              onClick={() => setShowAudiobookImport(true)}
+              className="px-3 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+              title="Import audiobooks with transcripts"
+            >
+              <BookAudio className="w-4 h-4" />
+              Audiobook
             </button>
             {isTauri() && (
               <button
@@ -1191,6 +1202,13 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
       <WebArticleImportDialog
         isOpen={showWebArticleImport}
         onClose={() => setShowWebArticleImport(false)}
+        onOpenDocument={onOpenDocument}
+      />
+
+      {/* Audiobook Import Dialog */}
+      <AudiobookImportDialog
+        isOpen={showAudiobookImport}
+        onClose={() => setShowAudiobookImport(false)}
         onOpenDocument={onOpenDocument}
       />
     </div>

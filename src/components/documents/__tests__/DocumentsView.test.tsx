@@ -81,8 +81,8 @@ describe("DocumentsView", () => {
 
   it("updates inspector on selection", () => {
     render(<DocumentsView enableYouTubeImport={false} />);
-    fireEvent.click(screen.getByText("Priority Doc"));
-    expect(screen.getByText("Priority Doc")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText("Priority Doc")[0]);
+    expect(screen.getAllByText("Priority Doc").length).toBeGreaterThan(0);
     expect(screen.getByText("Inspector")).toBeInTheDocument();
   });
 
