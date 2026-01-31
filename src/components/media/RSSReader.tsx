@@ -420,6 +420,16 @@ export function RSSReader() {
     } as React.CSSProperties;
   }, [preferences]);
 
+  // Scroll mode view - render before main layout
+  if (scrollMode) {
+    return (
+      <RSSScrollMode
+        onExit={() => setScrollMode(false)}
+        initialFeedId={selectedFeed?.id}
+      />
+    );
+  }
+
   return (
     <>
     <div className="h-full w-full bg-background">
@@ -883,16 +893,4 @@ export function RSSReader() {
     )}
     </>
   );
-
-  // Scroll mode view
-  if (scrollMode) {
-    return (
-      <RSSScrollMode
-        onExit={() => setScrollMode(false)}
-        initialFeedId={selectedFeed?.id}
-      />
-    );
-  }
-
-  return null;
 }
