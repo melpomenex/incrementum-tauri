@@ -146,7 +146,7 @@ jobs:
       - name: Build Tauri AppImage (without custom-protocol)
         run: |
           cd src-tauri
-          cargo tauri build --bundles appimage --no-default-features
+          cargo tauri build --bundles appimage
         env:
           TAURI_BUNDLE_APPIMAGE: "true"
 
@@ -180,7 +180,7 @@ jobs:
       - name: Install Arch dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf npm nodejs rust cargo
+          pacman -S --noconfirm --needed base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf npm nodejs rust ttf-dejavu
 
       - name: Install frontend dependencies
         run: npm ci
@@ -204,21 +204,21 @@ jobs:
           mkdir -p arch-pkg/incrementum-${PKG_VERSION}-${PKG_RELEASE}/pkg
 
           # Create PKGBUILD
-          cat > arch-pkg/PKGBUILD << 'EOF'
+          cat > arch-pkg/PKGBUILD << EOF
           pkgname=incrementum
-          pkgver=$(grep '^version' src-tauri/Cargo.toml | head -1 | awk -F'"' '{print $2}')
-          pkgrel=1
+          pkgver=${PKG_VERSION}
+          pkgrel=${PKG_RELEASE}
           pkgdesc="Incrementum - Spaced repetition and incremental reading for effective learning"
           arch=('x86_64')
           url="https://github.com/melpomenex/incrementum-tauri"
           license=('MIT')
           depends=('webkit2gtk-4.1' 'gtk3' 'libappindicator-gtk3' 'librsvg' 'gcc-libs' 'glibc')
-          makedepends=('cargo')
-          source=("$pkgname-$pkgver::git+https://github.com/melpomenex/incrementum-tauri.git#tag=v$pkgver")
+          makedepends=('rust')
+          source=("\$pkgname-\$pkgver::git+https://github.com/melpomenex/incrementum-tauri.git#tag=v\$pkgver")
           sha256sums=('SKIP')
 
           build() {
-            cd "$pkgname-$pkgver"
+            cd "\$pkgname-\$pkgver"
             npm ci
             npm run build
             cd src-tauri
@@ -226,10 +226,10 @@ jobs:
           }
 
           package() {
-            cd "$pkgname-$pkgver"
-            install -Dm755 "src-tauri/target/release/incrementum-tauri" "$pkgdir/usr/bin/incrementum"
-            install -Dm644 "src-tauri/icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/incrementum.png"
-            install -Dm644 "src-tauri/incrementum.desktop" "$pkgdir/usr/share/applications/incrementum.desktop" || true
+            cd "\$pkgname-\$pkgver"
+            install -Dm755 "src-tauri/target/release/incrementum-tauri" "\$pkgdir/usr/bin/incrementum"
+            install -Dm644 "src-tauri/icons/128x128.png" "\$pkgdir/usr/share/icons/hicolor/128x128/apps/incrementum.png"
+            install -Dm644 "src-tauri/incrementum.desktop" "\$pkgdir/usr/share/applications/incrementum.desktop" || true
           }
           EOF
 

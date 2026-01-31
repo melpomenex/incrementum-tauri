@@ -1181,8 +1181,12 @@ export async function markItemReadAuto(feedId: string, itemId: string, read: boo
     return;
   }
   if (shouldUseHttpBackend()) {
-    await markArticleReadViaHttp(itemId, read);
-    return;
+    try {
+      await markArticleReadViaHttp(itemId, read);
+      return;
+    } catch (error) {
+      console.warn("[RSS] HTTP backend unavailable, updating local item.", error);
+    }
   }
   markItemRead(feedId, itemId, read);
 }
@@ -1192,10 +1196,14 @@ export async function markItemReadAuto(feedId: string, itemId: string, read: boo
  */
 export async function markFeedReadAuto(feedId: string): Promise<void> {
   if (shouldUseHttpBackend()) {
-    // In web mode, mark all articles for this feed as read
-    const articles = await getArticlesViaHttp(feedId, 1000);
-    await Promise.all(articles.map(a => markArticleReadViaHttp(a.id, true)));
-    return;
+    try {
+      // In web mode, mark all articles for this feed as read
+      const articles = await getArticlesViaHttp(feedId, 1000);
+      await Promise.all(articles.map(a => markArticleReadViaHttp(a.id, true)));
+      return;
+    } catch (error) {
+      console.warn("[RSS] HTTP backend unavailable, updating local feed.", error);
+    }
   }
   markFeedRead(feedId);
 }
@@ -1205,11 +1213,15 @@ export async function markFeedReadAuto(feedId: string): Promise<void> {
  */
 export async function toggleItemFavoriteAuto(feedId: string, itemId: string): Promise<void> {
   if (shouldUseHttpBackend()) {
-    // In web mode, toggle queued status for favorite
-    await fetch(`${getApiBaseUrl()}/api/rss/articles/${itemId}/queued`, {
-      method: 'POST',
-    });
-    return;
+    try {
+      // In web mode, toggle queued status for favorite
+      await fetch(`${getApiBaseUrl()}/api/rss/articles/${itemId}/queued`, {
+        method: 'POST',
+      });
+      return;
+    } catch (error) {
+      console.warn("[RSS] HTTP backend unavailable, updating local item.", error);
+    }
   }
   toggleItemFavorite(feedId, itemId);
 }

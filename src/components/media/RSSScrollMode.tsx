@@ -180,6 +180,15 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     return saved !== "false";
   });
   const [assistantContext, setAssistantContext] = useState<string>("");
+  
+  // Panel resize state
+  const [panelWidth, setPanelWidth] = useState(() => {
+    const saved = localStorage.getItem("rss-assistant-width");
+    return saved ? parseInt(saved, 10) : 320; // default 320px (w-80)
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(0);
 
   // Load feeds and prepare scroll items
   useEffect(() => {
@@ -661,6 +670,49 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     setAssistantPosition(prev => prev === "left" ? "right" : "left");
   }, []);
 
+  // Panel resize handlers
+  const currentWidthRef = useRef(panelWidth);
+  currentWidthRef.current = panelWidth; // Keep ref in sync with state
+  
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = currentWidthRef.current;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = assistantPosition === "right" 
+        ? resizeStartXRef.current - e.clientX  // dragging left increases width
+        : e.clientX - resizeStartXRef.current; // dragging right increases width
+      const newWidth = Math.max(240, Math.min(600, resizeStartWidthRef.current + delta));
+      setPanelWidth(newWidth);
+      currentWidthRef.current = newWidth; // Update ref immediately
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      // Save to localStorage using the ref to ensure we get the latest value
+      localStorage.setItem("rss-assistant-width", currentWidthRef.current.toString());
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing, assistantPosition]); // removed panelWidth from deps to avoid re-binding
+
   const currentItem = scrollItems[currentIndex];
   const renderedItem = scrollItems[renderedIndex];
 
@@ -931,10 +983,27 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
       {showSummary && summaryMode === "terminal" && renderedItem && (
         <div 
           className={cn(
-            "fixed top-28 bottom-24 w-80 z-10 bg-[#1a1a1a] border-2 border-[#ffb000] rounded-lg shadow-2xl overflow-hidden flex flex-col transition-all duration-300",
+            "fixed top-28 bottom-24 z-10 bg-[#1a1a1a] border-2 border-[#ffb000] rounded-lg shadow-2xl overflow-hidden flex flex-col transition-all duration-300",
             assistantPosition === "left" ? "left-4" : "right-4"
           )}
+          style={{ width: `${panelWidth}px` }}
         >
+          {/* Resize handle - positioned on the inner edge */}
+          <div
+            className={cn(
+              "absolute top-0 bottom-0 w-2 cursor-col-resize z-20 hover:bg-[#ffb000]/20 transition-colors",
+              assistantPosition === "left" ? "right-0" : "left-0"
+            )}
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          >
+            {/* Visual indicator */}
+            <div className={cn(
+              "absolute top-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-[#ffb000]/30",
+              assistantPosition === "left" ? "right-0.5" : "left-0.5"
+            )} />
+          </div>
+
           {/* Terminal header */}
           <div className="flex items-center justify-between px-3 py-2 bg-[#2a2a2a] border-b border-[#ffb000]/30 flex-shrink-0">
             <div className="flex items-center gap-2">
