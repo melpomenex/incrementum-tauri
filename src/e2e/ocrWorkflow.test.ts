@@ -6,12 +6,12 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { useSettingsStore } from "../../stores/settingsStore";
-import { useDocumentStore } from "../../stores/documentStore";
-import * as documentsApi from "../../api/documents";
+import { useSettingsStore } from "../stores/settingsStore";
+import { useDocumentStore } from "../stores/documentStore";
+import * as documentsApi from "../api/documents";
 
 // Mock the API
-vi.mock("../../api/documents", () => ({
+vi.mock("../api/documents", () => ({
   getDocuments: vi.fn(),
   getDocument: vi.fn(),
   createDocument: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock("../../api/documents", () => ({
 }));
 
 // Mock the OCR commands
-vi.mock("../../api/ocrCommands", () => ({
+vi.mock("../api/ocrCommands", () => ({
   initOCR: vi.fn(),
   ocrImageFile: vi.fn(),
   extractKeyPhrases: vi.fn(),

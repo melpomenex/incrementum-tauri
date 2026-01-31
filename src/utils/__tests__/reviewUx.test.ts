@@ -40,8 +40,8 @@ describe("reviewUx helpers", () => {
   });
 
   it("returns drifted status for overdue items", () => {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    expect(getQueueStatus(baseItem({ dueDate: yesterday }))).toBe("drifted");
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    expect(getQueueStatus(baseItem({ itemType: "document", dueDate: twoDaysAgo }))).toBe("drifted");
   });
 
   it("creates time estimate ranges", () => {

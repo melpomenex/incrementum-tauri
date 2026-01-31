@@ -1,0 +1,77 @@
+name: Cleanup Deployments
+
+on:
+  schedule:
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  deployments: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trim deployments per environment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const keepCount = 5;
+            const { owner, repo } = context.repo;
+
+            async function listAllDeployments() {
+              const all = [];
+              let page = 1;
+              while (true) {
+                const { data } = await github.rest.repos.listDeployments({
+                  owner,
+                  repo,
+                  per_page: 100,
+                  page,
+                });
+                if (!data.length) break;
+                all.push(...data);
+                page += 1;
+              }
+              return all;
+            }
+
+            const deployments = await listAllDeployments();
+            const byEnv = new Map();
+
+            for (const dep of deployments) {
+              const env = dep.environment || "default";
+              if (!byEnv.has(env)) byEnv.set(env, []);
+              byEnv.get(env).push(dep);
+            }
+
+            for (const [env, deps] of byEnv.entries()) {
+              deps.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              const toDelete = deps.slice(keepCount);
+              core.info(`Environment "${env}": keeping ${Math.min(keepCount, deps.length)}, deleting ${toDelete.length}`);
+
+              for (const dep of toDelete) {
+                try {
+                  await github.rest.repos.createDeploymentStatus({
+                    owner,
+                    repo,
+                    deployment_id: dep.id,
+                    state: "inactive",
+                  });
+                } catch (err) {
+                  core.warning(`Failed to mark inactive for ${dep.id}: ${err.message}`);
+                }
+
+                try {
+                  await github.rest.repos.deleteDeployment({
+                    owner,
+                    repo,
+                    deployment_id: dep.id,
+                  });
+                  core.info(`Deleted deployment ${dep.id}`);
+                } catch (err) {
+                  core.warning(`Failed to delete ${dep.id}: ${err.message}`);
+                }
+              }
+            }

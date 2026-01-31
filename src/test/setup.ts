@@ -22,6 +22,17 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve({ unregister: vi.fn() })),
 }));
 
+// Mock PDF.js for test environment to avoid DOMMatrix dependency.
+vi.mock("pdfjs-dist", () => ({
+  GlobalWorkerOptions: { workerSrc: "" },
+  getDocument: vi.fn(() => ({
+    promise: Promise.resolve({
+      numPages: 0,
+      getPage: vi.fn(),
+    }),
+  })),
+}));
+
 // Mock window.__TAURI__ for Tauri 2.0
 Object.defineProperty(window, "__TAURI__", {
   value: {

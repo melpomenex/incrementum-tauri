@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 use serde::Deserialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use zip::ZipArchive;
 
 use crate::database::Repository;
