@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Play, Clock, ExternalLink, Share2, Youtube, AlertTriangle, SkipForward, Loader2 } from "lucide-react";
+import { Play, Clock, ExternalLink, Share2, Youtube, AlertTriangle, SkipForward, Loader2, GripVertical } from "lucide-react";
 import { useToast } from "../common/Toast";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
@@ -54,6 +54,15 @@ export function YouTubeViewer({
     return saved !== 'false';
   });
   const [transcriptLayout, setTranscriptLayout] = useState<'below' | 'side'>('below');
+  
+  // Resizable transcript panel state
+  const [transcriptWidth, setTranscriptWidth] = useState(() => {
+    const saved = localStorage.getItem('transcript-panel-width');
+    return saved ? parseInt(saved, 10) : 400; // Default 400px
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(0);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
@@ -87,6 +96,55 @@ export function YouTubeViewer({
   useEffect(() => {
     localStorage.setItem('transcript-visibility', String(showTranscript));
   }, [showTranscript]);
+
+  // Persist transcript width to localStorage
+  useEffect(() => {
+    localStorage.setItem('transcript-panel-width', String(transcriptWidth));
+  }, [transcriptWidth]);
+
+  // Handle resize start
+  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    resizeStartXRef.current = clientX;
+    resizeStartWidthRef.current = transcriptWidth;
+    
+    // Add resize cursor to body
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+  }, [transcriptWidth]);
+
+  // Handle resize move
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent | TouchEvent) => {
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const delta = resizeStartXRef.current - clientX; // Inverted: dragging left increases width
+      const newWidth = Math.max(250, Math.min(800, resizeStartWidthRef.current + delta));
+      setTranscriptWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleMouseMove);
+    window.addEventListener('touchend', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleMouseMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Load SponsorBlock segments
   useEffect(() => {
@@ -351,18 +409,27 @@ export function YouTubeViewer({
     },
   };
 
+  // Calculate video container style based on layout
+  const getVideoContainerStyle = () => {
+    if (transcriptLayout === 'side' && showTranscript) {
+      return {
+        paddingBottom: '60px',
+        flex: 1,
+      };
+    }
+    return {
+      paddingBottom: showTranscript ? "40%" : "56.25%",
+      minHeight: showTranscript ? "300px" : "auto",
+    };
+  };
+
   return (
     <div className={`flex h-full bg-background ${transcriptLayout === 'side' && showTranscript ? 'flex-row' : 'flex-col'}`}>
       {/* Video Player Container */}
       <div
         ref={containerRef}
-        className={`relative bg-black flex-shrink-0 transition-all duration-300 ${transcriptLayout === 'side' && showTranscript ? 'w-1/2 h-full' : 'w-full'}`}
-        style={transcriptLayout === 'side' && showTranscript ? {
-          paddingBottom: '60px'
-        } : {
-          paddingBottom: showTranscript ? "40%" : "56.25%",
-          minHeight: showTranscript ? "300px" : "auto"
-        }}
+        className={`relative bg-black flex-shrink-0 transition-all duration-300 ${transcriptLayout === 'side' && showTranscript ? 'h-full' : 'w-full'}`}
+        style={getVideoContainerStyle()}
       >
         {/* Inline Player */}
         {showInlinePlayer ? (
@@ -453,8 +520,26 @@ export function YouTubeViewer({
         )}
       </div>
 
+      {/* Resize handle - only in side mode with transcript visible */}
+      {transcriptLayout === 'side' && showTranscript && (
+        <div
+          className={`w-1 flex-shrink-0 relative z-10 ${isResizing ? 'bg-primary' : 'bg-border hover:bg-primary/50'} cursor-ew-resize transition-colors`}
+          onMouseDown={handleResizeStart}
+          onTouchStart={handleResizeStart}
+          title="Drag to resize"
+        >
+          {/* Visual grip indicator */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-1 rounded bg-background/80 shadow-sm">
+            <GripVertical className="w-3 h-3 text-muted-foreground" />
+          </div>
+        </div>
+      )}
+
       {/* Content area with transcript toggle */}
-      <div className={`flex-1 flex overflow-hidden ${transcriptLayout === 'side' && showTranscript ? 'w-1/2' : ''}`}>
+      <div 
+        className="flex flex-col overflow-hidden"
+        style={transcriptLayout === 'side' && showTranscript ? { width: transcriptWidth } : { flex: 1 }}
+      >
         {/* Video info and transcript */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Video info header */}
