@@ -17,6 +17,7 @@ import {
   Minimize2,
   Newspaper,
   X,
+  Scroll,
 } from "lucide-react";
 import {
   Feed,
@@ -44,6 +45,7 @@ import {
 } from "../../api/rss";
 import { RSSCustomizationPanel, RSSUserPreferenceUpdate } from "./RSSCustomizationPanel";
 import { NewsletterDirectory } from "../newsletter/NewsletterDirectory";
+import { RSSScrollMode } from "./RSSScrollMode";
 import { isTauri } from "../../lib/tauri";
 
 type ViewMode = "all" | "unread" | "favorites" | "search";
@@ -70,6 +72,7 @@ export function RSSReader() {
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [lastAutoRefresh, setLastAutoRefresh] = useState<Date | null>(null);
   const [isMobileFullScreen, setIsMobileFullScreen] = useState(false);
+  const [scrollMode, setScrollMode] = useState(false);
 
   // Reference to the auto-refresh interval
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -465,6 +468,13 @@ export function RSSReader() {
                   title="Customize view"
                 >
                   <Settings className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setScrollMode(true)}
+                  className="p-2 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 rounded transition-colors"
+                  title="Enter scroll mode"
+                >
+                  <Scroll className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -873,4 +883,16 @@ export function RSSReader() {
     )}
     </>
   );
+
+  // Scroll mode view
+  if (scrollMode) {
+    return (
+      <RSSScrollMode
+        onExit={() => setScrollMode(false)}
+        initialFeedId={selectedFeed?.id}
+      />
+    );
+  }
+
+  return null;
 }
