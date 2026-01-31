@@ -48,6 +48,10 @@ jobs:
         if: runner.os == 'Windows'
         run: echo "RUST_MIN_STACK=33554432" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Force bundled SQLite (Windows)
+        if: runner.os == 'Windows'
+        run: echo "LIBSQLITE3_SYS_BUNDLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Sync node version and setup cache
         uses: actions/setup-node@v4
         with:
