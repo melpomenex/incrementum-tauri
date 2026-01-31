@@ -15,8 +15,8 @@ Vagrantfile
 
 # Ignore directories
 Incrementum-CPP
-vps_service
-transcript_tester
+vps-service
+transcript-tester
 
 # Editor directories and files
 .vscode
