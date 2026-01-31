@@ -91,19 +91,23 @@ export async function buildCollectionArchive(options: {
 
   for (const doc of scopedDocuments) {
     if (!doc.filePath) continue;
-    const base64 = await invokeCommand<string>("read_document_file", { filePath: doc.filePath });
-    if (!base64) continue;
-    const filename = getFilenameFromPath(doc.filePath, `${doc.id}.bin`);
-    const zipPath = `files/${doc.id}/${filename}`;
-    const bytes = base64ToBytes(base64);
-    zip.file(zipPath, bytes);
-    files.push({
-      documentId: doc.id,
-      filename,
-      contentType: doc.fileType ? `application/${doc.fileType}` : undefined,
-      zipPath,
-      size: bytes.byteLength,
-    });
+    try {
+      const base64 = await invokeCommand<string>("read_document_file", { filePath: doc.filePath });
+      if (!base64) continue;
+      const filename = getFilenameFromPath(doc.filePath, `${doc.id}.bin`);
+      const zipPath = `files/${doc.id}/${filename}`;
+      const bytes = base64ToBytes(base64);
+      zip.file(zipPath, bytes);
+      files.push({
+        documentId: doc.id,
+        filename,
+        contentType: doc.fileType ? `application/${doc.fileType}` : undefined,
+        zipPath,
+        size: bytes.byteLength,
+      });
+    } catch (error) {
+      console.warn("Failed to add document file to archive:", doc.filePath, error);
+    }
   }
 
   const deckName = options.scope === "all"

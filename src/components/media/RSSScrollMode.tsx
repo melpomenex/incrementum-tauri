@@ -43,6 +43,7 @@ import { useToast } from "../common/Toast";
 import { CreateExtractDialog } from "../extracts/CreateExtractDialog";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { summarizeContent } from "../../api/ai";
+import { isTauri } from "../../lib/tauri";
 
 interface RSSScrollItem {
   feed: Feed;
@@ -163,6 +164,12 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
   const [displayedSummary, setDisplayedSummary] = useState("");
   const [showSummary, setShowSummary] = useState(false);
 
+  // Auto-read mode - when enabled, marking one item as read auto-marks subsequent items
+  const [autoReadMode, setAutoReadMode] = useState(() => {
+    const saved = localStorage.getItem("rss-auto-read-mode");
+    return saved === "true";
+  });
+
   // Assistant panel state
   const [assistantPosition, setAssistantPosition] = useState<AssistantPosition>(() => {
     const saved = localStorage.getItem("rss-assistant-position");
@@ -226,28 +233,30 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     sessionStorage.setItem(RSS_SCROLL_POSITION_KEY, String(currentIndex));
   }, [currentIndex]);
 
-  // Mark current item as read when viewed
+  // Save auto-read mode preference
   useEffect(() => {
+    localStorage.setItem("rss-auto-read-mode", String(autoReadMode));
+  }, [autoReadMode]);
+
+  // Handle navigation with auto-read mode
+  useEffect(() => {
+    // When navigating to a new item and auto-read mode is on, mark it as read
+    if (!autoReadMode) return;
+    
     const currentItem = scrollItems[currentIndex];
     if (!currentItem) return;
-
+    
     const itemKey = `${currentItem.feed.id}-${currentItem.item.id}`;
-    if (!readItems.has(itemKey) && !currentItem.item.read) {
-      // Mark as read after viewing for 3 seconds
-      const timer = setTimeout(async () => {
-        try {
-          await markItemReadAuto(currentItem.feed.id, currentItem.item.id, true);
-        } catch (error) {
-          // Silently fail - the item will still be marked as read in local state
-          console.warn("Failed to mark item as read:", error);
-        }
-        // Always update local state regardless of API success
-        setReadItems((prev) => new Set(prev).add(itemKey));
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [currentIndex, scrollItems, readItems]);
+    if (readItems.has(itemKey) || currentItem.item.read) return;
+    if (currentItem.item.favorite) return; // Don't auto-mark favorites
+    
+    // Small delay to let user see the article first
+    const timer = setTimeout(() => {
+      handleMarkRead(currentItem.feed.id, currentItem.item.id);
+    }, 2000);
+    
+    return () => clearTimeout(timer);
+  }, [currentIndex, autoReadMode]); // Only trigger on navigation, not on scrollItems changes
 
   // Navigation functions
   const goToNext = useCallback(() => {
@@ -384,17 +393,51 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     );
   }, []);
 
-  // Handle mark as read
-  const handleMarkRead = useCallback(async (feedId: string, itemId: string) => {
+  // Handle mark as read - removes item from scroll list (except favorites)
+  const handleMarkRead = useCallback(async (feedId: string, itemId: string, shouldToggleAutoRead = false) => {
+    // Toggle auto-read mode if requested (user clicked the button)
+    if (shouldToggleAutoRead) {
+      setAutoReadMode(prev => !prev);
+    }
+    
     try {
       await markItemReadAuto(feedId, itemId, true);
     } catch (error) {
       console.warn("Failed to mark as read:", error);
     }
-    // Always update local state regardless of API success
+    
+    // Find the item to check if it's favorited
+    const itemToRemove = scrollItems.find(si => si.feed.id === feedId && si.item.id === itemId);
+    
+    // Don't remove if favorited - preserve for later access
+    if (itemToRemove?.item.favorite) {
+      const itemKey = `${feedId}-${itemId}`;
+      setReadItems((prev) => new Set(prev).add(itemKey));
+      return;
+    }
+    
+    // Get current index before removal
+    const itemIndex = scrollItems.findIndex(si => si.feed.id === feedId && si.item.id === itemId);
+    if (itemIndex === -1) return;
+    
+    // Remove item from scroll list
+    const newItems = scrollItems.filter((_, idx) => idx !== itemIndex);
+    setScrollItems(newItems);
+    
+    // Adjust indices after removal (use functional updates to avoid stale closures)
+    if (itemIndex < currentIndex) {
+      setCurrentIndex(prev => Math.max(0, prev - 1));
+    }
+    if (itemIndex < renderedIndex) {
+      setRenderedIndex(prev => Math.max(0, prev - 1));
+    }
+    // If we removed the current item, stay at same index (next item slides in)
+    // No need to change currentIndex since we removed current and next becomes current
+    
+    // Track in read items set
     const itemKey = `${feedId}-${itemId}`;
     setReadItems((prev) => new Set(prev).add(itemKey));
-  }, []);
+  }, [scrollItems, currentIndex, renderedIndex]);
 
   // Handle text selection
   const updateSelection = useCallback(() => {
@@ -518,7 +561,7 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
 
   // Typewriter effect for summary
   useEffect(() => {
-    if (!showSummary || summaryMode !== "terminal") return;
+    if (!showSummary || summaryMode !== "terminal" || !summaryText) return;
 
     let currentIndex = 0;
     const text = summaryText;
@@ -539,34 +582,59 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     return () => clearTimeout(timeoutId);
   }, [showSummary, summaryText, summaryMode]);
 
+  // Helper to strip HTML and convert to markdown-like text
+  const htmlToText = (html: string): string => {
+    // Create a temporary element to parse HTML
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    
+    // Get text content
+    let text = tmp.textContent || tmp.innerText || '';
+    
+    // Clean up whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    return text;
+  };
+
   // Handle summarize
   const handleSummarize = useCallback(async () => {
     const currentItem = scrollItems[renderedIndex];
     if (!currentItem || isSummarizing) return;
 
-    const content = currentItem.item.content || currentItem.item.description || "";
+    const rawContent = currentItem.item.content || currentItem.item.description || "";
+    // Convert HTML to clean text
+    const content = htmlToText(rawContent);
+    
     if (!content.trim()) {
       toast.error("No content to summarize");
       return;
     }
 
+    // Show inline terminal panel
     setIsSummarizing(true);
     setSummaryText("");
     setDisplayedSummary("");
     setShowSummary(true);
     setAssistantContext(content);
 
-    try {
-      // Use the summarizeContent function
-      const summary = await summarizeContent(content, 200);
+    // Check if we're in Tauri mode
+    if (!isTauri()) {
+      // Browser mode - show placeholder summary
+      const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
+      const excerpt = sentences.slice(0, 3).join(". ") + ".";
+      const summary = `## Quick Summary\n\n${excerpt}\n\n---\n\n*Note: AI summarization requires the desktop app for full functionality. This is an extractive preview.*`;
       
-      if (summaryMode === "terminal") {
-        setSummaryText(summary);
-      } else {
-        // For assistant mode, just set the text directly
-        setSummaryText(summary);
-        setDisplayedSummary(summary);
-      }
+      setSummaryText(summary);
+      setDisplayedSummary(summary);
+      setIsSummarizing(false);
+      return;
+    }
+
+    try {
+      // Use the summarizeContent function (Tauri only)
+      const summary = await summarizeContent(content, 200);
+      setSummaryText(summary);
     } catch (error) {
       console.error("Failed to summarize:", error);
       toast.error("Failed to generate summary", error instanceof Error ? error.message : "Unknown error");
@@ -574,7 +642,7 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
     } finally {
       setIsSummarizing(false);
     }
-  }, [scrollItems, renderedIndex, isSummarizing, summaryMode, toast]);
+  }, [scrollItems, renderedIndex, isSummarizing, toast]);
 
   // Toggle assistant visibility
   const toggleAssistant = useCallback(() => {
@@ -669,17 +737,23 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
               >
                 <Sparkles className="w-5 h-5" />
               </button>
+              {/* Mark as read / Auto-read toggle */}
               <button
-                onClick={() => handleMarkRead(currentItem.feed.id, currentItem.item.id)}
+                onClick={() => handleMarkRead(currentItem.feed.id, currentItem.item.id, true)}
                 className={cn(
-                  "p-2 rounded-lg transition-colors",
-                  currentItem.item.read || readItems.has(`${currentItem.feed.id}-${currentItem.item.id}`)
-                    ? "text-green-500"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  "p-2 rounded-lg transition-all duration-200 relative",
+                  autoReadMode
+                    ? "bg-green-500/20 text-green-500 ring-2 ring-green-500/50"
+                    : currentItem.item.read || readItems.has(`${currentItem.feed.id}-${currentItem.item.id}`)
+                      ? "text-green-500"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
-                title="Mark as read"
+                title={autoReadMode ? "Auto-read mode ON - Click to disable" : "Mark as read"}
               >
                 <CheckCircle2 className="w-5 h-5" />
+                {autoReadMode && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                )}
               </button>
               <button
                 onClick={() => handleToggleFavorite(currentItem.feed.id, currentItem.item.id)}
@@ -853,95 +927,53 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
         )}
       </div>
 
-      {/* Terminal-style Summary Overlay */}
-      {showSummary && summaryMode === "terminal" && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-3xl bg-[#1a1a1a] rounded-lg border-2 border-[#ffb000] shadow-2xl overflow-hidden">
-            {/* Terminal header */}
-            <div className="flex items-center justify-between px-4 py-2 bg-[#2a2a2a] border-b border-[#ffb000]/30">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span className="ml-2 text-[#ffb000] font-mono text-sm">AI_SUMMARY.exe</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSummaryMode("assistant")}
-                  className="px-2 py-1 text-xs text-[#ffb000]/70 hover:text-[#ffb000] font-mono transition-colors"
-                  title="Switch to assistant mode"
-                >
-                  [SWITCH_MODE]
-                </button>
-                <button
-                  onClick={closeSummary}
-                  className="px-2 py-1 text-xs text-[#ffb000]/70 hover:text-[#ffb000] font-mono transition-colors"
-                >
-                  [X]
-                </button>
-              </div>
-            </div>
-
-            {/* Terminal content */}
-            <div className="p-6 font-mono text-[#ffb000] min-h-[200px] max-h-[70vh] overflow-y-auto">
-              {isSummarizing && displayedSummary === "" && (
-                <div className="animate-pulse">Initializing neural network...</div>
-              )}
-              <div className="whitespace-pre-wrap leading-relaxed">
-                {displayedSummary}
-                {isSummarizing && <span className="animate-pulse">▋</span>}
-              </div>
-            </div>
-
-            {/* Terminal footer */}
-            <div className="px-4 py-2 bg-[#2a2a2a] border-t border-[#ffb000]/30 text-[#ffb000]/50 text-xs font-mono">
-              Model: {settings.ai.model} | Provider: {settings.ai.provider} | Tokens: {settings.ai.maxTokens}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Assistant Panel */}
-      {isAssistantVisible && summaryMode === "assistant" && showSummary && (
-        <div
+      {/* Inline Terminal Summary Panel */}
+      {showSummary && summaryMode === "terminal" && renderedItem && (
+        <div 
           className={cn(
-            "fixed top-16 bottom-4 w-80 z-40 bg-card border border-border rounded-lg shadow-xl overflow-hidden flex flex-col",
+            "fixed top-28 bottom-24 w-80 z-10 bg-[#1a1a1a] border-2 border-[#ffb000] rounded-lg shadow-2xl overflow-hidden flex flex-col transition-all duration-300",
             assistantPosition === "left" ? "left-4" : "right-4"
           )}
         >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50">
-            <span className="text-sm font-medium flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              AI Summary
-            </span>
+          {/* Terminal header */}
+          <div className="flex items-center justify-between px-3 py-2 bg-[#2a2a2a] border-b border-[#ffb000]/30 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+              <span className="ml-2 text-[#ffb000] font-mono text-xs">AI_SUMMARY.exe</span>
+            </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={toggleAssistantPosition}
-                className="p-1 text-muted-foreground hover:text-foreground rounded"
+                className="px-1.5 py-0.5 text-xs text-[#ffb000]/70 hover:text-[#ffb000] font-mono transition-colors"
                 title="Move panel"
               >
                 ↔
               </button>
               <button
                 onClick={closeSummary}
-                className="p-1 text-muted-foreground hover:text-foreground rounded"
+                className="px-1.5 py-0.5 text-xs text-[#ffb000]/70 hover:text-[#ffb000] font-mono transition-colors"
               >
-                ×
+                [X]
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert">
-            {isSummarizing && displayedSummary === "" ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                Generating summary...
-              </div>
-            ) : (
-              <div className="whitespace-pre-wrap">{displayedSummary}</div>
+
+          {/* Terminal content */}
+          <div className="flex-1 p-4 font-mono text-[#ffb000] overflow-y-auto text-sm leading-relaxed">
+            {isSummarizing && displayedSummary === "" && (
+              <div className="animate-pulse">Initializing neural network...</div>
             )}
+            <div className="whitespace-pre-wrap">
+              {displayedSummary}
+              {isSummarizing && <span className="animate-pulse">▋</span>}
+            </div>
           </div>
-          <div className="px-3 py-2 border-t border-border text-xs text-muted-foreground bg-muted/30">
-            {settings.ai.model} • {settings.ai.provider}
+
+          {/* Terminal footer */}
+          <div className="px-3 py-1.5 bg-[#2a2a2a] border-t border-[#ffb000]/30 text-[#ffb000]/50 text-[10px] font-mono truncate">
+            {settings?.ai?.model || 'AI'} • {settings?.ai?.provider || 'Provider'}
           </div>
         </div>
       )}
@@ -953,29 +985,32 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
           showControls ? "opacity-100" : "opacity-0"
         )}
       >
-        {/* Assistant toggle */}
+        {/* Summary toggle */}
         <button
-          onClick={toggleAssistant}
+          onClick={() => showSummary ? closeSummary() : handleSummarize()}
+          disabled={isSummarizing}
           className={cn(
             "flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm",
-            isAssistantVisible
-              ? "bg-primary text-primary-foreground"
+            showSummary
+              ? "bg-[#ffb000] text-black hover:bg-[#ffb000]/90"
               : "bg-black/70 text-white hover:bg-black/80"
           )}
-          title={isAssistantVisible ? "Hide assistant" : "Show assistant"}
+          title={showSummary ? "Close summary" : "Generate AI summary"}
         >
           <Sparkles className="w-4 h-4" />
-          <span>{isAssistantVisible ? "Hide AI" : "Show AI"}</span>
+          <span>{isSummarizing ? "Summarizing..." : showSummary ? "Close Summary" : "Summarize"}</span>
         </button>
 
-        {/* Summary mode toggle */}
-        <button
-          onClick={() => setSummaryMode(prev => prev === "terminal" ? "assistant" : "terminal")}
-          className="px-3 py-2 bg-black/70 text-white hover:bg-black/80 rounded-lg transition-colors text-sm"
-          title="Toggle summary mode"
-        >
-          {summaryMode === "terminal" ? "🖥️ Terminal" : "📋 Panel"}
-        </button>
+        {/* Position toggle (only when summary is shown) */}
+        {showSummary && (
+          <button
+            onClick={toggleAssistantPosition}
+            className="px-3 py-2 bg-black/70 text-white hover:bg-black/80 rounded-lg transition-colors text-sm"
+            title="Move summary panel"
+          >
+            {assistantPosition === "left" ? "→ Right" : "← Left"}
+          </button>
+        )}
       </div>
 
       {/* Help text */}
@@ -985,7 +1020,7 @@ export function RSSScrollMode({ onExit, initialFeedId }: RSSScrollModeProps) {
           showControls ? "opacity-100" : "opacity-0"
         )}
       >
-        Scroll or use ↑↓ arrows to navigate • Press ? for help
+        Scroll or use ↑↓ arrows • Mark as read (✓) enables auto-read • Press ? for help
       </div>
 
       {/* Floating Extract Button */}
