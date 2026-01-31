@@ -316,23 +316,31 @@ export function EPUBViewer({
     if (!rendition || !viewerRef.current) return;
 
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    let animationFrameId: number | null = null;
 
     const resizeObserver = new ResizeObserver(() => {
-      // Skip resize events during initial load to prevent blank page
-      if (!initialDisplayCompleteRef.current) {
-        console.log("EPUBViewer: Skipping resize during initial load");
-        return;
+      // Use requestAnimationFrame to avoid "loop completed with undelivered notifications" error
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
       }
-      // Debounce resize calls to avoid excessive re-renders
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-      resizeTimeout = setTimeout(() => {
-        if (rendition) {
-          console.log("EPUBViewer: Container resized, calling rendition.resize()");
-          rendition.resize();
+      
+      animationFrameId = requestAnimationFrame(() => {
+        // Skip resize events during initial load to prevent blank page
+        if (!initialDisplayCompleteRef.current) {
+          console.log("EPUBViewer: Skipping resize during initial load");
+          return;
         }
-      }, 150);
+        // Debounce resize calls to avoid excessive re-renders
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
+        }
+        resizeTimeout = setTimeout(() => {
+          if (rendition) {
+            console.log("EPUBViewer: Container resized, calling rendition.resize()");
+            rendition.resize();
+          }
+        }, 150);
+      });
     });
 
     resizeObserver.observe(viewerRef.current);
@@ -340,6 +348,9 @@ export function EPUBViewer({
     return () => {
       if (resizeTimeout) {
         clearTimeout(resizeTimeout);
+      }
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
       }
       resizeObserver.disconnect();
     };

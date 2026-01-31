@@ -31,6 +31,17 @@ import type { ViewState } from "../../types/readerPosition";
 import { saveDocumentPosition, pagePosition, scrollPosition, cfiPosition, timePosition } from "../../api/position";
 import type { DocumentPosition } from "../../types/position";
 
+// Helper to format seconds as MM:SS or HH:MM:SS
+function formatTime(seconds: number): string {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
 type ViewMode = "document" | "extracts" | "cards";
 
 type DocumentType = "pdf" | "epub" | "markdown" | "html" | "youtube" | "video" | "audio";
@@ -117,6 +128,13 @@ interface DocumentViewerProps {
   onPdfContextTextChange?: (text: string) => void;
   contextPageWindow?: number;
   onExtractCreated?: (extract: Extract) => void;
+  onVideoContextChange?: (context: { 
+    videoId: string; 
+    title?: string; 
+    transcript?: string; 
+    currentTime?: number;
+    duration?: number;
+  } | null) => void;
 }
 
 export function DocumentViewer({
@@ -128,6 +146,7 @@ export function DocumentViewer({
   onPdfContextTextChange,
   contextPageWindow,
   onExtractCreated,
+  onVideoContextChange,
 }: DocumentViewerProps) {
   const toast = useToast();
   const { documents, setCurrentDocument, currentDocument: globalCurrentDocument } = useDocumentStore();
@@ -149,6 +168,19 @@ export function DocumentViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [pagesRendered, setPagesRendered] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode ?? "document");
+  const [videoContext, setVideoContext] = useState<{
+    videoId: string;
+    title?: string;
+    transcript?: string;
+    currentTime?: number;
+    duration?: number;
+  } | null>(null);
+
+  // Notify parent of video context changes
+  useEffect(() => {
+    onVideoContextChange?.(videoContext);
+  }, [videoContext, onVideoContextChange]);
+
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1945,6 +1977,21 @@ export function DocumentViewer({
               documentId={currentDocument.id}
               title={currentDocument.title}
               onLoad={handleDocumentLoad}
+              onTranscriptLoad={(segments) => {
+                const transcriptText = segments.map(s => `[${formatTime(s.start)}] ${s.text}`).join("\n");
+                setVideoContext(prev => ({
+                  ...prev,
+                  videoId: extractYouTubeId(currentDocument.filePath),
+                  title: currentDocument.title,
+                  transcript: transcriptText,
+                }));
+              }}
+              onTimeUpdate={(time) => {
+                setVideoContext(prev => prev ? { ...prev, currentTime: time } : null);
+              }}
+              onSelectionChange={(text) => {
+                onSelectionChange?.(text);
+              }}
             />
           </div>
         ) : (

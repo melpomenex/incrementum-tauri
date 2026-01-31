@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useTabsStore } from "../../stores";
 import {
   QueueTab,
@@ -5,9 +6,27 @@ import {
   DocumentsTab,
   AnalyticsTab,
 } from "./TabRegistry";
+import { getDashboardStats, type DashboardStats } from "../../api/analytics";
 
 export function DashboardTab() {
   const { addTab } = useTabsStore();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const data = await getDashboardStats();
+      setStats(data);
+    } catch (error) {
+      console.error("Failed to load dashboard stats:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="h-full overflow-auto p-4 md:p-6 lg:p-8 pb-20 md:pb-8">
@@ -100,15 +119,33 @@ export function DashboardTab() {
         <h2 className="text-lg md:text-xl font-semibold text-foreground mb-3 md:mb-4">Quick Stats</h2>
         <div className="grid grid-cols-3 gap-3 md:gap-4">
           <div className="text-center md:text-left">
-            <div className="text-xl md:text-2xl font-bold text-foreground">0</div>
+            <div className="text-xl md:text-2xl font-bold text-foreground">
+              {isLoading ? (
+                <span className="animate-pulse">...</span>
+              ) : (
+                stats?.total_documents ?? 0
+              )}
+            </div>
             <div className="text-xs md:text-sm text-muted-foreground">Documents</div>
           </div>
           <div className="text-center md:text-left">
-            <div className="text-xl md:text-2xl font-bold text-foreground">0</div>
+            <div className="text-xl md:text-2xl font-bold text-foreground">
+              {isLoading ? (
+                <span className="animate-pulse">...</span>
+              ) : (
+                stats?.cards_due_today ?? 0
+              )}
+            </div>
             <div className="text-xs md:text-sm text-muted-foreground">Due Today</div>
           </div>
           <div className="text-center md:text-left">
-            <div className="text-xl md:text-2xl font-bold text-foreground">0</div>
+            <div className="text-xl md:text-2xl font-bold text-foreground">
+              {isLoading ? (
+                <span className="animate-pulse">...</span>
+              ) : (
+                stats?.cards_learned ?? 0
+              )}
+            </div>
             <div className="text-xs md:text-sm text-muted-foreground">Cards Learned</div>
           </div>
         </div>

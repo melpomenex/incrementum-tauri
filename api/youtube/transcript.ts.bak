@@ -1,0 +1,424 @@
+/**
+ * Vercel Serverless Function for fetching YouTube transcripts
+ * Uses yt-dlp (youtube-dl-exec) for reliable transcript extraction
+ * 
+ * RESIDENTIAL PROXY CONFIGURATION (Recommended):
+ * To avoid bot detection, configure a residential proxy using environment variables.
+ * 
+ * Setup Instructions:
+ * 1. Sign up for a residential proxy service (e.g., Decodo, Bright Data, Oxylabs)
+ * 2. Get your proxy URL in format: http://username:password@host:port
+ * 3. Set the environment variable in Vercel Dashboard:
+ *    - DECODO_PROXY_URL: Your full proxy URL
+ */
+
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import youtubeDl from 'youtube-dl-exec';
+
+interface TranscriptSegment {
+  text: string;
+  start: number;
+  duration: number;
+}
+
+interface CaptionTrack {
+  ext: string;
+  url: string;
+  name: string;
+}
+
+/**
+ * Get proxy URL from environment variables
+ */
+function getProxyUrl(): string | undefined {
+  return process.env.DECODO_PROXY_URL || process.env.RESIDENTIAL_PROXY_URL || undefined;
+}
+
+/**
+ * Get proxy status for health checks (masks credentials)
+ */
+function getProxyStatus(): { configured: boolean; url: string | null } {
+  const proxyUrl = getProxyUrl();
+  return {
+    configured: !!proxyUrl,
+    url: proxyUrl ? proxyUrl.replace(/:\/\/[^:]+:[^@]+@/, '://***:***@') : null,
+  };
+}
+
+/**
+ * Extract video ID from YouTube URL
+ */
+function extractVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+
+  return null;
+}
+
+/**
+ * Parse WebVTT content to segments
+ */
+function parseWebVTT(content: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+  const lines = content.split('\n');
+  
+  let currentStart = 0;
+  let currentEnd = 0;
+  let currentText = '';
+  let inCue = false;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // Skip header and empty lines
+    if (!trimmed || trimmed === 'WEBVTT' || trimmed.startsWith('NOTE')) {
+      continue;
+    }
+    
+    // Check for timestamp line (e.g., "00:00:01.000 --> 00:00:04.000")
+    const timestampMatch = trimmed.match(/(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})/);
+    
+    if (timestampMatch) {
+      // Save previous cue if exists
+      if (currentText && segments.length === 0 || currentText !== segments[segments.length - 1]?.text) {
+        segments.push({
+          text: currentText.trim(),
+          start: currentStart,
+          duration: currentEnd - currentStart,
+        });
+      }
+      
+      // Parse new timestamps
+      currentStart = timestampToSeconds(timestampMatch[1]);
+      currentEnd = timestampToSeconds(timestampMatch[2]);
+      currentText = '';
+      inCue = true;
+    } else if (inCue && trimmed) {
+      // This is caption text
+      if (currentText) {
+        currentText += ' ';
+      }
+      currentText += trimmed.replace(/<[^>]+>/g, ''); // Remove HTML tags
+    }
+  }
+  
+  // Don't forget the last cue
+  if (currentText && (segments.length === 0 || currentText !== segments[segments.length - 1]?.text)) {
+    segments.push({
+      text: currentText.trim(),
+      start: currentStart,
+      duration: currentEnd - currentStart,
+    });
+  }
+  
+  return segments;
+}
+
+/**
+ * Parse SRT content to segments
+ */
+function parseSRT(content: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+  const blocks = content.split('\n\n');
+  
+  for (const block of blocks) {
+    const lines = block.trim().split('\n');
+    if (lines.length < 3) continue;
+    
+    // Second line should have timestamps
+    const timestampLine = lines[1];
+    const match = timestampLine.match(/(\d{2}:\d{2}:\d{2},\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2},\d{3})/);
+    
+    if (!match) continue;
+    
+    const start = timestampToSeconds(match[1].replace(',', '.'));
+    const end = timestampToSeconds(match[2].replace(',', '.'));
+    const text = lines.slice(2).join(' ').replace(/<[^>]+>/g, '').trim();
+    
+    if (text) {
+      segments.push({
+        text,
+        start,
+        duration: end - start,
+      });
+    }
+  }
+  
+  return segments;
+}
+
+/**
+ * Convert timestamp to seconds
+ */
+function timestampToSeconds(timestamp: string): number {
+  const parts = timestamp.split(':');
+  const hours = parseFloat(parts[0] || '0');
+  const minutes = parseFloat(parts[1] || '0');
+  const seconds = parseFloat(parts[2] || '0');
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+/**
+ * Get the best caption track based on priority
+ * Priority: manual subtitles (en-US, en-CA, en) > auto captions (en-orig, en-US, en-CA, en)
+ */
+function getBestCaptionTrack(subtitles: any, automaticCaptions: any): CaptionTrack | null {
+  const subtitlePriorities = ['en-US', 'en-CA', 'en'];
+  const autoCaptionPriorities = ['en-orig', 'en-US', 'en-CA', 'en'];
+  const formatPriorities = ['vtt', 'srt', 'ttml'];
+  
+  let captionTrack: any = null;
+  
+  // Check manual subtitles first
+  if (subtitles) {
+    for (const lang of subtitlePriorities) {
+      if (subtitles[lang] && subtitles[lang].length > 0) {
+        captionTrack = subtitles[lang];
+        break;
+      }
+    }
+    
+    // Try any en-* variant
+    if (!captionTrack) {
+      for (const lang of Object.keys(subtitles)) {
+        if (lang.startsWith('en-')) {
+          captionTrack = subtitles[lang];
+          break;
+        }
+      }
+    }
+  }
+  
+  // Check automatic captions if no manual subtitles
+  if (!captionTrack && automaticCaptions) {
+    for (const lang of autoCaptionPriorities) {
+      if (automaticCaptions[lang] && automaticCaptions[lang].length > 0) {
+        captionTrack = automaticCaptions[lang];
+        break;
+      }
+    }
+  }
+  
+  if (!captionTrack) return null;
+  
+  // Find preferred format
+  for (const format of formatPriorities) {
+    for (const track of captionTrack) {
+      if (track.protocol === 'm3u8_native') continue; // Skip m3u8 streams
+      if (track.ext === format) {
+        return {
+          ext: track.ext,
+          url: track.url,
+          name: track.name || 'Unknown',
+        };
+      }
+    }
+  }
+  
+  // Return first compatible track
+  for (const track of captionTrack) {
+    if (track.protocol !== 'm3u8_native') {
+      return {
+        ext: track.ext,
+        url: track.url,
+        name: track.name || 'Unknown',
+      };
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Fetch transcript using yt-dlp
+ */
+async function fetchTranscriptWithYtdlp(videoId: string): Promise<{ segments: TranscriptSegment[]; language: string }> {
+  const proxyUrl = getProxyUrl();
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  
+  console.log(`[yt-dlp] Fetching transcript for ${videoId}${proxyUrl ? ' (with proxy)' : ''}`);
+  
+  try {
+    // Get video info using yt-dlp
+    const result = await youtubeDl(videoUrl, {
+      dumpSingleJson: true,
+      skipDownload: true,
+      writeSubtitles: true,
+      writeAutoSub: true,
+      subtitlesLangs: ['en', 'en-US', 'en-CA', 'en-GB'],
+      noPlaylist: true,
+      proxy: proxyUrl,
+    });
+    
+    const info = result as any;
+    
+    if (!info.subtitles && !info.automatic_captions) {
+      throw new Error('No captions available for this video');
+    }
+    
+    // Get the best caption track
+    const track = getBestCaptionTrack(info.subtitles, info.automatic_captions);
+    
+    if (!track) {
+      throw new Error('No compatible caption track found');
+    }
+    
+    console.log(`[yt-dlp] Using caption track: ${track.name} (${track.ext})`);
+    
+    // Download the caption content
+    const response = await fetch(track.url);
+    if (!response.ok) {
+      throw new Error(`Failed to download captions: ${response.status}`);
+    }
+    
+    const content = await response.text();
+    
+    // Parse based on format
+    let segments: TranscriptSegment[];
+    if (track.ext === 'vtt' || track.ext === 'webvtt') {
+      segments = parseWebVTT(content);
+    } else if (track.ext === 'srt') {
+      segments = parseSRT(content);
+    } else {
+      // Try to parse as VTT first, then SRT
+      try {
+        segments = parseWebVTT(content);
+      } catch {
+        segments = parseSRT(content);
+      }
+    }
+    
+    if (segments.length === 0) {
+      throw new Error('No transcript segments found');
+    }
+    
+    console.log(`[yt-dlp] Successfully parsed ${segments.length} segments`);
+    
+    return {
+      segments,
+      language: 'en', // We prioritize English
+    };
+    
+  } catch (error: any) {
+    console.error('[yt-dlp] Error:', error);
+    
+    // Handle specific errors
+    if (error.message?.includes('Video unavailable')) {
+      throw new Error('This video is unavailable or private');
+    }
+    if (error.message?.includes('Sign in to confirm')) {
+      throw new Error('YOUTUBE_BOT_DETECTED: YouTube requires verification. Try using a residential proxy.');
+    }
+    if (error.message?.includes('age-restricted')) {
+      throw new Error('This video is age-restricted');
+    }
+    
+    throw error;
+  }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Health check endpoint
+  if (req.query.status === 'true') {
+    const proxyStatus = getProxyStatus();
+    
+    return res.status(200).json({
+      success: true,
+      proxy: proxyStatus,
+      method: 'yt-dlp',
+      message: proxyStatus.configured
+        ? 'Using yt-dlp with residential proxy' 
+        : 'Using yt-dlp without proxy (may be blocked by YouTube)',
+    });
+  }
+
+  try {
+    const { videoId, url } = req.query;
+
+    let targetVideoId: string | null = null;
+
+    if (videoId && typeof videoId === 'string') {
+      targetVideoId = videoId;
+    } else if (url && typeof url === 'string') {
+      targetVideoId = extractVideoId(url);
+    }
+
+    if (!targetVideoId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing or invalid videoId or url parameter',
+      });
+    }
+
+    const result = await fetchTranscriptWithYtdlp(targetVideoId);
+
+    return res.status(200).json({
+      success: true,
+      videoId: targetVideoId,
+      language: result.language,
+      segments: result.segments,
+      method: 'yt-dlp',
+    });
+    
+  } catch (error) {
+    console.error('Transcript fetch error:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (errorMessage.includes('YOUTUBE_BOT_DETECTED')) {
+      return res.status(503).json({
+        success: false,
+        error: 'YouTube has detected automated access and is requiring verification.',
+        code: 'YOUTUBE_BOT_DETECTED',
+        message: 'Please configure a residential proxy (DECODO_PROXY_URL) in Vercel environment variables.',
+      });
+    }
+    
+    if (errorMessage.includes('No captions available')) {
+      return res.status(404).json({
+        success: false,
+        error: errorMessage,
+        code: 'NO_CAPTIONS',
+      });
+    }
+    
+    if (errorMessage.includes('unavailable') || errorMessage.includes('private')) {
+      return res.status(404).json({
+        success: false,
+        error: errorMessage,
+        code: 'VIDEO_UNAVAILABLE',
+      });
+    }
+    
+    if (errorMessage.includes('age-restricted')) {
+      return res.status(403).json({
+        success: false,
+        error: errorMessage,
+        code: 'AGE_RESTRICTED',
+      });
+    }
+    
+    return res.status(500).json({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}

@@ -21,6 +21,13 @@ export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWi
   const [selection, setSelection] = useState("");
   const [scrollState, setScrollState] = useState<{ pageNumber?: number; scrollPercent?: number }>({});
   const [pdfContextText, setPdfContextText] = useState<string | undefined>(undefined);
+  const [videoContext, setVideoContext] = useState<{
+    videoId: string;
+    title?: string;
+    transcript?: string;
+    currentTime?: number;
+    duration?: number;
+  } | null>(null);
   const currentDocument = useDocumentStore((state) => state.currentDocument);
   const contextWindowTokens = useSettingsStore((state) => state.settings.ai.maxTokens);
   const aiModel = useSettingsStore((state) => state.settings.ai.model);
@@ -59,10 +66,34 @@ export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWi
     };
   }, [documentId]);
 
+  // Process content for assistant based on document type
   useEffect(() => {
     let isActive = true;
-    const baseContent = pdfContextText ?? currentDocument?.content ?? documentContent;
     const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
+
+    // If video context is available, use that
+    if (videoContext?.transcript) {
+      const videoText = `Video: ${videoContext.title || videoContext.videoId}\nDuration: ${formatDuration(videoContext.duration || 0)}\n\nTRANSCRIPT:\n${videoContext.transcript}`;
+      
+      trimToTokenWindow(videoText, maxTokens, aiModel, selection)
+        .then((trimmed) => {
+          if (isActive) {
+            setAssistantContent(trimmed);
+          }
+        })
+        .catch(() => {
+          if (isActive) {
+            setAssistantContent(videoText.slice(0, maxTokens * 4));
+          }
+        });
+      
+      return () => {
+        isActive = false;
+      };
+    }
+
+    // Otherwise use regular document content
+    const baseContent = pdfContextText ?? currentDocument?.content ?? documentContent;
 
     if (!baseContent) {
       setAssistantContent(undefined);
@@ -86,10 +117,31 @@ export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWi
     return () => {
       isActive = false;
     };
-  }, [currentDocument?.content, documentContent, selection, contextWindowTokens, aiModel, pdfContextText]);
+  }, [currentDocument?.content, documentContent, selection, contextWindowTokens, aiModel, pdfContextText, videoContext]);
 
   const assistantContext = useMemo<AssistantContext>(() => {
     const maxTokens = contextWindowTokens && contextWindowTokens > 0 ? contextWindowTokens : 2000;
+    
+    // If video context is available, create video type context
+    if (videoContext?.videoId) {
+      return {
+        type: "video",
+        documentId,
+        selection: selection || undefined,
+        content: assistantContent,
+        contextWindowTokens: maxTokens,
+        position: {
+          currentTime: videoContext.currentTime,
+        },
+        metadata: {
+          title: videoContext.title,
+          duration: videoContext.duration,
+          videoId: videoContext.videoId,
+        },
+      };
+    }
+    
+    // Otherwise create document type context
     return {
       type: "document",
       documentId,
@@ -98,7 +150,7 @@ export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWi
       contextWindowTokens: maxTokens,
       position: scrollState,
     };
-  }, [assistantContent, documentId, selection, contextWindowTokens, scrollState]);
+  }, [assistantContent, documentId, selection, contextWindowTokens, scrollState, videoContext]);
 
   const handlePositionChange = (newPosition: AssistantPosition) => {
     setAssistantPosition(newPosition);
@@ -125,6 +177,7 @@ export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWi
         initialViewMode={initialViewMode}
         onPdfContextTextChange={setPdfContextText}
         contextPageWindow={2}
+        onVideoContextChange={setVideoContext}
       />
     </div>
   );
@@ -146,6 +199,16 @@ export function DocumentViewer({ documentId, initialViewMode }: DocumentViewerWi
       )}
     </div>
   );
+}
+
+function formatDuration(seconds: number): string {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 /**

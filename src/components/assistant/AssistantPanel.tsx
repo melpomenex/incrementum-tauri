@@ -20,7 +20,7 @@ import { useSettingsStore } from "../../stores";
 import { useLLMProvidersStore } from "../../stores/llmProvidersStore";
 
 export interface AssistantContext {
-  type: "document" | "web" | "general";
+  type: "document" | "web" | "video" | "general";
   content?: string;
   url?: string;
   documentId?: string;
@@ -29,6 +29,12 @@ export interface AssistantContext {
   position?: {
     pageNumber?: number;
     scrollPercent?: number;
+    currentTime?: number;
+  };
+  metadata?: {
+    title?: string;
+    duration?: number;
+    videoId?: string;
   };
 }
 
@@ -183,9 +189,21 @@ export function AssistantPanel({
         return `📄 Viewing document${ctx.documentId ? ` (ID: ${ctx.documentId})` : ""}${ctx.position?.pageNumber ? ` • Page ${ctx.position.pageNumber}` : ""}${typeof ctx.position?.scrollPercent === "number" ? ` • ${ctx.position.scrollPercent.toFixed(1)}%` : ""}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
       case "web":
         return `🌐 Browsing: ${ctx.url || "Unknown page"}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
+      case "video":
+        return `🎬 Watching video: ${ctx.metadata?.title || ctx.metadata?.videoId || "Unknown"}${typeof ctx.position?.currentTime === "number" ? ` • ${formatDuration(ctx.position.currentTime)}` : ""}${ctx.metadata?.duration ? ` / ${formatDuration(ctx.metadata.duration)}` : ""}${ctx.selection ? `. Selected text: "${ctx.selection.slice(0, 100)}..."` : ""}`;
       default:
         return "General context - Ready to help";
     }
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const hours = Math.floor(mins / 60);
+    if (hours > 0) {
+      return `${hours}:${(mins % 60).toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   const handleSendMessage = async () => {

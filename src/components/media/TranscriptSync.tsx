@@ -20,6 +20,7 @@ interface TranscriptSyncProps {
   showTimestamps?: boolean;
   showSpeakers?: boolean;
   onExport?: () => void;
+  onSelectionChange?: (text: string) => void;
   className?: string;
 }
 
@@ -31,6 +32,7 @@ export function TranscriptSync({
   showTimestamps = true,
   showSpeakers = true,
   onExport,
+  onSelectionChange,
   className = "h-[400px]",
 }: TranscriptSyncProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -38,6 +40,7 @@ export function TranscriptSync({
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeSegmentRef = useRef<HTMLDivElement>(null);
+  const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Filter segments based on search query
   useEffect(() => {
@@ -86,6 +89,33 @@ export function TranscriptSync({
   const handleSegmentClick = (segment: TranscriptSegment) => {
     onSeek?.(segment.start);
   };
+
+  // Handle text selection
+  const handleSelection = () => {
+    if (!onSelectionChange) return;
+    
+    // Clear previous timeout
+    if (selectionTimeoutRef.current) {
+      clearTimeout(selectionTimeoutRef.current);
+    }
+    
+    // Debounce selection to avoid spamming
+    selectionTimeoutRef.current = setTimeout(() => {
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim()) {
+        onSelectionChange(selection.toString().trim());
+      }
+    }, 500);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (selectionTimeoutRef.current) {
+        clearTimeout(selectionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Copy transcript text
   const handleCopy = () => {
@@ -148,6 +178,8 @@ export function TranscriptSync({
         ref={containerRef}
         className={`${className} overflow-y-auto p-4 space-y-2`}
         data-transcript-scroll="true"
+        onMouseUp={handleSelection}
+        onKeyUp={handleSelection}
       >
         {filteredSegments.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">

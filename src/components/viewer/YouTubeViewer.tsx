@@ -19,6 +19,9 @@ interface YouTubeViewerProps {
   documentId?: string;
   title?: string;
   onLoad?: (metadata: { duration: number; title: string }) => void;
+  onTranscriptLoad?: (segments: Array<{ text: string; start: number; end: number }>) => void;
+  onTimeUpdate?: (time: number) => void;
+  onSelectionChange?: (text: string) => void;
 }
 
 declare global {
@@ -31,7 +34,15 @@ declare global {
 // Auto-save interval (in milliseconds) - save position every 5 seconds
 const AUTO_SAVE_INTERVAL = 5000;
 
-export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeViewerProps) {
+export function YouTubeViewer({ 
+  videoId, 
+  documentId, 
+  title, 
+  onLoad,
+  onTranscriptLoad,
+  onTimeUpdate,
+  onSelectionChange,
+}: YouTubeViewerProps) {
   const playerRef = useRef<any>(null);
   const toast = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -157,6 +168,9 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
       }));
 
       setTranscript(segments);
+      
+      // Notify parent component of transcript load
+      onTranscriptLoadRef.current?.(segments);
     } catch (error) {
       console.log("Transcript not available:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -330,6 +344,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                   if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
                     const time = playerRef.current.getCurrentTime();
                     setCurrentTime(time);
+                    onTimeUpdateRef.current?.(time);
                   }
                 } catch (e) {
                   // Player might have been destroyed
@@ -984,6 +999,7 @@ export function YouTubeViewer({ videoId, documentId, title, onLoad }: YouTubeVie
                   showTimestamps={true}
                   showSpeakers={false}
                   onExport={handleExportTranscript}
+                  onSelectionChange={onSelectionChange}
                   className="h-full"
                 />
               ) : (

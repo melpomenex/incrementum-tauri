@@ -472,61 +472,69 @@ export function PDFViewer({
     if (!pdf || !scrollContainerRef.current) return;
 
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    let animationFrameId: number | null = null;
 
     const resizeObserver = new ResizeObserver(() => {
-      // Debounce resize calls to avoid excessive re-renders
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
+      // Use requestAnimationFrame to avoid "loop completed with undelivered notifications" error
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
       }
-      resizeTimeout = setTimeout(async () => {
-        const container = scrollContainerRef.current;
-        if (!container) return;
-
-        // Skip resize handling while scroll position restoration is in progress
-        // suppressAutoScroll is controlled by DocumentViewer and stays true until restoration completes
-        if (suppressAutoScroll) {
-          console.log("PDFViewer: Skipping resize - suppressAutoScroll is true");
-          return;
+      
+      animationFrameId = requestAnimationFrame(() => {
+        // Debounce resize calls to avoid excessive re-renders
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
         }
+        resizeTimeout = setTimeout(async () => {
+          const container = scrollContainerRef.current;
+          if (!container) return;
 
-        // Also skip during protection windows
-        const now = Date.now();
-        const isInInitialLoadWindow = now < initialLoadWindowRef.current;
-        const isInRestorationWindow = now < restorationWindowRef.current;
-        if (isInInitialLoadWindow || isInRestorationWindow) {
-          console.log("PDFViewer: Skipping resize during protection window", { isInInitialLoadWindow, isInRestorationWindow });
-          return;
-        }
+          // Skip resize handling while scroll position restoration is in progress
+          // suppressAutoScroll is controlled by DocumentViewer and stays true until restoration completes
+          if (suppressAutoScroll) {
+            console.log("PDFViewer: Skipping resize - suppressAutoScroll is true");
+            return;
+          }
 
-        if (pdf && (zoomMode === "fit-width" || zoomMode === "fit-page")) {
-          console.log("PDFViewer: Container resized, re-rendering all pages");
+          // Also skip during protection windows
+          const now = Date.now();
+          const isInInitialLoadWindow = now < initialLoadWindowRef.current;
+          const isInRestorationWindow = now < restorationWindowRef.current;
+          if (isInInitialLoadWindow || isInRestorationWindow) {
+            console.log("PDFViewer: Skipping resize during protection window", { isInInitialLoadWindow, isInRestorationWindow });
+            return;
+          }
 
-          // Save current scroll position before re-render
-          const scrollTop = container.scrollTop;
-          const scrollHeight = container.scrollHeight;
-          const scrollPercent = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
+          if (pdf && (zoomMode === "fit-width" || zoomMode === "fit-page")) {
+            console.log("PDFViewer: Container resized, re-rendering all pages");
 
-          console.log("PDFViewer: Re-rendering all", numPages, "pages");
+            // Save current scroll position before re-render
+            const scrollTop = container.scrollTop;
+            const scrollHeight = container.scrollHeight;
+            const scrollPercent = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
 
-          // Re-render all pages
-          const renderId = ++renderIdRef.current;
-          for (let i = 1; i <= numPages; i++) {
-            if (renderId !== renderIdRef.current) {
-              return;
+            console.log("PDFViewer: Re-rendering all", numPages, "pages");
+
+            // Re-render all pages
+            const renderId = ++renderIdRef.current;
+            for (let i = 1; i <= numPages; i++) {
+              if (renderId !== renderIdRef.current) {
+                return;
+              }
+              // Mark as rendered and re-render when zoom mode changes
+              renderedPagesRef.current.add(i);
+              await renderPage(pdf, i);
             }
-            // Mark as rendered and re-render when zoom mode changes
-            renderedPagesRef.current.add(i);
-            await renderPage(pdf, i);
-          }
 
-          // Restore scroll position after re-render (based on percentage)
-          if (container.scrollHeight > 0 && scrollPercent > 0) {
-            const newScrollTop = scrollPercent * container.scrollHeight;
-            container.scrollTop = newScrollTop;
-            console.log("PDFViewer: Restored scroll position after resize", { scrollPercent, newScrollTop });
+            // Restore scroll position after re-render (based on percentage)
+            if (container.scrollHeight > 0 && scrollPercent > 0) {
+              const newScrollTop = scrollPercent * container.scrollHeight;
+              container.scrollTop = newScrollTop;
+              console.log("PDFViewer: Restored scroll position after resize", { scrollPercent, newScrollTop });
+            }
           }
-        }
-      }, 100);
+        }, 100);
+      });
     });
 
     resizeObserver.observe(scrollContainerRef.current);
@@ -538,6 +546,9 @@ export function PDFViewer({
     return () => {
       if (resizeTimeout) {
         clearTimeout(resizeTimeout);
+      }
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
       }
       resizeObserver.disconnect();
     };
