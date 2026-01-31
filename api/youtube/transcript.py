@@ -94,7 +94,24 @@ def parse_vtt(content):
     return segments
 
 
-def fetch_transcript_direct(video_id, proxy=None):
+def _format_cookie_header(cookies):
+    """Format cookies for Cookie header"""
+    if not cookies:
+        return None
+    if isinstance(cookies, str):
+        return cookies
+    if isinstance(cookies, dict):
+        return '; '.join(f"{k}={v}" for k, v in cookies.items())
+    if isinstance(cookies, list):
+        parts = []
+        for c in cookies:
+            if isinstance(c, dict) and c.get('name') and c.get('value') is not None:
+                parts.append(f"{c['name']}={c['value']}")
+        return '; '.join(parts) if parts else None
+    return None
+
+
+def fetch_transcript_direct(video_id, proxy=None, cookies_header=None):
     """Fetch transcript directly from YouTube's timedtext API (lighter than yt-dlp)"""
     from urllib.request import Request, urlopen, ProxyHandler, build_opener
     from urllib.error import HTTPError
@@ -107,6 +124,8 @@ def fetch_transcript_direct(video_id, proxy=None):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
     }
+    if cookies_header:
+        headers['Cookie'] = cookies_header
     
     req = Request(video_url, headers=headers)
     
@@ -190,14 +209,14 @@ def fetch_transcript_direct(video_id, proxy=None):
     }
 
 
-def fetch_transcript(video_id):
+def fetch_transcript(video_id, cookies_header=None):
     """Fetch transcript using multiple methods"""
     proxy = get_proxy_url()
     
     # Method 1: Direct API (fastest)
     print(f"[yt-dlp] Method 1: Direct API (no proxy)", file=sys.stderr)
     try:
-        return fetch_transcript_direct(video_id, proxy=None)
+        return fetch_transcript_direct(video_id, proxy=None, cookies_header=cookies_header)
     except Exception as e:
         error = str(e)
         print(f"[yt-dlp] Method 1 failed: {error[:80]}", file=sys.stderr)
@@ -206,7 +225,7 @@ def fetch_transcript(video_id):
         if 'bot' in error.lower() and proxy:
             print(f"[yt-dlp] Method 2: Direct API with proxy", file=sys.stderr)
             try:
-                return fetch_transcript_direct(video_id, proxy=proxy)
+                return fetch_transcript_direct(video_id, proxy=proxy, cookies_header=cookies_header)
             except Exception as e2:
                 print(f"[yt-dlp] Method 2 failed: {str(e2)[:80]}", file=sys.stderr)
     
@@ -223,6 +242,11 @@ def fetch_transcript(video_id):
             'proxy': proxy,
             'socket_timeout': 25,
         }
+        if cookies_header:
+            ydl_opts['http_headers'] = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Cookie': cookies_header,
+            }
         
         video_url = f'https://www.youtube.com/watch?v={video_id}'
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -350,14 +374,37 @@ class handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         
+        self._handle_request(query, None)
+    
+    def do_POST(self):
+        from urllib.parse import urlparse, parse_qs
+
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length) if content_length > 0 else b''
+        cookies = None
+        if body:
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                cookies = payload.get('cookies') or payload.get('cookie')
+            except Exception as e:
+                print(f"[API] Failed to parse JSON body: {e}", file=sys.stderr)
+
+        self._handle_request(query, cookies)
+
+    def _handle_request(self, query, cookies):
         # Health check
         if query.get('status', [''])[0] == 'true':
             proxy = get_proxy_url()
+            cookies_header = _format_cookie_header(cookies)
             self.send_json(200, {
                 'success': True,
                 'proxy_configured': bool(proxy),
                 'proxy_preview': proxy[:30] + '...' if proxy else None,
-                'yt_dlp_installed': YT_DLP_AVAILABLE
+                'yt_dlp_installed': YT_DLP_AVAILABLE,
+                'cookies_received': bool(cookies_header)
             })
             return
         
@@ -379,7 +426,8 @@ class handler(BaseHTTPRequestHandler):
         
         # Fetch transcript
         try:
-            result = fetch_transcript(video_id)
+            cookies_header = _format_cookie_header(cookies)
+            result = fetch_transcript(video_id, cookies_header=cookies_header)
             self.send_json(200, {
                 'success': True,
                 'videoId': video_id,

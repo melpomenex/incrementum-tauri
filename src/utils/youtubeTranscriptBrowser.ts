@@ -111,6 +111,10 @@ async function fetchWithCorsProxy(url: string): Promise<Response> {
     // Expected to fail due to CORS
   }
 
+  if (DISABLE_CORS_PROXY) {
+    throw new Error('CORS proxy disabled');
+  }
+
   // Try CORS proxies
   let lastError: Error | null = null;
 
@@ -381,6 +385,10 @@ export async function fetchYouTubeTranscript(
         '[YouTubeTranscript] Note: Transcript fetching in local development may fail due to CORS. ' +
         'Deploy to Vercel for full functionality, or use `vercel dev` to test API endpoints locally.'
       );
+    }
+
+    if (DISABLE_CORS_PROXY) {
+      throw apiError;
     }
   }
 
