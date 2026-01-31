@@ -1770,6 +1770,7 @@ export function DocumentViewer({
             onClick={openExtractDialog}
             className="p-2 rounded-md hover:bg-muted transition-colors text-primary"
             title="Create Extract"
+            data-extract-button="true"
           >
             <Lightbulb className="w-4 h-4" />
           </button>
