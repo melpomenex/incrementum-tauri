@@ -372,6 +372,8 @@ def fetch_transcript(video_id, cookies_header=None):
     """Fetch transcript using multiple methods"""
     proxy = get_proxy_url()
     force_proxy = os.environ.get('YT_FORCE_PROXY') == '1'
+    
+    print(f"[yt-dlp] Config: proxy={'yes' if proxy else 'no'}, cookies={'yes' if cookies_header else 'no'}, force_proxy={force_proxy}", file=sys.stderr)
 
     # Method 0: yt-dlp-transcripts with proxy (requested)
     if proxy and YT_DLP_TRANSCRIPTS_AVAILABLE:
@@ -381,90 +383,106 @@ def fetch_transcript(video_id, cookies_header=None):
         except Exception as e:
             print(f"[yt-dlp] Method 0 failed: {str(e)[:80]}", file=sys.stderr)
 
-    # Method 1: Direct API (fastest)
-    print(f"[yt-dlp] Method 1: Direct API (no proxy)", file=sys.stderr)
-    try:
-        return fetch_transcript_direct(video_id, proxy=None, cookies_header=cookies_header)
-    except Exception as e:
-        error = str(e)
-        print(f"[yt-dlp] Method 1 failed: {error[:80]}", file=sys.stderr)
-        
-        # If blocked and proxy available, try with proxy
-        if 'bot' in error.lower() and proxy and (force_proxy or not cookies_header):
-            print(f"[yt-dlp] Method 2: Direct API with proxy", file=sys.stderr)
-            try:
-                return fetch_transcript_direct(video_id, proxy=proxy, cookies_header=cookies_header)
-            except Exception as e2:
-                print(f"[yt-dlp] Method 2 failed: {str(e2)[:80]}", file=sys.stderr)
+    bot_detected = False
+    
+    # Method 1: Direct API (fastest) - skip if force_proxy is set
+    if not force_proxy:
+        print(f"[yt-dlp] Method 1: Direct API (no proxy)", file=sys.stderr)
+        try:
+            return fetch_transcript_direct(video_id, proxy=None, cookies_header=cookies_header)
+        except Exception as e:
+            error = str(e)
+            print(f"[yt-dlp] Method 1 failed: {error[:80]}", file=sys.stderr)
+            bot_detected = 'bot' in error.lower() or 'sign in' in error.lower()
+    else:
+        print(f"[yt-dlp] Skipping Method 1 (force_proxy=1)", file=sys.stderr)
+        bot_detected = True  # Assume we need proxy
+    
+    # Method 2: Direct API with proxy (if bot detected or force_proxy)
+    if proxy and bot_detected:
+        print(f"[yt-dlp] Method 2: Direct API with proxy", file=sys.stderr)
+        try:
+            return fetch_transcript_direct(video_id, proxy=proxy, cookies_header=cookies_header)
+        except Exception as e2:
+            print(f"[yt-dlp] Method 2 failed: {str(e2)[:80]}", file=sys.stderr)
+    elif not proxy and bot_detected:
+        print(f"[yt-dlp] Method 2 skipped: No proxy configured", file=sys.stderr)
     
     # Method 3: yt-dlp with proxy (last resort)
-    if YT_DLP_AVAILABLE and proxy and (force_proxy or not cookies_header):
+    if YT_DLP_AVAILABLE and proxy:
         print(f"[yt-dlp] Method 3: yt-dlp with proxy", file=sys.stderr)
-        ydl_opts = {
-            'writesubtitles': True,
-            'writeautomaticsub': True,
-            'subtitleslangs': ['en', 'en-US', 'en-CA', 'en-GB'],
-            'subtitlesformat': 'vtt/srt',
-            'skip_download': True,
-            'quiet': True,
-            'no_warnings': True,
-            'no_playlist': True,
-            'ignore_no_formats_error': True,
-            'proxy': proxy,
-            'socket_timeout': 12,
-        }
-        if cookies_header:
-            ydl_opts['http_headers'] = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Cookie': cookies_header,
+        try:
+            ydl_opts = {
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': ['en', 'en-US', 'en-CA', 'en-GB'],
+                'subtitlesformat': 'vtt/srt',
+                'skip_download': True,
+                'quiet': True,
+                'no_warnings': True,
+                'no_playlist': True,
+                'ignore_no_formats_error': True,
+                'proxy': proxy,
+                'socket_timeout': 12,
             }
-        
-        video_url = f'https://www.youtube.com/watch?v={video_id}'
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
+            if cookies_header:
+                ydl_opts['http_headers'] = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Cookie': cookies_header,
+                }
+            
+            video_url = f'https://www.youtube.com/watch?v={video_id}'
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=False)
 
-        track = get_best_caption_track(info)
-        if not track:
-            raise Exception('No captions available')
+            track = get_best_caption_track(info)
+            if not track:
+                raise Exception('No captions available')
 
-        from urllib.request import Request, urlopen, ProxyHandler, build_opener
-        req = Request(track['url'])
-        req.add_header('User-Agent', 'Mozilla/5.0')
-        if cookies_header:
-            req.add_header('Cookie', cookies_header)
-        if proxy:
-            proxy_handler = ProxyHandler({'http': proxy, 'https': proxy})
-            opener = build_opener(proxy_handler)
-            with opener.open(req, timeout=30) as resp:
-                content = resp.read().decode('utf-8')
-        else:
-            with urlopen(req, timeout=30) as resp:
-                content = resp.read().decode('utf-8')
+            from urllib.request import Request, urlopen, ProxyHandler, build_opener
+            req = Request(track['url'])
+            req.add_header('User-Agent', 'Mozilla/5.0')
+            if cookies_header:
+                req.add_header('Cookie', cookies_header)
+            if proxy:
+                proxy_handler = ProxyHandler({'http': proxy, 'https': proxy})
+                opener = build_opener(proxy_handler)
+                with opener.open(req, timeout=30) as resp:
+                    content = resp.read().decode('utf-8')
+            else:
+                with urlopen(req, timeout=30) as resp:
+                    content = resp.read().decode('utf-8')
 
-        if DEBUG_YT:
-            snippet = content[:200].replace('\n', ' ')
-            print(f"[yt-dlp DEBUG] Track ext={track.get('ext')} bytes={len(content)} snippet={snippet}", file=sys.stderr)
+            if DEBUG_YT:
+                snippet = content[:200].replace('\n', ' ')
+                print(f"[yt-dlp DEBUG] Track ext={track.get('ext')} bytes={len(content)} snippet={snippet}", file=sys.stderr)
 
-        if '<html' in content[:500].lower() or 'consent.youtube.com' in content:
-            raise Exception('Transcript download returned HTML (bot/consent)')
+            if '<html' in content[:500].lower() or 'consent.youtube.com' in content:
+                raise Exception('Transcript download returned HTML (bot/consent)')
 
-        if track.get('ext') in ('vtt', 'webvtt'):
-            segments = parse_vtt(content)
-        elif track.get('ext') == 'srt':
-            segments = parse_srt(content)
-        else:
-            # Try VTT then SRT
-            try:
+            if track.get('ext') in ('vtt', 'webvtt'):
                 segments = parse_vtt(content)
-            except Exception:
+            elif track.get('ext') == 'srt':
                 segments = parse_srt(content)
-        
-        return {
-            'segments': segments,
-            'language': 'en',
-            'title': info.get('title'),
-            'duration': info.get('duration')
-        }
+            else:
+                # Try VTT then SRT
+                try:
+                    segments = parse_vtt(content)
+                except Exception:
+                    segments = parse_srt(content)
+            
+            return {
+                'segments': segments,
+                'language': 'en',
+                'title': info.get('title'),
+                'duration': info.get('duration')
+            }
+        except Exception as e3:
+            print(f"[yt-dlp] Method 3 failed: {str(e3)[:80]}", file=sys.stderr)
+    elif not YT_DLP_AVAILABLE:
+        print(f"[yt-dlp] Method 3 skipped: yt-dlp not available", file=sys.stderr)
+    elif not proxy:
+        print(f"[yt-dlp] Method 3 skipped: No proxy configured", file=sys.stderr)
     
     raise Exception("All methods failed")
     

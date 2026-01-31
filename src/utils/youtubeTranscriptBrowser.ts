@@ -1,7 +1,7 @@
 /**
  * Browser-based YouTube transcript fetching
- * Uses youtube-transcript-ts library for PWA/Web app
- * Falls back to Vercel API endpoint when deployed on Vercel
+ * Uses Vercel API endpoint for production (readsync.org)
+ * Falls back to CORS proxy methods for local development
  */
 
 import { isTauri } from "../lib/tauri";
@@ -35,33 +35,19 @@ const TRANSCRIPT_APIS = [
   { url: 'https://yt.lemnoslife.com/videos?part=snippet&id=', extract: (data: any) => null }, // Not a transcript API, placeholder
 ];
 
-// Cache the API instance for reuse
-let transcriptApi: any = null;
-
-async function getTranscriptApi(): Promise<any> {
-  if (!transcriptApi) {
-    const { YouTubeTranscriptApi } = await import('youtube-transcript-ts');
-    transcriptApi = new YouTubeTranscriptApi();
-  }
-  return transcriptApi;
-}
+// NOTE: youtube-transcript-ts library removed due to bundling issues in browser builds.
 
 /**
  * Check if running on Vercel or production domain
  */
 function isVercel(): boolean {
   if (typeof window === 'undefined') return false;
-  
+
   const hostname = window.location.hostname;
   return (
     hostname.includes('vercel.app') ||
     hostname.includes('readsync.org') ||
-    hostname.includes('incrementum') ||
-    // Check for env vars that indicate Vercel deployment
-    // @ts-expect-error - Vite env var
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_VERCEL_ENV === 'production') ||
-    // @ts-expect-error - Vite env var  
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_VERCEL_URL !== undefined)
+    hostname.includes('incrementum')
   );
 }
 
@@ -70,7 +56,7 @@ function isVercel(): boolean {
  */
 function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  
+
   // Use relative URL for same-origin requests
   return '';
 }
@@ -144,7 +130,7 @@ async function fetchVideoPage(videoId: string): Promise<string> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const response = await fetchWithCorsProxy(url);
   const text = await response.text();
-  
+
   // Handle allorigins.win response format (JSON with contents field)
   try {
     const json = JSON.parse(text);
@@ -247,17 +233,22 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
       },
       body: cookies.length > 0 ? JSON.stringify({ cookies }) : undefined,
     });
-    
+
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
     if (!contentType?.includes('application/json')) {
       const text = await response.text();
-      console.error('[YouTubeTranscript] API returned non-JSON:', text.substring(0, 200));
+      console.error('[YouTubeTranscript] API returned non-JSON response:', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType,
+        bodyPreview: text.substring(0, 500)
+      });
       throw new Error(`API returned ${response.status}: Server error (check Vercel logs)`);
     }
 
     const data = await response.json();
-    
+
     if (!response.ok || !data.success) {
       // Handle specific error codes
       if (data.code === 'YOUTUBE_BOT_DETECTED') {
@@ -272,6 +263,12 @@ async function fetchFromApi(videoId: string, language?: string): Promise<Transcr
       if (data.code === 'NO_CAPTIONS') {
         throw new Error('This video does not have captions/subtitles available.');
       }
+      console.error('[YouTubeTranscript] API error response:', {
+        status: response.status,
+        error: data.error,
+        code: data.code,
+        fullResponse: data
+      });
       throw new Error(data.error || `API returned ${response.status}`);
     }
 
@@ -313,11 +310,11 @@ export async function fetchYouTubeTranscript(
       "get_youtube_transcript_by_id",
       { videoId }
     );
-    
+
     if (!result) {
       throw new Error('Transcript not available via Tauri backend');
     }
-    
+
     return {
       segments: result.map(item => ({
         text: item.text,
@@ -330,39 +327,14 @@ export async function fetchYouTubeTranscript(
   }
 
   // Check if running locally
-  const isLocalhost = typeof window !== 'undefined' && 
+  const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  // Try youtube-transcript-ts library first (for PWA/Web)
-  try {
-    const api = await getTranscriptApi();
-    const response = await api.fetchTranscript(videoId, language ? [language] : undefined);
-    
-    const transcript = response.transcript || [];
-    
-    return {
-      segments: transcript.map((item: any) => ({
-        text: item.text,
-        start: item.offset / 1000, // Convert ms to seconds
-        duration: item.duration / 1000, // Convert ms to seconds
-      })),
-      videoId,
-      language: language || response.language || 'en',
-    };
-  } catch (libError: any) {
-    console.warn('[YouTubeTranscript] Library fetch failed:', libError);
-    
-    // Check if it's a specific library error we can handle
-    const libErrorMsg = libError?.message || '';
-    if (libErrorMsg.includes('Transcript is disabled') || libErrorMsg.includes('No transcript found')) {
-      throw new Error('This video does not have captions or subtitles enabled by the creator.');
-    }
-    if (libErrorMsg.includes('Video is unavailable') || libErrorMsg.includes('Video is private')) {
-      throw new Error('This video is unavailable or private.');
-    }
-    // For other library errors, continue to fallback but note the library failure
-    console.log('[YouTubeTranscript] Library failed, trying fallback methods...');
-  }
+  // NOTE: youtube-transcript-ts library is skipped because it has bundling issues
+  // in production browser builds (TypeError: Class extends value undefined).
+  // Go directly to the API endpoint instead.
+
+  console.log('[YouTubeTranscript] Fetching via API endpoint...');
 
   // Try API endpoint (works best on Vercel deployments)
   try {
@@ -372,14 +344,14 @@ export async function fetchYouTubeTranscript(
   } catch (apiError) {
     // If it's a specific error (like no captions), don't try fallback
     const errorMsg = apiError instanceof Error ? apiError.message : '';
-    if (errorMsg.includes('does not have captions') || 
-        errorMsg.includes('age-restricted') ||
-        errorMsg.includes('requires consent')) {
+    if (errorMsg.includes('does not have captions') ||
+      errorMsg.includes('age-restricted') ||
+      errorMsg.includes('requires consent')) {
       throw apiError;
     }
-    
+
     console.warn('[YouTubeTranscript] API fetch failed:', apiError);
-    
+
     if (isLocalhost) {
       console.warn(
         '[YouTubeTranscript] Note: Transcript fetching in local development may fail due to CORS. ' +
@@ -421,7 +393,7 @@ export async function fetchYouTubeTranscript(
     const transcriptUrl = selectedTrack.baseUrl;
     const transcriptResponse = await fetchWithCorsProxy(transcriptUrl);
     let transcriptXml = await transcriptResponse.text();
-    
+
     // Handle allorigins.win response format (JSON with contents field)
     try {
       const json = JSON.parse(transcriptXml);
@@ -447,12 +419,12 @@ export async function fetchYouTubeTranscript(
   } catch (error: any) {
     // All methods failed
     const errorMsg = error?.message || String(error);
-    
+
     // Check for specific error types
     if (errorMsg.includes('disabled') || errorMsg.includes('No caption tracks')) {
       throw new Error('This video does not have captions or subtitles enabled.');
     }
-    
+
     if (isLocalhost) {
       // In local development, YouTube often blocks requests
       throw new Error(
@@ -464,7 +436,7 @@ export async function fetchYouTubeTranscript(
         ` (Error: ${errorMsg})`
       );
     }
-    
+
     throw error;
   }
 }
