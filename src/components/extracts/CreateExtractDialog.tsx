@@ -80,7 +80,10 @@ export function CreateExtractDialog({
   // Reset form when dialog opens
   useEffect(() => {
     if (isOpen) {
-      setContent(selectedText);
+      // Only update content if selectedText is provided (don't clear it if selectedText becomes empty on close)
+      if (selectedText) {
+        setContent(selectedText);
+      }
       setNotes("");
       setCategory("");
       setTags([]);
@@ -184,15 +187,6 @@ export function CreateExtractDialog({
         return;
       }
       onClose();
-
-      // Reset form
-      setContent("");
-      setNotes("");
-      setCategory("");
-      setTags([]);
-      setTagInput("");
-      setProgressiveLevel(0);
-      setShowPreview(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create extract");
     } finally {
