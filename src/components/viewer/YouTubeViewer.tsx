@@ -1,13 +1,10 @@
 /**
  * YouTube Viewer Component
- * Displays YouTube videos with synchronized transcript
- * 
- * NOTE: YouTube iframe embeds are enabled for inline playback.
- * If a build environment blocks the embed, users can still open in a new window.
+ * Displays YouTube videos with synchronized transcript and SponsorBlock integration
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Play, Clock, ExternalLink, Share2, Youtube, AlertTriangle } from "lucide-react";
+import { Play, Clock, ExternalLink, Share2, Youtube, AlertTriangle, SkipForward } from "lucide-react";
 import { useToast } from "../common/Toast";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
@@ -16,6 +13,13 @@ import { getDocumentAuto, updateDocument, updateDocumentProgressAuto } from "../
 import { generateYouTubeShareUrl, copyShareLink, parseStateFromUrl } from "../../lib/shareLink";
 import { saveDocumentPosition, timePosition } from "../../api/position";
 import { isTauri } from "../../lib/tauri";
+import YouTube, { YouTubeProps, YouTubePlayer } from "react-youtube";
+import { 
+  fetchSponsorBlockSegments, 
+  SponsorBlockSegment, 
+  getCategoryDisplayName,
+  getCategoryColor
+} from "../../api/sponsorblock";
 
 interface YouTubeViewerProps {
   videoId: string;
@@ -55,9 +59,14 @@ export function YouTubeViewer({
   const [startTime, setStartTime] = useState(0);
   const [resolvedTitle, setResolvedTitle] = useState<string | undefined>(title);
   const titleFetchRef = useRef<string | null>(null);
-  const timeTrackingRef = useRef<NodeJS.Timeout | null>(null);
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
   const [playerReloadKey, setPlayerReloadKey] = useState(0);
+  
+  // SponsorBlock state
+  const [segments, setSegments] = useState<SponsorBlockSegment[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const playerRef = useRef<YouTubePlayer | null>(null);
+  const lastSkippedSegmentIdRef = useRef<string | null>(null);
 
   // Update refs when values change
   useEffect(() => {
@@ -77,6 +86,19 @@ export function YouTubeViewer({
   useEffect(() => {
     localStorage.setItem('transcript-visibility', String(showTranscript));
   }, [showTranscript]);
+
+  // Load SponsorBlock segments
+  useEffect(() => {
+    if (!videoId) return;
+    
+    const loadSegments = async () => {
+      const fetchedSegments = await fetchSponsorBlockSegments(videoId);
+      console.log(`[SponsorBlock] Loaded ${fetchedSegments.length} segments for ${videoId}`);
+      setSegments(fetchedSegments);
+    };
+    
+    loadSegments();
+  }, [videoId]);
 
   // Load transcript from backend
   const loadTranscript = useCallback(async () => {
@@ -189,16 +211,52 @@ export function YouTubeViewer({
     }
   }, [duration]);
 
-  // Simulate time tracking for transcript sync (since video plays in external window)
+  // Monitor playback for SponsorBlock segments and position saving
   useEffect(() => {
-    // When user clicks a transcript segment, we track time from there
-    // In a real implementation, we'd communicate with the external window
-    return () => {
-      if (timeTrackingRef.current) {
-        clearInterval(timeTrackingRef.current);
+    if (!isPlaying || !playerRef.current) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const time = await playerRef.current.getCurrentTime();
+        setCurrentTime(time);
+        
+        // Notify parent
+        onTimeUpdate?.(time);
+        
+        // Save position periodically (every 5 seconds roughly via saveCurrentPosition check)
+        saveCurrentPosition(time);
+
+        // Check SponsorBlock segments
+        if (segments.length > 0) {
+          for (const segment of segments) {
+            const [start, end] = segment.segment;
+            
+            // If current time is within a segment and we haven't just skipped it
+            if (time >= start && time < end) {
+              if (lastSkippedSegmentIdRef.current !== segment.UUID) {
+                // Skip segment
+                playerRef.current.seekTo(end, true);
+                lastSkippedSegmentIdRef.current = segment.UUID;
+                
+                // Show toast
+                const categoryName = getCategoryDisplayName(segment.category);
+                toast.info(`Skipped ${categoryName}`, "SponsorBlock");
+                console.log(`[SponsorBlock] Skipped ${categoryName} (${start.toFixed(1)}s - ${end.toFixed(1)}s)`);
+              }
+            } else if (time >= end && lastSkippedSegmentIdRef.current === segment.UUID) {
+              // Reset skipped flag once we're past the segment
+              // This is a simplification; handling seeking back is trickier but this covers forward playback
+              // We don't strictly need to clear it, but it helps if user seeks back before the segment
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore errors from player (e.g. if it's not ready)
       }
-    };
-  }, []);
+    }, 500);
+
+    return () => clearInterval(intervalId);
+  }, [isPlaying, segments, saveCurrentPosition, onTimeUpdate, toast]);
 
   // Seek to time - opens video at specific timestamp
   const handleSeek = useCallback((time: number) => {
@@ -206,8 +264,8 @@ export function YouTubeViewer({
     setStartTime(time);
     saveCurrentPosition(time);
 
-    if (showInlinePlayer) {
-      setPlayerReloadKey((prev) => prev + 1);
+    if (showInlinePlayer && playerRef.current) {
+      playerRef.current.seekTo(time, true);
     } else {
       setShowInlinePlayer(true);
     }
@@ -222,23 +280,6 @@ export function YouTubeViewer({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Export transcript
-  const handleExportTranscript = () => {
-    if (transcript.length === 0) return;
-
-    const text = transcript
-      .map((seg) => `[${formatTime(seg.start)}] ${seg.text}`)
-      .join("\n");
-
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${resolvedTitle || title || videoId}-transcript.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   // Share video with current timestamp
   const handleShare = async () => {
     const shareUrl = generateYouTubeShareUrl(videoId, currentTime);
@@ -250,29 +291,45 @@ export function YouTubeViewer({
     }
   };
 
-  const embedOrigin = useMemo(() => window.location.origin, []);
-
-  const embedUrl = useMemo(() => {
-    const params = new URLSearchParams({
-      enablejsapi: "1",
-      playsinline: "1",
-      rel: "0",
-      origin: embedOrigin,
-    });
-
-    if (startTime > 0) {
-      params.set("start", String(Math.floor(startTime)));
-    }
-
-    return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
-  }, [videoId, startTime, embedOrigin]);
-
-  // Open video in external window
   const handlePlayVideo = () => {
     setShowInlinePlayer(true);
   };
 
+  // YouTube Player Event Handlers
+  const onPlayerReady = (event: any) => {
+    playerRef.current = event.target;
+    setDuration(event.target.getDuration());
+    
+    // Resume at start time if set
+    if (startTime > 0) {
+      event.target.seekTo(startTime, true);
+    }
+  };
+
+  const onPlayerStateChange = (event: any) => {
+    // Player states: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (video cued)
+    setIsPlaying(event.data === 1);
+    
+    if (event.data === 1) { // Playing
+      // Ensure duration is set
+      const d = event.target.getDuration();
+      if (d && d > 0) setDuration(d);
+    }
+  };
+
   const displayTitle = resolvedTitle || title || "YouTube Video";
+
+  const youtubeOpts: YouTubeProps['opts'] = {
+    height: '100%',
+    width: '100%',
+    playerVars: {
+      autoplay: 1,
+      start: Math.floor(startTime),
+      modestbranding: 1,
+      rel: 0,
+      origin: window.location.origin,
+    },
+  };
 
   return (
     <div className={`flex h-full bg-background ${transcriptLayout === 'side' && showTranscript ? 'flex-row' : 'flex-col'}`}>
@@ -289,15 +346,16 @@ export function YouTubeViewer({
       >
         {/* Inline Player */}
         {showInlinePlayer ? (
-          <iframe
-            key={`yt-${videoId}-${playerReloadKey}`}
-            className="absolute inset-0 w-full h-full"
-            src={embedUrl}
-            title={displayTitle}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            referrerPolicy="strict-origin-when-cross-origin"
-            allowFullScreen
-          />
+          <div className="absolute inset-0 w-full h-full">
+            <YouTube
+              videoId={videoId}
+              opts={youtubeOpts}
+              onReady={onPlayerReady}
+              onStateChange={onPlayerStateChange}
+              className="w-full h-full"
+              iframeClassName="w-full h-full"
+            />
+          </div>
         ) : (
           <div className="absolute inset-0 w-full h-full bg-gradient-to-b from-gray-900 to-black flex items-center justify-center">
             <div className="text-center p-6 max-w-xl w-full">
@@ -325,6 +383,14 @@ export function YouTubeViewer({
                   <div className="absolute bottom-4 left-4 bg-black/70 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
                     <Clock className="w-4 h-4" />
                     Resume from {formatTime(startTime)}
+                  </div>
+                )}
+                
+                {/* Segments badge */}
+                {segments.length > 0 && (
+                  <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                    <SkipForward className="w-4 h-4" />
+                    {segments.length} Skippable Segments
                   </div>
                 )}
               </div>
@@ -378,11 +444,15 @@ export function YouTubeViewer({
                 <h2 className="text-lg font-semibold text-foreground line-clamp-2 mb-1">
                   {displayTitle}
                 </h2>
-                {duration > 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    Duration: {formatDuration(duration)}
-                  </p>
-                )}
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  {duration > 0 && <span>Duration: {formatDuration(duration)}</span>}
+                  {segments.length > 0 && (
+                    <span className="flex items-center gap-1 text-green-600">
+                      <SkipForward className="w-3 h-3" />
+                      SponsorBlock Enabled
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2 ml-4 flex-shrink-0">

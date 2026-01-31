@@ -1461,6 +1461,11 @@ export function DocumentViewer({
     console.log("Document loaded:", numPages, "pages", outline.length, "outline items");
   }, []);
 
+  // Handle YouTube load
+  const handleYouTubeLoad = useCallback((metadata: { duration: number; title: string }) => {
+    console.log("YouTube loaded:", metadata);
+  }, []);
+
   const handlePdfContextTextChange = useCallback(
     (text: string) => {
       if (!onPdfContextTextChange) return;
@@ -1964,7 +1969,19 @@ export function DocumentViewer({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-auto bg-muted/30 relative">
+      <div 
+        className="flex-1 overflow-auto bg-muted/30 relative"
+        onClick={(e) => {
+          // Toggle controls/fullscreen on click/tap if not clicking interactive elements
+          const isMobile = window.matchMedia("(max-width: 768px)").matches;
+          if (isMobile && !(e.target as HTMLElement).closest('button, input, textarea, a, .interactive, [data-extract-button]')) {
+            // For EPUB, the viewer handles its own taps. For PDF/others, we handle it here.
+            if (docType !== 'epub') {
+              toggleFullscreen();
+            }
+          }
+        }}
+      >
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-muted-foreground">Loading document...</div>
@@ -2001,7 +2018,7 @@ export function DocumentViewer({
             fileData={fileData}
             fileName={currentDocument.title}
             documentId={currentDocument.id}
-            onLoad={handleDocumentLoad}
+            onLoad={(toc) => handleDocumentLoad(0, toc)}
             onSelectionChange={updateSelection}
             onContextTextChange={onPdfContextTextChange}
           />
@@ -2033,7 +2050,7 @@ export function DocumentViewer({
               videoId={extractYouTubeId(currentDocument.filePath)}
               documentId={currentDocument.id}
               title={currentDocument.title}
-              onLoad={handleDocumentLoad}
+              onLoad={handleYouTubeLoad}
               onTranscriptLoad={(segments) => {
                 const transcriptText = segments.map(s => `[${formatTime(s.start)}] ${s.text}`).join("\n");
                 setVideoContext(prev => ({

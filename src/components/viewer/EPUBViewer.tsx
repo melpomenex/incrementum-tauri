@@ -1019,11 +1019,11 @@ export function EPUBViewer({
           {/* Mobile chrome - Bottom Bar */}
           <div
             className={cn(
-              "absolute left-0 right-0 bottom-0 z-40 transition-all duration-300",
+              "absolute left-0 right-0 bottom-0 z-40 transition-all duration-300 pb-[env(safe-area-inset-bottom)]",
               chromeVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
             )}
           >
-            <div className="mx-3 mb-3 rounded-2xl bg-background/95 backdrop-blur border border-border shadow-lg">
+            <div className="mx-3 mb-16 rounded-2xl bg-background/95 backdrop-blur border border-border shadow-lg">
               <div className="px-4 py-3 space-y-2">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{progressPercent}%</span>

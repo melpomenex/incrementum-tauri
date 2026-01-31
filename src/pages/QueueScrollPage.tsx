@@ -1144,7 +1144,15 @@ export function QueueScrollPage() {
       )}
 
       {/* Content Viewer - Document, Flashcard, or RSS Article */}
-      <div className="flex h-full w-full">
+      <div 
+        className="flex h-full w-full"
+        onClick={(e) => {
+          // Toggle controls on click/tap if not clicking interactive elements
+          if (isMobile && !(e.target as HTMLElement).closest('button, input, textarea, a, .interactive')) {
+            setShowControls(prev => !prev);
+          }
+        }}
+      >
         {!isMobile && isAssistantVisible && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "left" && (
           <>
             {/* Model Chooser - Above Assistant */}
@@ -1501,29 +1509,29 @@ export function QueueScrollPage() {
                 <Settings2 className="w-4 h-4" />
                 Settings
               </button>
-              <div className="text-white text-sm bg-black/40 backdrop-blur-sm px-3 py-2 rounded-lg">
+              <div className="text-white text-sm bg-black/40 backdrop-blur-sm px-3 py-2 rounded-lg max-w-[200px] sm:max-w-md truncate">
                 {currentItem.type === "document" && (
-                  <span className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 bg-blue-500/30 rounded text-xs">DOC</span>
-                    {currentItem.documentTitle}
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="px-1.5 py-0.5 bg-blue-500/30 rounded text-xs shrink-0">DOC</span>
+                    <span className="truncate">{currentItem.documentTitle}</span>
                   </span>
                 )}
                 {currentItem.type === "flashcard" && (
-                  <span className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 bg-purple-500/30 rounded text-xs">CARD</span>
-                    {currentItem.documentTitle}
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="px-1.5 py-0.5 bg-purple-500/30 rounded text-xs shrink-0">CARD</span>
+                    <span className="truncate">{currentItem.documentTitle}</span>
                   </span>
                 )}
                 {currentItem.type === "rss" && (
-                  <span className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 bg-orange-500/30 rounded text-xs">RSS</span>
-                    {currentItem.documentTitle}
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="px-1.5 py-0.5 bg-orange-500/30 rounded text-xs shrink-0">RSS</span>
+                    <span className="truncate">{currentItem.documentTitle}</span>
                   </span>
                 )}
                 {currentItem.type === "extract" && (
-                  <span className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 bg-yellow-500/30 rounded text-xs">EXTRACT</span>
-                    {currentItem.documentTitle}
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="px-1.5 py-0.5 bg-yellow-500/30 rounded text-xs shrink-0">EXTRACT</span>
+                    <span className="truncate">{currentItem.documentTitle}</span>
                   </span>
                 )}
               </div>
