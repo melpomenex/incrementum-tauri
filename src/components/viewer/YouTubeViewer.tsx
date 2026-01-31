@@ -501,9 +501,9 @@ export function YouTubeViewer({
             </div>
           </div>
 
-          {/* Transcript panel - scrollable */}
+          {/* Transcript panel - fills available space */}
           {showTranscript && (
-            <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="flex-1 min-h-0 overflow-hidden">
               {isLoadingTranscript ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="flex flex-col items-center gap-3">
@@ -536,6 +536,7 @@ export function YouTubeViewer({
                   currentTime={currentTime}
                   onSeek={handleSeek}
                   onSelectionChange={onSelectionChange}
+                  className="h-full"
                 />
               )}
             </div>

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Clock, Search, Copy, Download } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { Clock, Search, Copy, Download, Play, CornerDownLeft } from "lucide-react";
 
 /**
  * Transcript segment
@@ -22,6 +22,10 @@ interface TranscriptSyncProps {
   onExport?: () => void;
   onSelectionChange?: (text: string) => void;
   className?: string;
+  /**
+   * Whether to show paragraph-level grouping for better readability
+   */
+  groupParagraphs?: boolean;
 }
 
 export function TranscriptSync({
@@ -33,7 +37,8 @@ export function TranscriptSync({
   showSpeakers = true,
   onExport,
   onSelectionChange,
-  className = "h-[400px]",
+  className = "flex-1 min-h-0",
+  groupParagraphs = true,
 }: TranscriptSyncProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredSegments, setFilteredSegments] = useState<TranscriptSegment[]>(segments || []);
@@ -119,6 +124,37 @@ export function TranscriptSync({
     };
   }, []);
 
+  // Group segments into paragraphs for better readability
+  const groupedSegments = useMemo(() => {
+    if (!groupParagraphs || segments.length === 0) return segments.map((seg, i) => ({ ...seg, groupIndex: i }));
+    
+    const groups: (TranscriptSegment & { groupIndex: number; isParagraphStart?: boolean })[] = [];
+    let currentGroup: TranscriptSegment | null = null;
+    let groupIndex = 0;
+    
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const prevSeg = segments[i - 1];
+      
+      // Start a new paragraph if:
+      // 1. This is the first segment
+      // 2. There's a gap of more than 2 seconds
+      // 3. The text ends with punctuation (sentence break)
+      const isNewParagraph = !prevSeg || 
+        (seg.start - prevSeg.end > 2) ||
+        /[.!?]\s*$/.test(prevSeg.text);
+      
+      if (isNewParagraph) {
+        groupIndex++;
+        currentGroup = seg;
+      }
+      
+      groups.push({ ...seg, groupIndex, isParagraphStart: isNewParagraph });
+    }
+    
+    return groups;
+  }, [segments, groupParagraphs]);
+
   // Copy transcript text
   const handleCopy = () => {
     const text = segments
@@ -136,16 +172,29 @@ export function TranscriptSync({
     onExport?.();
   };
 
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && activeIndex !== -1 && onSeek) {
+      e.preventDefault();
+      onSeek(segments[activeIndex].start);
+    }
+  };
+
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-card border border-border rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-border">
+      <div className="flex-shrink-0 p-4 border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-foreground">Transcript</h3>
-          <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            Transcript
+            <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {filteredSegments.length} segments
+            </span>
+          </h3>
+          <div className="flex items-center gap-1">
             <button
               onClick={handleCopy}
-              className="p-2 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
               title="Copy transcript"
             >
               <Copy className="w-4 h-4" />
@@ -153,7 +202,7 @@ export function TranscriptSync({
             {onExport && (
               <button
                 onClick={handleExport}
-                className="p-2 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
                 title="Export transcript"
               >
                 <Download className="w-4 h-4" />
@@ -169,71 +218,112 @@ export function TranscriptSync({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Search transcript..."
-            className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full pl-9 pr-8 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground rounded"
+            >
+              <CornerDownLeft className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Transcript segments */}
       <div
         ref={containerRef}
-        className={`${className} overflow-y-auto p-4 space-y-2`}
+        className={`${className} overflow-y-auto p-4 space-y-1`}
         data-transcript-scroll="true"
         onMouseUp={handleSelection}
         onKeyUp={handleSelection}
+        tabIndex={0}
+        role="listbox"
+        aria-label="Video transcript"
       >
         {filteredSegments.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8">
-            No transcript segments found
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-12">
+            <Search className="w-8 h-8 mb-3 opacity-50" />
+            <p className="text-sm">No transcript segments found</p>
+            {searchQuery && (
+              <p className="text-xs mt-1 opacity-70">Try a different search term</p>
+            )}
           </div>
         ) : (
           filteredSegments.map((segment, index) => {
-            const isActive = (segments || []).indexOf(segment) === activeIndex;
+            const segmentIndex = (segments || []).indexOf(segment);
+            const isActive = segmentIndex === activeIndex;
             const isHighlighted = searchQuery && segment.text.toLowerCase().includes(searchQuery.toLowerCase());
+            const isParagraphStart = (segment as any).isParagraphStart;
 
             return (
               <div
                 key={segment.id}
                 ref={isActive ? activeSegmentRef : null}
                 onClick={() => handleSegmentClick(segment)}
-                className={`p-3 rounded-lg cursor-pointer transition-all ${
+                className={`group relative rounded-lg cursor-pointer transition-all duration-200 ${
                   isActive
-                    ? "bg-primary/20 border border-primary/50"
+                    ? "bg-primary/15 border-l-4 border-l-primary border-y border-r border-primary/20 shadow-sm"
                     : isHighlighted
-                    ? "bg-primary/10 border border-primary/30"
-                    : "bg-muted/30 border border-transparent hover:bg-muted/50"
-                }`}
+                    ? "bg-amber-500/10 border-l-4 border-l-amber-500 border-y border-r border-amber-500/20"
+                    : "bg-transparent hover:bg-muted/40 border-l-4 border-l-transparent border-y border-r border-transparent"
+                } ${isParagraphStart ? "mt-4 first:mt-0" : ""}`}
+                role="option"
+                aria-selected={isActive}
               >
-                <div className="flex items-start gap-3">
-                  {/* Timestamp */}
+                <div className="flex items-start gap-3 p-3">
+                  {/* Timestamp with play button */}
                   {showTimestamps && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleSegmentClick(segment);
                       }}
-                      className="flex-shrink-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-                      title="Jump to timestamp"
+                      className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-medium transition-all ${
+                        isActive
+                          ? "text-primary"
+                          : "text-muted-foreground hover:text-primary"
+                      }`}
+                      title={`Jump to ${formatTime(segment.start)}`}
                     >
-                      <Clock className="w-3 h-3" />
-                      {formatTime(segment.start)}
+                      {isActive ? (
+                        <Play className="w-3 h-3 fill-current" />
+                      ) : (
+                        <Clock className="w-3 h-3" />
+                      )}
+                      <span className="tabular-nums">{formatTime(segment.start)}</span>
                     </button>
                   )}
 
                   {/* Content */}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 leading-relaxed">
                     {/* Speaker */}
                     {showSpeakers && segment.speaker && (
-                      <span className="text-xs font-medium text-primary mr-2">
-                        {segment.speaker}:
+                      <span className={`text-xs font-semibold mr-2 ${
+                        isActive ? "text-primary" : "text-primary/80"
+                      }`}>
+                        {segment.speaker}
                       </span>
                     )}
 
                     {/* Text */}
-                    <span className="text-sm text-foreground">{segment.text}</span>
+                    <span className={`text-sm ${
+                      isActive 
+                        ? "text-foreground font-medium" 
+                        : "text-foreground/90"
+                    }`}>
+                      {highlightText(segment.text, searchQuery)}
+                    </span>
                   </div>
                 </div>
+
+                {/* Active indicator dot */}
+                {isActive && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-primary animate-pulse" />
+                )}
               </div>
             );
           })
@@ -241,14 +331,25 @@ export function TranscriptSync({
       </div>
 
       {/* Footer with stats */}
-      <div className="px-4 py-2 border-t border-border text-xs text-muted-foreground flex items-center justify-between">
-        <span>
-          {filteredSegments.length} segment{filteredSegments.length !== 1 ? "s" : ""}
-        </span>
-        {activeIndex !== -1 && (
-          <span>
-            Currently at: {formatTime(currentTime)}
+      <div className="flex-shrink-0 px-4 py-2.5 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-medium">
+            {filteredSegments.length.toLocaleString()}
           </span>
+          <span>segment{filteredSegments.length !== 1 ? "s" : ""}</span>
+          {searchQuery && (
+            <span className="text-primary">
+              ({segments.length - filteredSegments.length} filtered)
+            </span>
+          )}
+        </div>
+        {activeIndex !== -1 && (
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span className="tabular-nums font-medium text-foreground">
+              {formatTime(currentTime)}
+            </span>
+          </div>
         )}
       </div>
     </div>
@@ -397,4 +498,29 @@ export function exportToPlainText(segments: TranscriptSegment[]): string {
       return `${timestamp} ${speaker}${seg.text}`;
     })
     .join("\n");
+}
+
+/**
+ * Highlight search terms in text
+ */
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  
+  const parts = text.split(new RegExp(`(${escapeRegExp(query)})`, 'gi'));
+  return parts.map((part, i) => 
+    part.toLowerCase() === query.toLowerCase() ? (
+      <mark key={i} className="bg-amber-500/30 text-foreground rounded px-0.5">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+}
+
+/**
+ * Escape special regex characters
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
