@@ -222,6 +222,74 @@ def fetch_transcript_direct(video_id, proxy=None, cookies_header=None):
         'duration': player_response.get('videoDetails', {}).get('lengthSeconds')
     }
 
+def parse_srt(content):
+    """Parse SRT content to segments"""
+    segments = []
+    blocks = content.split('\n\n')
+    for block in blocks:
+        lines = [l.strip() for l in block.split('\n') if l.strip()]
+        if len(lines) < 3:
+            continue
+        # Timestamp line is usually second line
+        ts_line = lines[1]
+        match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2},\d{3})', ts_line)
+        if not match:
+            continue
+        start = parse_timestamp(match.group(1).replace(',', '.'))
+        end = parse_timestamp(match.group(2).replace(',', '.'))
+        text = ' '.join(lines[2:]).strip()
+        if text:
+            segments.append({
+                'text': re.sub(r'<[^>]+>', '', text),
+                'start': start,
+                'duration': max(end - start, 0)
+            })
+    if not segments:
+        raise Exception('No transcript segments found')
+    return segments
+
+
+def get_best_caption_track(info):
+    """Pick best caption track from yt-dlp info"""
+    subtitle_priorities = ['en-US', 'en-CA', 'en-GB', 'en']
+    auto_priorities = ['en-orig', 'en-US', 'en-CA', 'en-GB', 'en']
+    format_priorities = ['vtt', 'srt', 'ttml']
+
+    caption_track = None
+    subtitles = info.get('subtitles') or {}
+    auto_captions = info.get('automatic_captions') or {}
+
+    for lang in subtitle_priorities:
+        if subtitles.get(lang):
+            caption_track = subtitles[lang]
+            break
+    if not caption_track:
+        for lang in subtitles.keys():
+            if lang.startswith('en-'):
+                caption_track = subtitles[lang]
+                break
+
+    if not caption_track:
+        for lang in auto_priorities:
+            if auto_captions.get(lang):
+                caption_track = auto_captions[lang]
+                break
+
+    if not caption_track:
+        return None
+
+    for fmt in format_priorities:
+        for track in caption_track:
+            if track.get('protocol') == 'm3u8_native':
+                continue
+            if track.get('ext') == fmt:
+                return track
+
+    for track in caption_track:
+        if track.get('protocol') != 'm3u8_native':
+            return track
+
+    return None
 
 def fetch_transcript(video_id, cookies_header=None):
     """Fetch transcript using multiple methods"""
@@ -249,7 +317,7 @@ def fetch_transcript(video_id, cookies_header=None):
         ydl_opts = {
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitleslangs': ['en'],
+            'subtitleslangs': ['en', 'en-US', 'en-CA', 'en-GB'],
             'subtitlesformat': 'vtt/srt/ttml',
             'skip_download': True,
             'quiet': True,
@@ -268,27 +336,11 @@ def fetch_transcript(video_id, cookies_header=None):
         video_url = f'https://www.youtube.com/watch?v={video_id}'
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
-        
-        # ... (rest of yt-dlp processing)
-        subtitles = info.get('subtitles', {})
-        auto_captions = info.get('automatic_captions', {})
-        
-        track_list = None
-        for lang in ['en-US', 'en-GB', 'en-CA', 'en-AU', 'en']:
-            if lang in subtitles and subtitles[lang]:
-                track_list = subtitles[lang]
-                break
-        if not track_list:
-            for lang in ['en-orig', 'en-US', 'en-GB', 'en-CA', 'en-AU', 'en']:
-                if lang in auto_captions and auto_captions[lang]:
-                    track_list = auto_captions[lang]
-                    break
-        
-        if not track_list:
+
+        track = get_best_caption_track(info)
+        if not track:
             raise Exception('No captions available')
-        
-        track = next((t for t in track_list if t.get('ext') == 'vtt'), track_list[0])
-        
+
         from urllib.request import Request, urlopen, ProxyHandler, build_opener
         req = Request(track['url'])
         req.add_header('User-Agent', 'Mozilla/5.0')
@@ -302,8 +354,17 @@ def fetch_transcript(video_id, cookies_header=None):
         else:
             with urlopen(req, timeout=30) as resp:
                 content = resp.read().decode('utf-8')
-        
-        segments = parse_vtt(content)
+
+        if track.get('ext') in ('vtt', 'webvtt'):
+            segments = parse_vtt(content)
+        elif track.get('ext') == 'srt':
+            segments = parse_srt(content)
+        else:
+            # Try VTT then SRT
+            try:
+                segments = parse_vtt(content)
+            except Exception:
+                segments = parse_srt(content)
         
         return {
             'segments': segments,
