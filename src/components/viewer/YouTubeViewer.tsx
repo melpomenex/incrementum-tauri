@@ -4,11 +4,12 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Play, Clock, ExternalLink, Share2, Youtube, AlertTriangle, SkipForward } from "lucide-react";
+import { Play, Clock, ExternalLink, Share2, Youtube, AlertTriangle, SkipForward, Loader2 } from "lucide-react";
 import { useToast } from "../common/Toast";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
 import { getYouTubeWatchURL, formatDuration } from "../../api/youtube";
+import { fetchYouTubeTranscript } from "../../utils/youtubeTranscriptBrowser";
 import { getDocumentAuto, updateDocument, updateDocumentProgressAuto } from "../../api/documents";
 import { generateYouTubeShareUrl, copyShareLink, parseStateFromUrl } from "../../lib/shareLink";
 import { saveDocumentPosition, timePosition } from "../../api/position";
@@ -107,29 +108,48 @@ export function YouTubeViewer({
     setIsLoadingTranscript(true);
     setTranscriptError(null);
     try {
-      const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }> | null>(
-        "get_youtube_transcript_by_id",
-        { videoId, documentId }
-      );
+      let segments: TranscriptSegment[] = [];
+      let fetchedDuration = 0;
 
-      if (!transcriptData || !Array.isArray(transcriptData)) {
-        setTranscript([]);
-        return;
+      if (isTauri()) {
+        // Use Tauri backend for desktop app
+        const transcriptData = await invoke<Array<{ text: string; start: number; duration: number }> | null>(
+          "get_youtube_transcript_by_id",
+          { videoId, documentId }
+        );
+
+        if (!transcriptData || !Array.isArray(transcriptData)) {
+          setTranscript([]);
+          return;
+        }
+
+        segments = transcriptData.map((seg, i) => ({
+          id: `seg-${i}`,
+          start: seg.start,
+          end: seg.start + seg.duration,
+          text: seg.text,
+        }));
+        fetchedDuration = segments[segments.length - 1]?.end || 0;
+      } else {
+        // Use web API for browser app
+        console.log('[YouTubeViewer] Fetching transcript via web API...');
+        const result = await fetchYouTubeTranscript(videoId);
+
+        segments = result.segments.map((seg, i) => ({
+          id: `seg-${i}`,
+          start: seg.start,
+          end: seg.start + seg.duration,
+          text: seg.text,
+        }));
+        fetchedDuration = segments[segments.length - 1]?.end || 0;
       }
 
-      const segments: TranscriptSegment[] = transcriptData.map((seg, i) => ({
-        id: `seg-${i}`,
-        start: seg.start,
-        end: seg.start + seg.duration,
-        text: seg.text,
-      }));
-
       setTranscript(segments);
-      setDuration(segments[segments.length - 1]?.end || 0);
-      
+      setDuration(fetchedDuration);
+
       // Notify parent component of transcript load
       onTranscriptLoadRef.current?.(segments);
-      onLoad?.({ duration: segments[segments.length - 1]?.end || 0, title: titleRef.current || "" });
+      onLoad?.({ duration: fetchedDuration, title: titleRef.current || "" });
     } catch (error) {
       console.log("Transcript not available:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -484,12 +504,40 @@ export function YouTubeViewer({
           {/* Transcript panel - scrollable */}
           {showTranscript && (
             <div className="flex-1 overflow-y-auto min-h-0">
-              <TranscriptSync
-                segments={transcript}
-                currentTime={currentTime}
-                onSeek={handleSeek}
-                onSelectionChange={onSelectionChange}
-              />
+              {isLoadingTranscript ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-sm">Loading transcript...</span>
+                  </div>
+                </div>
+              ) : transcriptError ? (
+                <div className="flex items-center justify-center h-full p-6">
+                  <div className="text-center max-w-md">
+                    <AlertTriangle className="w-8 h-8 text-yellow-500 mx-auto mb-3" />
+                    <h3 className="text-sm font-medium text-foreground mb-2">Transcript Unavailable</h3>
+                    <p className="text-xs text-muted-foreground">{transcriptError}</p>
+                    {!isTauri() && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Note: Transcript fetching requires the API server to be running.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : transcript.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center">
+                    <p className="text-sm">No transcript available for this video.</p>
+                  </div>
+                </div>
+              ) : (
+                <TranscriptSync
+                  segments={transcript}
+                  currentTime={currentTime}
+                  onSeek={handleSeek}
+                  onSelectionChange={onSelectionChange}
+                />
+              )}
             </div>
           )}
         </div>

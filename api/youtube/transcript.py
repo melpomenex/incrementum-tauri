@@ -10,6 +10,9 @@ from http.server import BaseHTTPRequestHandler
 # Debug: Log Python version only (avoid leaking secrets)
 print(f"[yt-dlp DEBUG] Python version: {sys.version}", file=sys.stderr)
 
+# Debug: Log Python version only (avoid leaking secrets)
+print(f"[yt-dlp DEBUG] Python version: {sys.version}", file=sys.stderr)
+
 DEBUG_YT = os.environ.get('YT_DEBUG') == '1'
 
 # Try to import yt-dlp
@@ -28,6 +31,43 @@ try:
 except ImportError as e:
     print(f"[yt-dlp] ERROR: Failed to import yt_dlp_transcripts: {e}", file=sys.stderr)
     YT_DLP_TRANSCRIPTS_AVAILABLE = False
+
+
+# =============================================================================
+# VPS SERVICE INTEGRATION
+# =============================================================================
+VPS_SERVICE_URL = os.environ.get('VPS_TRANSCRIPT_URL', '')
+VPS_API_KEY = os.environ.get('VPS_TRANSCRIPT_API_KEY', '')
+
+def fetch_from_vps_service(video_id):
+    """Fetch transcript from VPS service (via Tailscale)."""
+    if not VPS_SERVICE_URL or not VPS_API_KEY:
+        print("[VPS] Not configured - skipping", file=sys.stderr)
+        return None
+
+    from urllib.request import Request, urlopen
+
+    service_url = f"{VPS_SERVICE_URL}/transcript/{video_id}"
+    print(f"[VPS] Fetching from: {service_url}", file=sys.stderr)
+
+    try:
+        req = Request(service_url)
+        req.add_header('X-API-Key', VPS_API_KEY)
+        req.add_header('User-Agent', 'Incrementum/1.0')
+
+        response = urlopen(req, timeout=30)
+
+        if response.status == 200:
+            data = json.loads(response.read().decode('utf-8'))
+            print(f"[VPS] Success: cached={data.get('cached')}, segments={data.get('segment_count')}", file=sys.stderr)
+            return data
+        else:
+            print(f"[VPS] HTTP {response.status}: {response.read().decode('utf-8')[:200]}", file=sys.stderr)
+            return None
+
+    except Exception as e:
+        print(f"[VPS] Error: {e}", file=sys.stderr)
+        return None
 
 
 def get_proxy_url():
@@ -601,7 +641,11 @@ class handler(BaseHTTPRequestHandler):
                 'proxy_configured': bool(proxy),
                 'proxy_preview': proxy[:30] + '...' if proxy else None,
                 'yt_dlp_installed': YT_DLP_AVAILABLE,
-                'cookies_received': bool(cookies_header)
+                'cookies_received': bool(cookies_header),
+                'vps_service': {
+                    'configured': bool(VPS_SERVICE_URL and VPS_API_KEY),
+                    'url': VPS_SERVICE_URL if VPS_SERVICE_URL else None
+                }
             })
             return
         
@@ -624,6 +668,23 @@ class handler(BaseHTTPRequestHandler):
         # Fetch transcript
         try:
             cookies_header = _format_cookie_header(cookies)
+
+            # TRY VPS SERVICE FIRST (via Tailscale)
+            vps_result = fetch_from_vps_service(video_id)
+            if vps_result and vps_result.get('success'):
+                # Return VPS result with segment format matching local fetch
+                self.send_json(200, {
+                    'success': True,
+                    'videoId': video_id,
+                    'segments': vps_result.get('segments', []),
+                    'language': vps_result.get('language', 'en'),
+                    'title': vps_result.get('title'),
+                    'duration': vps_result.get('duration')
+                })
+                return
+
+            # FALLBACK: Local fetch methods
+            print("[VPS] Failed or not configured, trying local methods...", file=sys.stderr)
             result = fetch_transcript(video_id, cookies_header=cookies_header)
             if not result.get('segments'):
                 raise Exception('No transcript segments found')

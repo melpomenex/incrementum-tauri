@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documents now open immediately after upload
 - YouTube URL imports now maintain timestamps
 
-## [1.0.0] - 2024
+## [1.0.0] - 2026
 
 ### Added
 - Initial release of Incrementum
