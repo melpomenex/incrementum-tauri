@@ -1240,3 +1240,301 @@ export async function exportOpmlAuto(): Promise<string> {
   }
   return exportOPML();
 }
+
+// ============================================================================
+// Newsletter Feed Discovery
+// ============================================================================
+
+/**
+ * Newsletter platform detection result
+ */
+export interface NewsletterFeedResult {
+  feedUrl: string;
+  platform: string;
+  confidence: "high" | "medium" | "low";
+}
+
+/**
+ * Discover RSS feed URL from a newsletter/web URL
+ * Attempts to auto-detect the feed URL for popular platforms
+ */
+export async function discoverNewsletterFeedUrl(url: string): Promise<NewsletterFeedResult | null> {
+  try {
+    const normalizedUrl = normalizeUrl(url);
+
+    // Try known platform patterns first (high confidence)
+    const platformResult = detectPlatformFeed(normalizedUrl);
+    if (platformResult) {
+      // Verify the feed URL is valid
+      const isValid = await verifyFeedUrl(platformResult.feedUrl);
+      if (isValid) {
+        return platformResult;
+      }
+    }
+
+    // Try generic RSS auto-discovery (medium confidence)
+    const genericResult = await discoverGenericFeed(normalizedUrl);
+    if (genericResult) {
+      return genericResult;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[Newsletter Discovery] Failed to discover feed:", error);
+    return null;
+  }
+}
+
+/**
+ * Normalize URL by ensuring it has a protocol and removing trailing slashes
+ */
+function normalizeUrl(url: string): string {
+  let normalized = url.trim();
+
+  // Add protocol if missing
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`;
+  }
+
+  // Remove trailing slash
+  normalized = normalized.replace(/\/$/, "");
+
+  return normalized;
+}
+
+/**
+ * Detect feed URL based on known platform patterns
+ */
+function detectPlatformFeed(url: string): NewsletterFeedResult | null {
+  const hostname = new URL(url).hostname.toLowerCase();
+
+  // Substack: https://author.substack.com -> https://author.substack.com/feed
+  if (hostname.includes("substack.com")) {
+    return {
+      feedUrl: `${url}/feed`,
+      platform: "Substack",
+      confidence: "high",
+    };
+  }
+
+  // Beehiiv: https://newsletter.beehiiv.com -> https://newsletter.beehiiv.com/feed
+  if (hostname.includes("beehiiv.com")) {
+    return {
+      feedUrl: `${url}/feed`,
+      platform: "Beehiiv",
+      confidence: "high",
+    };
+  }
+
+  // Ghost: Most Ghost blogs use /rss/
+  if (hostname.includes(".ghost.io") || hostname.includes("ghost.org")) {
+    return {
+      feedUrl: `${url}/rss/`,
+      platform: "Ghost",
+      confidence: "high",
+    };
+  }
+
+  // Buttondown: https://buttondown.email/newsletter -> https://buttondown.email/newsletter/feed
+  if (hostname.includes("buttondown.email")) {
+    return {
+      feedUrl: `${url}/feed`,
+      platform: "Buttondown",
+      confidence: "high",
+    };
+  }
+
+  // ConvertKit: Try /feed first
+  if (hostname.includes("ck.page")) {
+    return {
+      feedUrl: `${url}/feed`,
+      platform: "ConvertKit",
+      confidence: "medium",
+    };
+  }
+
+  // Revue: Try /feed first
+  if (hostname.includes("getrevue.co")) {
+    return {
+      feedUrl: `${url}/feed`,
+      platform: "Revue",
+      confidence: "high",
+    };
+  }
+
+  // Medium: Try /feed/
+  if (hostname.includes("medium.com")) {
+    return {
+      feedUrl: `${url}/feed/`,
+      platform: "Medium",
+      confidence: "medium",
+    };
+  }
+
+  // WordPress sites often use /feed/
+  // We'll try this as a fallback
+
+  return null;
+}
+
+/**
+ * Generic RSS feed discovery by parsing HTML for feed links
+ */
+async function discoverGenericFeed(url: string): Promise<NewsletterFeedResult | null> {
+  try {
+    // Fetch the HTML page
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Accept": "text/html,application/xhtml+xml,application/xml",
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const html = await response.text();
+
+    // Parse HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    // Look for RSS feed links in various formats
+    const feedSelectors = [
+      'link[type="application/rss+xml"]',
+      'link[type="application/atom+xml"]',
+      'link[type="application/rdf+xml"]',
+      'link[rel="alternate"][type*="rss"]',
+      'link[rel="alternate"][type*="atom"]',
+    ];
+
+    for (const selector of feedSelectors) {
+      const link = doc.querySelector(selector) as HTMLLinkElement;
+      if (link && link.href) {
+        const feedUrl = new URL(link.href, url).toString();
+        const isValid = await verifyFeedUrl(feedUrl);
+        if (isValid) {
+          return {
+            feedUrl,
+            platform: "RSS/Atom",
+            confidence: "medium",
+          };
+        }
+      }
+    }
+
+    // Try common WordPress feed URLs as a last resort
+    const commonPaths = ["/feed/", "/feed", "/rss/", "/rss"];
+    for (const path of commonPaths) {
+      const testUrl = `${url}${path}`;
+      const isValid = await verifyFeedUrl(testUrl);
+      if (isValid) {
+        return {
+          feedUrl: testUrl,
+          platform: "WordPress/RSS",
+          confidence: "low",
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[Newsletter Discovery] Generic discovery failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Verify that a URL is a valid RSS/Atom feed
+ */
+async function verifyFeedUrl(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Accept": "application/rss+xml,application/atom+xml,application/xml,text/xml",
+      },
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const isXmlContent = contentType.includes("xml") ||
+                        contentType.includes("rss") ||
+                        contentType.includes("atom");
+
+    // Check if content looks like XML
+    const text = await response.text();
+    const trimmedText = text.trim().substring(0, 1000);
+    const looksLikeXml = trimmedText.startsWith("<?xml") ||
+                        trimmedText.startsWith("<rss") ||
+                        trimmedText.startsWith("<feed") ||
+                        trimmedText.startsWith("<rdf:");
+
+    return isXmlContent || looksLikeXml;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get popular newsletter platforms
+ */
+export function getNewsletterPlatforms(): string[] {
+  return [
+    "Substack",
+    "Beehiiv",
+    "Ghost",
+    "Buttondown",
+    "ConvertKit",
+    "Revue",
+    "Medium",
+    "WordPress",
+  ];
+}
+
+/**
+ * Quick subscribe to a newsletter URL
+ * Combines discovery and subscription in one step
+ */
+export async function quickSubscribeToNewsletter(
+  url: string,
+  title?: string
+): Promise<Feed | null> {
+  try {
+    // First, try to discover the feed URL
+    const discovery = await discoverNewsletterFeedUrl(url);
+
+    let feedUrl: string;
+    if (discovery) {
+      feedUrl = discovery.feedUrl;
+      console.log(`[Newsletter] Discovered ${discovery.platform} feed: ${feedUrl}`);
+    } else {
+      // If discovery failed, assume the URL is already a feed URL
+      feedUrl = url;
+      console.log("[Newsletter] Using URL as feed URL directly");
+    }
+
+    // Fetch the feed
+    const feed = await fetchFeed(feedUrl);
+    if (!feed) {
+      throw new Error("Failed to fetch or parse feed");
+    }
+
+    // Use provided title or the one from the feed
+    if (title) {
+      feed.title = title;
+    }
+
+    // Subscribe to the feed
+    await subscribeToFeedAuto(feed);
+
+    return feed;
+  } catch (error) {
+    console.error("[Newsletter] Quick subscribe failed:", error);
+    throw error;
+  }
+}

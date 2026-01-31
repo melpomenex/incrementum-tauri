@@ -15,6 +15,8 @@ import {
   Download,
   Maximize2,
   Minimize2,
+  Newspaper,
+  X,
 } from "lucide-react";
 import {
   Feed,
@@ -41,6 +43,7 @@ import {
   type RssUserPreference,
 } from "../../api/rss";
 import { RSSCustomizationPanel, RSSUserPreferenceUpdate } from "./RSSCustomizationPanel";
+import { NewsletterDirectory } from "../newsletter/NewsletterDirectory";
 import { isTauri } from "../../lib/tauri";
 
 type ViewMode = "all" | "unread" | "favorites" | "search";
@@ -59,6 +62,7 @@ export function RSSReader() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showCustomization, setShowCustomization] = useState(false);
+  const [showNewsletterDirectory, setShowNewsletterDirectory] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [folders, setFolders] = useState(getFeedFolders());
@@ -432,6 +436,13 @@ export function RSSReader() {
                   title="Add feed"
                 >
                   <Plus className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setShowNewsletterDirectory(true)}
+                  className="p-2 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 rounded transition-colors"
+                  title="Browse newsletter directory"
+                >
+                  <Newspaper className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleImportOPML}
@@ -837,5 +848,28 @@ export function RSSReader() {
         onSave={handleSavePreferences}
       />
     </div>
+
+    {/* Newsletter Directory Modal */}
+    {showNewsletterDirectory && (
+      <div className="fixed inset-0 z-50 bg-black/50">
+        <div className="h-full w-full bg-background">
+          <button
+            onClick={() => setShowNewsletterDirectory(false)}
+            className="absolute top-4 right-4 z-10 p-2 bg-muted/80 hover:bg-muted text-foreground rounded-lg backdrop-blur-sm transition-colors"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <NewsletterDirectory
+            onSubscribe={(feed) => {
+              // Refresh feeds after subscription
+              loadFeeds();
+            }}
+            onClose={() => setShowNewsletterDirectory(false)}
+          />
+        </div>
+      </div>
+    )}
+  </>
   );
 }

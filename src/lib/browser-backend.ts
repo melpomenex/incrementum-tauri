@@ -1796,6 +1796,11 @@ const commandHandlers: Record<string, CommandHandler> = {
             if (context.selection && context.selection.trim().length > 0) {
                 contextPrompt += `\n\nSelected text:\n${context.selection}`;
             }
+        } else if (context.type === 'video' && normalizedContent) {
+            contextPrompt = `You are a helpful assistant analyzing the following video transcript:\n\n${normalizedContent}\n\nAnswer questions based on this transcript.`;
+            if (context.selection && context.selection.trim().length > 0) {
+                contextPrompt += `\n\nSelected text:\n${context.selection}`;
+            }
         } else if (context.type === 'web') {
             contextPrompt = 'You are a helpful assistant that can search the web for information.';
         } else {

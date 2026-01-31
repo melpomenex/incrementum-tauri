@@ -1177,6 +1177,30 @@ If the answer is not in the provided context, say so.",
             instructions.push_str(&prompt);
             instructions
         }
+        "video" => {
+            let mut prompt = String::from("The user is watching a video.");
+
+            if let Some(selection) = context.selection.as_ref() {
+                if !selection.trim().is_empty() {
+                    prompt.push_str(&format!("\nSelected text: \"{}\"", selection));
+                }
+            }
+
+            if let Some(content) = context.content.as_ref() {
+                let excerpt = select_relevant_excerpt(
+                    content,
+                    context.context_window_tokens,
+                    latest_user_message,
+                );
+                if !excerpt.trim().is_empty() {
+                    prompt.push_str("\nTranscript (excerpt):\n");
+                    prompt.push_str(&excerpt);
+                }
+            }
+
+            instructions.push_str(&prompt);
+            instructions
+        }
         _ => {
             instructions.push_str("You are a helpful assistant.");
             instructions

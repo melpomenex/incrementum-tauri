@@ -826,7 +826,79 @@ Visualize connections between your knowledge:
 
 Learn from your favorite feeds:
 
-**Feed Management:**
+#### Newsletter Directory
+
+Discover and subscribe to popular newsletters directly in Incrementum:
+
+**Access the Newsletter Directory:**
+1. Click **RSS** tab
+2. Click the **Newsletter icon** (📬) in the header
+3. Browse curated newsletters by category
+
+**Newsletter Categories:**
+- **Technology**: Tech news, programming, AI
+- **Science**: Research, discoveries, scientific insights
+- **Finance**: Investing, markets, personal finance
+- **Business**: Entrepreneurship, strategy, company building
+- **Health**: Wellness, medicine, healthy living
+- **Lifestyle**: Culture, travel, food, personal development
+- **Politics**: Policy, governance, current events
+- **Arts & Literature**: Books, art, music, creative writing
+- **Education**: Learning, teaching, academic insights
+- **Crypto & Web3**: Blockchain, DeFi, cryptocurrency news
+
+**Subscribing to Newsletters:**
+1. Browse the directory or search for a newsletter
+2. Click **Subscribe** on any newsletter
+3. The feed is automatically added to your RSS subscriptions
+4. New issues will appear in your RSS reader
+
+**Newsletter Feed Discovery:**
+
+Incrementum can automatically discover RSS feeds from popular newsletter platforms:
+
+- **Substack**: Add `/feed` to any Substack URL
+  - Example: `https://author.substack.com` → `https://author.substack.com/feed`
+- **Beehiiv**: Auto-discovers the `/feed` endpoint
+- **Ghost blogs**: Auto-discovers the `/rss/` endpoint
+- **Buttondown**: Add `/feed` to the newsletter URL
+- **Generic**: Auto-discovers RSS feeds from HTML `<link>` tags
+
+**Quick Subscribe from URL:**
+1. Copy any newsletter URL
+2. Click **Add Feed** in RSS tab
+3. Paste the URL
+4. Incrementum auto-discovers the RSS feed
+5. Click **Add Feed** to subscribe
+
+**Finding Newsletter RSS Feeds:**
+
+Most newsletter platforms publish RSS feeds:
+
+| Platform | RSS Feed Pattern | Example |
+|----------|------------------|---------|
+| Substack | `https://[author].substack.com/feed` | `https://stratechery.substack.com/feed` |
+| Beehiiv | `https://[newsletter].beehiiv.com/feed` | `https://banklesshq.beehiiv.com/feed` |
+| Ghost | `https://[blog].ghost.io/rss/` | `https://blog.ghost.io/rss/` |
+| Buttondown | `https://buttondown.email/[name]/feed` | `https://buttondown.email/newsletter/feed` |
+
+**Supported Platforms:**
+- Substack (most newsletters)
+- Beehiiv
+- Ghost blogs
+- Buttondown
+- ConvertKit
+- Revue
+- Medium publications
+- WordPress sites (generic)
+
+**Import/Export Newsletter Subscriptions:**
+- **OPML Import**: Import from other RSS readers
+- **OPML Export**: Backup your newsletter subscriptions
+- Share subscriptions between devices
+
+#### Feed Management
+
 1. Click **RSS** tab
 2. Click **Add Feed**
 3. Enter feed URL
@@ -1354,6 +1426,14 @@ Export your data before major changes (Settings → Backup → Export)
 ---
 
 ## FAQ
+
+**Q: How do I add newsletters to Incrementum?**
+A: You can add newsletters in two ways:
+1. **Newsletter Directory**: Click RSS → Newsletter icon (📬) → Browse and subscribe to curated newsletters
+2. **Direct URL**: Copy any newsletter URL (Substack, Beehiiv, etc.) → RSS → Add Feed → Paste URL. Incrementum will auto-discover the RSS feed.
+
+**Q: Which newsletter platforms are supported?**
+A: Incrementum supports RSS feeds from Substack, Beehiiv, Ghost blogs, Buttondown, ConvertKit, Revue, Medium, and WordPress sites. Most newsletters publish RSS feeds - check the newsletter's website for an RSS link or try adding `/feed` to the URL.
 
 **Q: How many cards should I review per day?**
 A: Start with 20-50 per day. Adjust based on your schedule and goals. Consistency is more important than volume.

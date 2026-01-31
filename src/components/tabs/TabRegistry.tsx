@@ -17,5 +17,6 @@ export const KnowledgeSphereTab = lazy(() => import("./knowledge/KnowledgeSphere
 export const WebBrowserTab = lazy(() => import("../viewer/DocumentViewerWrapper").then(m => ({ default: m.WebBrowserTab })));
 export const RssTab = lazy(() => import("./RssTab").then(m => ({ default: m.RssTab })));
 export const RSSReader = lazy(() => import("../media/RSSReader").then(m => ({ default: m.RSSReader })));
+export const NewsletterDirectoryTab = lazy(() => import("../newsletter/NewsletterDirectory").then(m => ({ default: m.NewsletterDirectory })));
 export const ScreenshotTab = lazy(() => import("./ScreenshotTab").then(m => ({ default: m.ScreenshotTab })));
 export const DocumentQATab = lazy(() => import("./DocumentQATab").then(m => ({ default: m.DocumentQATab })));

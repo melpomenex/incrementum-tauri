@@ -14,6 +14,7 @@ export type TabType =
   | "knowledge-sphere"
   | "knowledge-network"
   | "rss"
+  | "newsletter"
   | "web-browser"
   | "doc-qa";
 

@@ -768,6 +768,11 @@ Available tools: ${toolNames}`;
             {context.type === "document" && <FileText className="w-3 h-3" />}
             {context.type === "web" && <Code className="w-3 h-3" />}
             <span>{getContextMessage(context)}</span>
+            {context.type === "video" && context.content && (
+              <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground/80">
+                Transcript attached
+              </span>
+            )}
           </div>
         </div>
       )}

@@ -17,6 +17,7 @@ import {
   Settings,
   BarChart3,
   X,
+  Newspaper,
 } from "lucide-react";
 import { useTabsStore } from "../../stores";
 import type { TabType } from "../../stores/tabsStore";
@@ -28,6 +29,7 @@ import {
   AnalyticsTab,
   SettingsTab,
   RssTab,
+  NewsletterDirectoryTab,
 } from "../tabs/TabRegistry";
 
 interface NavItem {
@@ -110,6 +112,16 @@ const allNavItems: NavItem[] = [
     tabContent: RssTab,
     closable: true,
     badge: "rss",
+  },
+  {
+    id: "newsletter",
+    label: "Newsletters",
+    icon: Newspaper,
+    tabType: "newsletter",
+    tabTitle: "Newsletter Directory",
+    tabIcon: "📬",
+    tabContent: NewsletterDirectoryTab,
+    closable: true,
   },
   {
     id: "analytics",
