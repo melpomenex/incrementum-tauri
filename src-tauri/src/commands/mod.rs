@@ -26,6 +26,7 @@ pub mod position;
 pub mod reading_goals;
 pub mod search;
 pub mod collections;
+pub mod collection_archive;
 pub mod video;
 pub mod youtube_playlist;
 
@@ -54,6 +55,7 @@ pub use position::*;
 pub use reading_goals::*;
 pub use search::*;
 pub use collections::*;
+pub use collection_archive::*;
 pub use video::*;
 pub use youtube_playlist::*;
 

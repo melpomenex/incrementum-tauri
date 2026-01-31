@@ -4,8 +4,11 @@
 
 import { useState, useEffect } from "react";
 import { invokeCommand } from "../../lib/tauri";
-import { Download, Upload, FileDown, FileUp, RefreshCw } from "lucide-react";
+import { Download, Upload, FileDown, FileUp, RefreshCw, PackageCheck } from "lucide-react";
 import { SettingsSection, SettingsRow } from "./SettingsPage";
+import { useCollectionStore } from "../../stores/collectionStore";
+import { buildCollectionArchive, parseCollectionArchive, restoreBrowserArchive, restoreLocalStorage, shouldUseTauriImport } from "../../utils/collectionArchive";
+import type { CollectionExportScope } from "../../types/archive";
 
 /**
  * Export options
@@ -23,6 +26,7 @@ interface ExportOptions {
  * Import/Export Settings
  */
 export function ImportExportSettings({ onChange }: { onChange: () => void }) {
+  const { collections, activeCollectionId, documentAssignments } = useCollectionStore();
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     includeDocuments: true,
     includeExtracts: true,
@@ -35,6 +39,9 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [demoContentStatus, setDemoContentStatus] = useState<string>("Loading...");
+  const [archiveScope, setArchiveScope] = useState<CollectionExportScope>("current");
+  const [archiveInProgress, setArchiveInProgress] = useState(false);
+  const [archiveStatus, setArchiveStatus] = useState<string | null>(null);
 
   // Load demo content status on mount
   useEffect(() => {
@@ -79,6 +86,32 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
     }
   };
 
+  const handleArchiveExport = async () => {
+    setArchiveInProgress(true);
+    setArchiveStatus(null);
+    try {
+      const { blob, filename } = await buildCollectionArchive({
+        scope: archiveScope,
+        activeCollectionId,
+        collections,
+        documentAssignments,
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      setArchiveStatus("Archive export created successfully.");
+    } catch (error) {
+      setArchiveStatus(`Archive export failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setArchiveInProgress(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!importFile) {
       alert("Please select a file to import");
@@ -88,6 +121,31 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
     setIsProcessing(true);
     try {
       const fileName = importFile.name.toLowerCase();
+      if (fileName.endsWith(".zip")) {
+        try {
+          const parsed = await parseCollectionArchive(importFile);
+
+          if (shouldUseTauriImport(importFile)) {
+            const filePath = (importFile as File & { path?: string }).path;
+            if (!filePath) {
+              throw new Error("Archive import requires a file path in Tauri.");
+            }
+            const result = await invokeCommand<string>("import_collection_archive", {
+              archivePath: filePath,
+            });
+            alert(result);
+          } else {
+            await restoreBrowserArchive(parsed);
+            alert("Archive import complete. Reload the app to finish restoring your data.");
+          }
+
+          restoreLocalStorage(parsed.payload.localStorage);
+          onChange();
+          return;
+        } catch (error) {
+          console.warn("Not a collection archive, falling back to legacy import.", error);
+        }
+      }
       if (fileName.endsWith(".apkg")) {
         const filePath = (importFile as File & { path?: string }).path;
         if (filePath) {
@@ -163,7 +221,62 @@ export function ImportExportSettings({ onChange }: { onChange: () => void }) {
   return (
     <>
       <SettingsSection
-        title="Export Data"
+        title="Collection Archive (Recommended)"
+        description="Create a portable backup that includes data, files, settings, and Anki .apkg"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-muted/30 rounded-lg">
+            <h4 className="text-sm font-medium mb-3 text-foreground">Scope</h4>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="archive-scope"
+                  checked={archiveScope === "current"}
+                  onChange={() => setArchiveScope("current")}
+                />
+                <span className="text-sm text-foreground">
+                  Current collection ({collections.find((c) => c.id === activeCollectionId)?.name || "None"})
+                </span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="archive-scope"
+                  checked={archiveScope === "all"}
+                  onChange={() => setArchiveScope("all")}
+                />
+                <span className="text-sm text-foreground">All collections</span>
+              </label>
+            </div>
+          </div>
+
+          <button
+            onClick={handleArchiveExport}
+            disabled={archiveInProgress}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+          >
+            {archiveInProgress ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Preparing archive...
+              </>
+            ) : (
+              <>
+                <PackageCheck className="w-4 h-4" />
+                Export Collection Archive (.zip)
+              </>
+            )}
+          </button>
+
+          {archiveStatus && (
+            <p className="text-xs text-muted-foreground">{archiveStatus}</p>
+          )}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Export Data (Legacy Formats)"
         description="Choose what to include in your export"
       >
         <div className="space-y-4">

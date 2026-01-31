@@ -83,3 +83,11 @@ pub async fn get_learning_items_by_extract(
     let items = repo.get_learning_items_by_extract(&extract_id).await?;
     Ok(items)
 }
+
+#[tauri::command]
+pub async fn get_all_learning_items(
+    repo: State<'_, Repository>,
+) -> Result<Vec<LearningItem>> {
+    let items = repo.get_all_learning_items().await?;
+    Ok(items)
+}

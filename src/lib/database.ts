@@ -401,6 +401,11 @@ export async function getExtractsByDocument(documentId: string): Promise<Extract
     return extracts.filter(e => !e._deleted).sort((a, b) => (a.page_number || 0) - (b.page_number || 0));
 }
 
+export async function getAllExtracts(): Promise<Extract[]> {
+    const extracts = await getAll<Extract>(STORES.extracts);
+    return extracts.filter(e => !e._deleted);
+}
+
 export async function updateExtract(id: string, updates: Partial<Extract>): Promise<Extract> {
     const existing = await getExtract(id);
     if (!existing) throw new Error(`Extract ${id} not found`);
@@ -521,6 +526,11 @@ export async function getLearningItemsByDocument(documentId: string): Promise<Le
     return items.filter(i => !i._deleted);
 }
 
+export async function getAllLearningItems(): Promise<LearningItem[]> {
+    const items = await getAll<LearningItem>(STORES.learningItems);
+    return items.filter(i => !i._deleted);
+}
+
 export async function updateLearningItem(id: string, updates: Partial<LearningItem>): Promise<LearningItem> {
     const existing = await getLearningItem(id);
     if (!existing) throw new Error(`Learning item ${id} not found`);
@@ -625,6 +635,32 @@ export async function deleteFile(id: string): Promise<void> {
 
 export async function getAllFiles(): Promise<StoredFile[]> {
     return getAll<StoredFile>(STORES.files);
+}
+
+export async function bulkPutFiles(files: StoredFile[]): Promise<void> {
+    const database = await openDatabase();
+    const tx = database.transaction(STORES.files, 'readwrite');
+    const store = tx.objectStore(STORES.files);
+
+    for (const file of files) {
+        store.put(file);
+    }
+
+    return new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+export async function clearStore(storeName: string): Promise<void> {
+    const database = await openDatabase();
+    return new Promise((resolve, reject) => {
+        const tx = database.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
 }
 
 

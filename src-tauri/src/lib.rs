@@ -196,6 +196,7 @@ pub fn run() {
             commands::get_learning_items,
             commands::get_learning_item,
             commands::get_learning_items_by_extract,
+            commands::get_all_learning_items,
             // Category commands
             commands::get_categories,
             commands::create_category,
@@ -373,6 +374,7 @@ pub fn run() {
             commands::cloud_sync_resolve_conflicts,
             commands::cloud_list_files,
             commands::cloud_import_files,
+            commands::import_collection_archive,
             // Scheduler commands
             commands::scheduler_init,
             commands::scheduler_start,

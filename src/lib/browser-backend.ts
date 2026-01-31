@@ -612,8 +612,10 @@ const commandHandlers: Record<string, CommandHandler> = {
 
     // Extract commands
     get_extracts: async (args) => {
-        const documentId = args.documentId as string;
-        const extracts = await db.getExtractsByDocument(documentId);
+        const documentId = args.documentId as string | undefined;
+        const extracts = documentId
+            ? await db.getExtractsByDocument(documentId)
+            : await db.getAllExtracts();
         return toCamelCase(extracts);
     },
 
@@ -662,6 +664,11 @@ const commandHandlers: Record<string, CommandHandler> = {
     get_learning_items: async (args) => {
         const documentId = args.documentId as string;
         const items = await db.getLearningItemsByDocument(documentId);
+        return toCamelCase(items);
+    },
+
+    get_all_learning_items: async () => {
+        const items = await db.getAllLearningItems();
         return toCamelCase(items);
     },
 

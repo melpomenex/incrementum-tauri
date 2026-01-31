@@ -47,7 +47,9 @@ def fetch_from_vps_service(video_id):
 
     from urllib.request import Request, urlopen
 
-    service_url = f"{VPS_SERVICE_URL}/transcript/{video_id}"
+    # Strip trailing slash from base URL to avoid double slashes
+    base_url = VPS_SERVICE_URL.rstrip('/')
+    service_url = f"{base_url}/transcript/{video_id}"
     print(f"[VPS] Fetching from: {service_url}", file=sys.stderr)
 
     try:
