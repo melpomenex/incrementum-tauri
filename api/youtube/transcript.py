@@ -122,23 +122,43 @@ def fetch_transcript(video_id):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(video_url, download=False)
     
-    # Find captions
+    # Find captions - check all available languages
     subtitles = info.get('subtitles', {})
     auto_captions = info.get('automatic_captions', {})
     
+    print(f"[yt-dlp] Available subtitles: {list(subtitles.keys())}", file=sys.stderr)
+    print(f"[yt-dlp] Available auto captions: {list(auto_captions.keys())}", file=sys.stderr)
+    
     track_list = None
-    for lang in ['en-US', 'en-CA', 'en']:
+    track_source = None
+    
+    # Try manual subtitles first (higher quality)
+    for lang in ['en-US', 'en-GB', 'en-CA', 'en-AU', 'en']:
         if lang in subtitles and subtitles[lang]:
             track_list = subtitles[lang]
+            track_source = f"subtitles.{lang}"
             break
+    
+    # Fall back to auto-generated captions
     if not track_list:
-        for lang in ['en-orig', 'en-US', 'en-CA', 'en']:
+        for lang in ['en-orig', 'en-US', 'en-GB', 'en-CA', 'en-AU', 'en']:
             if lang in auto_captions and auto_captions[lang]:
                 track_list = auto_captions[lang]
+                track_source = f"auto_captions.{lang}"
+                break
+    
+    # Last resort: try any English variant
+    if not track_list:
+        for key in list(subtitles.keys()) + list(auto_captions.keys()):
+            if key.startswith('en'):
+                track_list = subtitles.get(key) or auto_captions.get(key)
+                track_source = key
                 break
     
     if not track_list:
-        raise Exception('No captions available')
+        raise Exception(f'No captions available. Subtitles: {list(subtitles.keys())}, Auto: {list(auto_captions.keys())}')
+    
+    print(f"[yt-dlp] Using captions from: {track_source}", file=sys.stderr)
     
     # Get VTT track
     track = next((t for t in track_list if t.get('ext') == 'vtt'), track_list[0])

@@ -53,6 +53,7 @@ export function YouTubeViewer({
   const seekDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const documentIdRef = useRef(documentId);
   const onLoadRef = useRef(onLoad);
+  const onTranscriptLoadRef = useRef(onTranscriptLoad);
   const titleRef = useRef(title);
   const startTimeRef = useRef(0);
   const isPlayingRef = useRef(false);
@@ -88,6 +89,10 @@ export function YouTubeViewer({
   useEffect(() => {
     onLoadRef.current = onLoad;
   }, [onLoad]);
+
+  useEffect(() => {
+    onTranscriptLoadRef.current = onTranscriptLoad;
+  }, [onTranscriptLoad]);
 
   useEffect(() => {
     titleRef.current = title;
