@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText, Filter } from "lucide-react";
+import { Link2, List, Search, X, Youtube, LayoutGrid, BookOpen, Trash2, FileText, Filter, Globe, FileText as FileTextIcon } from "lucide-react";
 import { useDocumentStore } from "../../stores/documentStore";
 import { useCollectionStore } from "../../stores/collectionStore";
 import { AnnaArchiveSearch } from "../import/AnnaArchiveSearch";
+import { ArxivImportDialog } from "../import/ArxivImportDialog";
+import { WebArticleImportDialog } from "../import/WebArticleImportDialog";
 import { EmptyDocuments, EmptySearch } from "../common/EmptyState";
 import { DocumentCardSkeleton, DocumentGridSkeleton } from "../common/Skeleton";
 import type { Document } from "../../types/document";
@@ -136,6 +138,8 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
   const [isDragging, setIsDragging] = useState(false);
   const [showYouTubeImport, setShowYouTubeImport] = useState(false);
   const [showAnnaArchiveSearch, setShowAnnaArchiveSearch] = useState(false);
+  const [showArxivImport, setShowArxivImport] = useState(false);
+  const [showWebArticleImport, setShowWebArticleImport] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
@@ -543,6 +547,22 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
                 Import YouTube
               </button>
             )}
+            <button
+              onClick={() => setShowArxivImport(true)}
+              className="px-3 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+              title="Import research papers from ArXiv"
+            >
+              <FileTextIcon className="w-4 h-4" />
+              ArXiv
+            </button>
+            <button
+              onClick={() => setShowWebArticleImport(true)}
+              className="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+              title="Import web articles"
+            >
+              <Globe className="w-4 h-4" />
+              Web Article
+            </button>
             {isTauri() && (
               <button
                 onClick={() => setShowAnnaArchiveSearch(true)}
@@ -1159,6 +1179,18 @@ export function DocumentsView({ onOpenDocument, enableYouTubeImport = true }: Do
           </div>
         </div>
       )}
+
+      {/* ArXiv Import Dialog */}
+      <ArxivImportDialog
+        isOpen={showArxivImport}
+        onClose={() => setShowArxivImport(false)}
+      />
+
+      {/* Web Article Import Dialog */}
+      <WebArticleImportDialog
+        isOpen={showWebArticleImport}
+        onClose={() => setShowWebArticleImport(false)}
+      />
     </div>
   );
 }

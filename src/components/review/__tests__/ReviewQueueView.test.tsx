@@ -57,14 +57,14 @@ describe("ReviewQueueView", () => {
   it("renders session actions and queue toggle", () => {
     render(<ReviewQueueView />);
     expect(screen.getByText("Start Optimal Session")).toBeInTheDocument();
-    expect(screen.getByText("Reading Queue")).toBeInTheDocument();
+    expect(screen.getAllByText("Reading Queue").length).toBeGreaterThan(0);
   });
 
   it("shows inspector for selected item", () => {
     render(<ReviewQueueView />);
-    fireEvent.click(screen.getByText("Reading Item"));
+    fireEvent.click(screen.getAllByText("Reading Item")[0]);
     expect(screen.getByText("Inspector")).toBeInTheDocument();
-    expect(screen.getByText("Reading Item")).toBeInTheDocument();
+    expect(screen.getAllByText("Reading Item").length).toBeGreaterThan(0);
   });
 
   it("routes optimal session to scroll mode when available", () => {

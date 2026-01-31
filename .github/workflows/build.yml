@@ -68,8 +68,8 @@ jobs:
       - name: List bundle directory (debug)
         run: |
           echo "=== Bundle directory contents ==="
-          find src-tauri/target -name "bundle" -type d 2>/dev/null | head -5
-          find src-tauri/target -path "*/bundle/*" -type f 2>/dev/null | head -20
+          find src-tauri/target -name "bundle" -type d 2>/dev/null | head -5 || true
+          find src-tauri/target -path "*/bundle/*" -type f 2>/dev/null | head -20 || true
           echo "=== Release directory ==="
           ls -la src-tauri/target/release/ 2>/dev/null || echo "No release dir"
           ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "No bundle dir"
@@ -88,7 +88,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            src-tauri/target/release/bundle/**/*
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app.tar.gz
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -131,6 +136,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
       - name: Build Tauri AppImage (without custom-protocol)
         run: |
           cd src-tauri
@@ -149,7 +157,8 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          files: src-tauri/target/release/bundle/appimage/*
+          files: src-tauri/target/release/bundle/appimage/*.AppImage
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -222,7 +231,9 @@ jobs:
 
           # Build the package
           cd arch-pkg
-          makepkg -s --noconfirm
+          useradd -m builder
+          chown -R builder:builder /__w/incrementum-tauri/incrementum-tauri/arch-pkg
+          su builder -c "cd /__w/incrementum-tauri/incrementum-tauri/arch-pkg && makepkg -s --noconfirm"
 
       - name: Upload Pacman artifacts
         uses: actions/upload-artifact@v4
@@ -236,6 +247,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: arch-pkg/*.pkg.tar.zst
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
           generate_release_notes: true

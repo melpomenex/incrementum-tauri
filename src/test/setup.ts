@@ -47,6 +47,21 @@ Object.defineProperty(window, "__TAURI__", {
   writable: true,
 });
 
+// Mock matchMedia for components relying on PWA/media queries.
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(), // deprecated
+    removeListener: vi.fn(), // deprecated
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }),
+});
+
 // Suppress console errors in tests (optional, for cleaner output)
 const originalError = console.error;
 beforeAll(() => {

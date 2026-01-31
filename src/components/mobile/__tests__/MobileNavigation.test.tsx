@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "../../../test/utils";
 import { MobileNavigation } from "../MobileNavigation";
 import { useTabsStore } from "../../../stores";
+import { createTabPane } from "../../../stores/tabsStore";
 
 describe("MobileNavigation", () => {
   beforeEach(() => {
     useTabsStore.setState({
       tabs: [],
-      activeTabId: null,
+      rootPane: createTabPane([], null),
       closedTabs: [],
     });
   });
@@ -17,7 +18,8 @@ describe("MobileNavigation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Queue" }));
 
-    const { tabs, activeTabId } = useTabsStore.getState();
+    const { tabs, rootPane } = useTabsStore.getState();
+    const activeTabId = rootPane.type === "tabs" ? rootPane.activeTabId : null;
     const queueTab = tabs.find((tab) => tab.type === "queue");
 
     expect(queueTab).toBeTruthy();

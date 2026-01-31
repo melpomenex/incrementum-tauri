@@ -244,7 +244,7 @@ export function detectMathContent(text: string): {
   }
 
   return {
-    hasMath: confidence > 0.3,
+    hasMath: confidence >= 0.15,
     confidence: Math.min(confidence, 1.0),
     indicators,
   };

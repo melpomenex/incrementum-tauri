@@ -287,3 +287,39 @@ export function isPaperSaved(paperId: string): boolean {
   const saved = getSavedPapers();
   return saved.some((p) => p.id === paperId);
 }
+
+/**
+ * Import an ArXiv paper as a document
+ * Downloads the PDF and creates a document in the library
+ */
+export async function importArxivPaper(
+  paper: ArxivPaper
+): Promise<{ success: boolean; documentId?: string; error?: string }> {
+  try {
+    const { fetchUrlContent } = await import("./documents");
+    
+    // Download the PDF from ArXiv
+    const pdfUrl = getArxivPdfUrl(paper.id);
+    const content = await fetchUrlContent(pdfUrl);
+    
+    if (!content.file_path) {
+      return { success: false, error: "Failed to download PDF" };
+    }
+    
+    return { 
+      success: true, 
+      filePath: content.file_path,
+      title: paper.title,
+      authors: paper.authors,
+      summary: paper.summary,
+      categories: paper.categories,
+      published: paper.published,
+    };
+  } catch (error) {
+    console.error("Failed to import ArXiv paper:", error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Failed to import paper" 
+    };
+  }
+}
