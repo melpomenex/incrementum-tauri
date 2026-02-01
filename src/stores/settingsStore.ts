@@ -212,6 +212,26 @@ interface ScrollQueueSettings {
 }
 
 /**
+ * RSS Queue Settings
+ */
+export interface RSSQueueSettings {
+  /** Whether to include RSS items in the main queue at all */
+  includeInQueue: boolean;
+  /** Percentage of queue items that should be RSS (0-100) */
+  percentage: number;
+  /** Maximum number of RSS items to include per session (0 = unlimited) */
+  maxItemsPerSession: number;
+  /** Specific feed IDs to include in the queue (empty = all feeds) */
+  includedFeedIds: string[];
+  /** Feed IDs explicitly excluded from the queue */
+  excludedFeedIds: string[];
+  /** Whether to only include unread items */
+  unreadOnly: boolean;
+  /** Whether to prefer newer items */
+  preferRecent: boolean;
+}
+
+/**
  * YouTube API Settings
  */
 interface YouTubeSettings {
@@ -236,6 +256,7 @@ export interface Settings {
   audioTranscription: AudioTranscriptionSettings;
   smartQueue: SmartQueueSettings;
   scrollQueue: ScrollQueueSettings;
+  rssQueue: RSSQueueSettings;
   youtube: YouTubeSettings;
 }
 
@@ -368,6 +389,15 @@ export const defaultSettings: Settings = {
   scrollQueue: {
     flashcardPercentage: 30, // 30% of queue should be flashcards by default
     extractsCountAsFlashcards: true, // Extracts count towards the flashcard percentage
+  },
+  rssQueue: {
+    includeInQueue: true,
+    percentage: 20, // 20% of queue should be RSS by default
+    maxItemsPerSession: 10, // Max 10 RSS items per session
+    includedFeedIds: [], // Empty = all feeds included by default
+    excludedFeedIds: [], // No feeds excluded by default
+    unreadOnly: true, // Only include unread items
+    preferRecent: true, // Prefer newer items
   },
   youtube: {
     apiKey: undefined,

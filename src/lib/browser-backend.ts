@@ -793,7 +793,8 @@ const commandHandlers: Record<string, CommandHandler> = {
     // Queue/Review commands
     get_queue: async () => {
         // Return a flat array of queue items matching Rust format
-        const docs = await db.getDocuments();
+        const docs = (await db.getDocuments()).filter((doc) => !doc.is_archived);
+        const activeDocIds = new Set(docs.map((doc) => doc.id));
         const dueExtracts = await db.getDueExtracts();
         const dueLearningItems = await db.getDueLearningItems();
 
@@ -819,6 +820,9 @@ const commandHandlers: Record<string, CommandHandler> = {
         }
 
         for (const ext of dueExtracts) {
+            if (!activeDocIds.has(ext.document_id)) {
+                continue;
+            }
             const doc = await db.getDocument(ext.document_id);
             items.push({
                 id: ext.id,
@@ -837,6 +841,9 @@ const commandHandlers: Record<string, CommandHandler> = {
         }
 
         for (const item of dueLearningItems) {
+            if (item.document_id && !activeDocIds.has(item.document_id)) {
+                continue;
+            }
             const doc = item.document_id ? await db.getDocument(item.document_id) : null;
             items.push({
                 id: item.id,
@@ -863,7 +870,7 @@ const commandHandlers: Record<string, CommandHandler> = {
     },
 
     get_due_documents_only: async () => {
-        const docs = await db.getDocuments();
+        const docs = (await db.getDocuments()).filter((doc) => !doc.is_archived);
         const now = new Date().toISOString();
         const session = getQueueSession();
         
@@ -932,7 +939,8 @@ const commandHandlers: Record<string, CommandHandler> = {
     },
 
     get_due_queue_items: async () => {
-        const docs = await db.getDocuments();
+        const docs = (await db.getDocuments()).filter((doc) => !doc.is_archived);
+        const activeDocIds = new Set(docs.map((doc) => doc.id));
         const now = new Date().toISOString();
         const dueDocs = docs.filter((doc) => !doc.next_reading_date || doc.next_reading_date <= now);
         const dueExtracts = await db.getDueExtracts();
@@ -959,6 +967,9 @@ const commandHandlers: Record<string, CommandHandler> = {
         }
 
         for (const ext of dueExtracts) {
+            if (!activeDocIds.has(ext.document_id)) {
+                continue;
+            }
             const doc = await db.getDocument(ext.document_id);
             items.push({
                 id: ext.id,
@@ -977,6 +988,9 @@ const commandHandlers: Record<string, CommandHandler> = {
         }
 
         for (const item of dueLearningItems) {
+            if (item.document_id && !activeDocIds.has(item.document_id)) {
+                continue;
+            }
             const doc = item.document_id ? await db.getDocument(item.document_id) : null;
             items.push({
                 id: item.id,
@@ -1002,11 +1016,14 @@ const commandHandlers: Record<string, CommandHandler> = {
     },
 
     get_queue_stats: async () => {
-        const docs = await db.getDocuments();
+        const docs = (await db.getDocuments()).filter((doc) => !doc.is_archived);
+        const activeDocIds = new Set(docs.map((doc) => doc.id));
         const now = new Date().toISOString();
         const dueDocs = docs.filter((doc) => !doc.next_reading_date || doc.next_reading_date <= now);
-        const dueExtracts = await db.getDueExtracts();
-        const dueLearningItems = await db.getDueLearningItems();
+        const dueExtracts = (await db.getDueExtracts()).filter((ext) => activeDocIds.has(ext.document_id));
+        const dueLearningItems = (await db.getDueLearningItems()).filter(
+            (item) => !item.document_id || activeDocIds.has(item.document_id)
+        );
         return {
             total_items: docs.length + dueExtracts.length + dueLearningItems.length,
             due_today: dueDocs.length + dueExtracts.length + dueLearningItems.length,

@@ -41,6 +41,7 @@ export interface SearchResult {
     modifiedAt?: Date;
     createdAt?: Date;
     fileType?: string;
+    transcriptMatch?: boolean;
   };
 }
 
@@ -517,6 +518,11 @@ export function GlobalSearch({
                         )}
 
                         <div className="flex items-center gap-2 mt-1">
+                          {result.metadata?.transcriptMatch && (
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 border border-amber-500/30">
+                              Transcript
+                            </span>
+                          )}
                           {result.metadata?.category && (
                             <span className="text-xs px-1.5 py-0.5 bg-muted rounded">
                               {result.metadata.category}

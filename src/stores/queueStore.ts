@@ -13,6 +13,7 @@ import {
 } from "../api/queue";
 import type { QueueItem, SortOptions, SearchFilters } from "../types";
 import { useCollectionStore } from "./collectionStore";
+import { useDocumentStore } from "./documentStore";
 
 // Queue filter modes for FSRS-based scheduling
 export type QueueFilterMode = "due-today" | "all-items" | "new-only" | "due-all";
@@ -208,6 +209,9 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     const { items, searchQuery, filters, sortOptions } = get();
     let filtered = [...items];
     const { activeCollectionId, documentAssignments } = useCollectionStore.getState();
+    const archivedDocumentIds = new Set(
+      useDocumentStore.getState().documents.filter((doc) => doc.isArchived).map((doc) => doc.id)
+    );
 
     if (activeCollectionId) {
       filtered = filtered.filter((item) => {
@@ -215,6 +219,10 @@ export const useQueueStore = create<QueueState>((set, get) => ({
         const assigned = documentAssignments[item.documentId];
         return assigned ? assigned === activeCollectionId : true;
       });
+    }
+
+    if (archivedDocumentIds.size > 0) {
+      filtered = filtered.filter((item) => !item.documentId || !archivedDocumentIds.has(item.documentId));
     }
 
     // Apply search query

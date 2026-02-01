@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Play, Clock, ExternalLink, Share2, Youtube, AlertTriangle, SkipForward, Loader2, GripVertical } from "lucide-react";
 import { useToast } from "../common/Toast";
+import { useDocumentStore } from "../../stores";
 import { TranscriptSync, TranscriptSegment } from "../media/TranscriptSync";
 import { invokeCommand as invoke } from "../../lib/tauri";
 import { getYouTubeWatchURL, formatDuration } from "../../api/youtube";
@@ -30,6 +31,7 @@ interface YouTubeViewerProps {
   onTranscriptLoad?: (segments: Array<{ text: string; start: number; end: number }>) => void;
   onTimeUpdate?: (time: number) => void;
   onSelectionChange?: (text: string) => void;
+  onArchive?: () => void;
 }
 
 export function YouTubeViewer({ 
@@ -40,8 +42,10 @@ export function YouTubeViewer({
   onTranscriptLoad,
   onTimeUpdate,
   onSelectionChange,
+  onArchive,
 }: YouTubeViewerProps) {
   const toast = useToast();
+  const updateDocumentInStore = useDocumentStore((state) => state.updateDocument);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastSavedTimeRef = useRef<number>(0);
   const documentIdRef = useRef(documentId);
@@ -71,6 +75,9 @@ export function YouTubeViewer({
   const titleFetchRef = useRef<string | null>(null);
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
   const [playerReloadKey, setPlayerReloadKey] = useState(0);
+  const [showArchivePrompt, setShowArchivePrompt] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [hasEnded, setHasEnded] = useState(false);
   
   // SponsorBlock state
   const [segments, setSegments] = useState<SponsorBlockSegment[]>([]);
@@ -373,6 +380,31 @@ export function YouTubeViewer({
     setShowInlinePlayer(true);
   };
 
+  const handleArchiveVideo = useCallback(async () => {
+    if (!documentId || isArchiving) return;
+    setIsArchiving(true);
+    try {
+      await updateDocument(documentId, { isArchived: true } as any);
+      updateDocumentInStore(documentId, { isArchived: true });
+      toast.success("Archived", "Video removed from the queue but kept in your library.");
+      setShowArchivePrompt(false);
+      onArchive?.();
+    } catch (error) {
+      toast.error("Archive failed", error instanceof Error ? error.message : "Please try again");
+    } finally {
+      setIsArchiving(false);
+    }
+  }, [documentId, isArchiving, onArchive, toast, updateDocumentInStore]);
+
+  const handleReplay = useCallback(() => {
+    setShowArchivePrompt(false);
+    setHasEnded(false);
+    if (playerRef.current) {
+      playerRef.current.seekTo(0, true);
+      playerRef.current.playVideo?.();
+    }
+  }, []);
+
   // YouTube Player Event Handlers
   const onPlayerReady = (event: any) => {
     playerRef.current = event.target;
@@ -389,9 +421,21 @@ export function YouTubeViewer({
     setIsPlaying(event.data === 1);
     
     if (event.data === 1) { // Playing
+      if (hasEnded) {
+        setHasEnded(false);
+      }
+      if (showArchivePrompt) {
+        setShowArchivePrompt(false);
+      }
       // Ensure duration is set
       const d = event.target.getDuration();
       if (d && d > 0) setDuration(d);
+    } else if (event.data === 0) { // Ended
+      setHasEnded(true);
+      setShowArchivePrompt(true);
+      if (duration > 0) {
+        saveCurrentPosition(duration);
+      }
     }
   };
 
@@ -514,6 +558,41 @@ export function YouTubeViewer({
                   <ExternalLink className="w-5 h-5" />
                   Browser
                 </a>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showArchivePrompt && documentId && (
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-xl bg-background border border-border shadow-2xl p-6 text-center">
+              <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-red-600/10 flex items-center justify-center">
+                <Youtube className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Finished watching?</h3>
+              <p className="text-sm text-muted-foreground mb-5">
+                Archive this video to keep it searchable without scheduling it in your queue.
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleArchiveVideo}
+                  disabled={isArchiving}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+                >
+                  {isArchiving ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Archive video</span>}
+                </button>
+                <button
+                  onClick={() => setShowArchivePrompt(false)}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground transition-colors"
+                >
+                  Keep in queue
+                </button>
+                <button
+                  onClick={handleReplay}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Replay
+                </button>
               </div>
             </div>
           </div>

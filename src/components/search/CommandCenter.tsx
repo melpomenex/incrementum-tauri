@@ -6,7 +6,7 @@ import { useStudyDeckStore } from "../../stores/studyDeckStore";
 import { useUIStore } from "../../stores/uiStore";
 import { useExtractStore } from "../../stores/extractStore";
 import { matchesDeckTags } from "../../utils/studyDecks";
-import { calculateRelevanceScore, highlightSearchTerms } from "./SearchUtils";
+import { calculateRelevanceScore, extractSearchTerms, fuzzyMatch, highlightSearchTerms } from "./SearchUtils";
 import { extractDocumentText, getDocuments as fetchDocuments } from "../../api/documents";
 import { isTauri } from "../../lib/tauri";
 import {
@@ -34,6 +34,102 @@ import type { TabsState } from "../../stores/tabsStore";
 import type { UIState } from "../../stores/uiStore";
 import type { StudyDeckState } from "../../stores/studyDeckStore";
 import type { Extract } from "../../types/document";
+import { fetchYouTubeTranscript } from "../../api/youtube";
+
+const STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "but",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "he",
+  "her",
+  "his",
+  "i",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "me",
+  "my",
+  "not",
+  "of",
+  "on",
+  "or",
+  "our",
+  "she",
+  "so",
+  "that",
+  "the",
+  "their",
+  "them",
+  "there",
+  "these",
+  "they",
+  "this",
+  "to",
+  "us",
+  "was",
+  "we",
+  "were",
+  "will",
+  "with",
+  "you",
+  "your",
+]);
+
+const SHORT_MEANINGFUL_TERMS = new Set(["ai", "ml", "ui", "ux", "vr", "ar", "3d"]);
+
+const extractYouTubeId = (urlOrId: string): string => {
+  if (!urlOrId) return "";
+  if (/^[a-zA-Z0-9_-]{11}$/.test(urlOrId)) return urlOrId;
+
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = urlOrId.match(pattern);
+    if (match) return match[1];
+  }
+
+  return urlOrId;
+};
+
+const isMeaningfulTerm = (term: string): boolean => {
+  const normalized = term.trim().toLowerCase();
+  if (!normalized) return false;
+
+  if (normalized.includes(" ")) {
+    const parts = normalized.split(/\s+/).filter(Boolean);
+    return parts.some((part) => !STOPWORDS.has(part));
+  }
+
+  if (STOPWORDS.has(normalized)) return false;
+  if (/^\d+$/.test(normalized)) return normalized.length >= 2;
+  if (normalized.length >= 3) return true;
+
+  return SHORT_MEANINGFUL_TERMS.has(normalized);
+};
+
+const buildTranscriptText = (segments: Array<{ text: string }>): string =>
+  segments
+    .map((segment) => segment.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 // Stable selectors defined outside component to avoid infinite re-renders
 const selectAddTab = (state: TabsState) => state.addTab;
@@ -65,6 +161,8 @@ export function CommandCenter() {
   const indexingRef = useRef(false);
   const documentsSnapshotRef = useRef<Document[]>([]);
   const documentsFetchInFlight = useRef<Promise<Document[]> | null>(null);
+  const transcriptCacheRef = useRef<Map<string, { text: string; lower: string }>>(new Map());
+  const transcriptFetchInFlightRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!documentsLoading && documents.length === 0) {
@@ -134,10 +232,30 @@ export function CommandCenter() {
     const results: SearchResult[] = [];
     if (!term) return results;
 
+    const queryTerms = extractSearchTerms(query.query)
+      .map((item) => item.toLowerCase().trim())
+      .filter(Boolean);
+    const meaningfulTerms = queryTerms.filter(isMeaningfulTerm);
+    const searchTerms = meaningfulTerms.length > 0 ? meaningfulTerms : [term];
+    const allowContentSearch = meaningfulTerms.length > 0;
+
+    const matchesTerms = (text: string, terms: string[]): boolean =>
+      terms.some((value) => text.includes(value));
+
+    const fuzzyMatches = (text: string): boolean => {
+      if (!allowContentSearch) return false;
+      if (term.length < 3) return false;
+      if (text.length > 80) return false;
+      const { match, score } = fuzzyMatch(text, term, 2);
+      return match && score >= 0.6;
+    };
+
     const isWeb = !isTauri();
     const maxResults = 50;
     const maxDocsToScan = isWeb ? 500 : Infinity;
     const maxExtractsToScan = isWeb ? 1000 : Infinity;
+    const maxTranscriptFetches = isWeb ? 5 : 20;
+    let transcriptFetches = 0;
 
     let docsForSearch = documents.length > 0 ? documents : documentsSnapshotRef.current;
     if (docsForSearch.length === 0 && !documentsLoading) {
@@ -250,11 +368,16 @@ export function CommandCenter() {
 
     const allCommands = [...getDefaultCommands(), ...navigationCommands];
 
-    const matchedCommands = allCommands.filter(cmd =>
-      cmd.label.toLowerCase().includes(term) ||
-      cmd.description?.toLowerCase().includes(term) ||
-      cmd.keywords?.some(k => k.toLowerCase().includes(term))
-    );
+    const matchedCommands = allCommands.filter((cmd) => {
+      const label = cmd.label.toLowerCase();
+      const description = cmd.description?.toLowerCase() ?? "";
+      const keywords = cmd.keywords?.map((keyword) => keyword.toLowerCase()) ?? [];
+      const termMatch = matchesTerms(label, searchTerms) || matchesTerms(description, searchTerms);
+      const keywordMatch = keywords.some((keyword) => matchesTerms(keyword, searchTerms));
+
+      if (termMatch || keywordMatch) return true;
+      return fuzzyMatches(label) || (description ? fuzzyMatches(description) : false);
+    });
 
     matchedCommands.forEach(cmd => {
       results.push({
@@ -279,15 +402,54 @@ export function CommandCenter() {
         if (scanned >= maxDocsToScan || results.length >= maxResults) break;
         scanned += 1;
 
-        const titleMatch = doc.title.toLowerCase().includes(term);
+        const titleLower = doc.title.toLowerCase();
+        const titleMatch = matchesTerms(titleLower, searchTerms) || (!allowContentSearch && titleLower.includes(term)) || fuzzyMatches(titleLower);
         const content = doc.content ?? "";
-        const contentMatch = !isWeb && content.toLowerCase().includes(term);
-        if (!titleMatch && !contentMatch) continue;
+        const contentLower = content.toLowerCase();
+        const contentMatch = !isWeb && allowContentSearch && matchesTerms(contentLower, searchTerms);
 
-        const excerptSource = contentMatch ? content : doc.title;
+        let transcriptMatch = false;
+        let transcriptText: string | null = null;
+        if (allowContentSearch && doc.fileType === "youtube" && results.length < maxResults) {
+          const cached = transcriptCacheRef.current.get(doc.id);
+          if (cached) {
+            transcriptMatch = matchesTerms(cached.lower, searchTerms);
+            transcriptText = cached.text;
+          } else if (!transcriptFetchInFlightRef.current.has(doc.id) && transcriptFetches < maxTranscriptFetches) {
+            transcriptFetchInFlightRef.current.add(doc.id);
+            transcriptFetches += 1;
+            try {
+              const videoId = extractYouTubeId(doc.filePath);
+              if (videoId) {
+                const segments = await fetchYouTubeTranscript(videoId);
+                if (segments.length > 0) {
+                  const text = buildTranscriptText(segments);
+                  if (text) {
+                    const entry = { text, lower: text.toLowerCase() };
+                    transcriptCacheRef.current.set(doc.id, entry);
+                    transcriptMatch = matchesTerms(entry.lower, searchTerms);
+                    transcriptText = entry.text;
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn("[CommandCenter] Failed to fetch YouTube transcript", doc.id, error);
+            } finally {
+              transcriptFetchInFlightRef.current.delete(doc.id);
+            }
+          }
+        }
+
+        if (!titleMatch && !contentMatch && !transcriptMatch) continue;
+
+        const excerptSource = transcriptMatch && transcriptText
+          ? transcriptText
+          : contentMatch
+            ? content
+            : doc.title;
         const { excerpt, highlights } = highlightSearchTerms(excerptSource, query.query);
         const score = calculateRelevanceScore(
-          { title: doc.title, content },
+          { title: doc.title, content: transcriptMatch && transcriptText ? transcriptText : content },
           query.query,
           SearchResultType.Document
         );
@@ -296,7 +458,11 @@ export function CommandCenter() {
           id: doc.id,
           type: SearchResultType.Document,
           title: doc.title,
-          excerpt: contentMatch ? excerpt : undefined,
+          excerpt: transcriptMatch
+            ? `Transcript — ${excerpt}`
+            : contentMatch
+              ? excerpt
+              : undefined,
           highlights,
           score: score / 100,
           metadata: {
@@ -304,6 +470,7 @@ export function CommandCenter() {
             fileType: doc.fileType,
             category: doc.category,
             tags: doc.tags ?? [],
+            transcriptMatch,
           },
         });
       }
@@ -317,7 +484,8 @@ export function CommandCenter() {
         scanned += 1;
 
         const content = extract.content ?? "";
-        if (!content.toLowerCase().includes(term)) continue;
+        const contentLower = content.toLowerCase();
+        if (!allowContentSearch || !matchesTerms(contentLower, searchTerms)) continue;
         const parentDoc = documents.find((doc) => doc.id === extract.documentId);
         const { excerpt, highlights } = highlightSearchTerms(content, query.query);
         const prefix = extract.pageNumber ? `Page ${extract.pageNumber} — ` : "";

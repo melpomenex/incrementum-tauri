@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import type { TabPane } from "../stores/tabsStore";
-import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2, Lightbulb, MessageSquare, Code } from "lucide-react";
+import { ChevronUp, ChevronDown, X, Star, AlertCircle, CheckCircle, Sparkles, ExternalLink, Info, Settings2, Lightbulb, MessageSquare, Code, Rss } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueueStore } from "../stores/queueStore";
 import { useTabsStore } from "../stores/tabsStore";
 import { useDocumentStore } from "../stores/documentStore";
-import { useSettingsStore } from "../stores/settingsStore";
+import { defaultSettings, useSettingsStore } from "../stores/settingsStore";
 import { DocumentViewer } from "../components/viewer/DocumentViewer";
 import { FlashcardScrollItem } from "../components/review/FlashcardScrollItem";
 import { ScrollModeArticleEditor } from "../components/review/ScrollModeArticleEditor";
@@ -17,13 +17,14 @@ import { ExtractScrollItem } from "../components/review/ExtractScrollItem";
 import { ClozeCreatorPopup } from "../components/extracts/ClozeCreatorPopup";
 import { QACreatorPopup } from "../components/extracts/QACreatorPopup";
 import { submitReview } from "../api/review";
-import { getUnreadItems, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemReadAuto } from "../api/rss";
+import { getUnreadItems, getSubscribedFeeds, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemReadAuto } from "../api/rss";
 import { cn } from "../utils";
 import type { QueueItem } from "../types";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../components/common/ItemDetailsPopover";
 import { AssistantPanel, type AssistantContext, type AssistantPosition } from "../components/assistant/AssistantPanel";
 import { useToast } from "../components/common/Toast";
 import { getDeviceInfo } from "../lib/pwa";
+import { RSSQueueSettingsModal } from "../components/settings/RSSQueueSettings";
 import { createDocument, updateDocumentContent } from "../api/documents";
 import { trimToTokenWindow } from "../utils/tokenizer";
 
@@ -101,6 +102,7 @@ export function QueueScrollPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRssSettings, setShowRssSettings] = useState(false);
   const [scrollItems, setScrollItems] = useState<ScrollItem[]>([]);
   const [dueFlashcards, setDueFlashcards] = useState<LearningItem[]>([]);
   const [dueExtracts, setDueExtracts] = useState<Extract[]>([]);
@@ -430,8 +432,12 @@ export function QueueScrollPage() {
     }));
 
     // Create document items with engagement scoring
-    const docItems: ScrollItem[] = documentQueueItems.map((item) => {
+    const docItems: ScrollItem[] = documentQueueItems
+      .map((item) => {
       const doc = documents.find(d => d.id === item.documentId);
+      if (doc?.isArchived) {
+        return null;
+      }
       const isImportedWebArticle = !!doc?.filePath
         && /^https?:\/\//.test(doc.filePath)
         && doc?.fileType !== "youtube";
@@ -454,21 +460,63 @@ export function QueueScrollPage() {
         estimatedTime: item.estimatedTime ?? 10,
         engagementScore: baseScore + serendipityBonus,
       };
-    });
+    })
+      .filter((item): item is ScrollItem => item !== null);
 
-    // Load RSS unread items
-    const rssUnread = getUnreadItems();
-    const rssItems: ScrollItem[] = rssUnread.map(({ feed, item }) => ({
-      id: `rss-${item.id}`,
-      type: "rss",
-      documentTitle: item.title,
-      rssItem: item,
-      rssFeed: feed,
-      category: feed.category ?? "rss",
-      estimatedTime: 5,
-      // Use stable random based on item ID
-      engagementScore: 4 + getStableRandom(item.id, 3),
-    }));
+    // Load RSS items based on settings
+    const rssSettings = settings.rssQueue ?? defaultSettings.rssQueue;
+    let rssItems: ScrollItem[] = [];
+    
+    if (rssSettings.includeInQueue) {
+      // Get items based on unread setting
+      let rssItemsToProcess: { feed: RSSFeed; item: RSSFeedItem }[];
+      if (rssSettings.unreadOnly) {
+        rssItemsToProcess = getUnreadItems();
+      } else {
+        // Get all items from subscribed feeds
+        const allFeeds = getSubscribedFeeds();
+        rssItemsToProcess = allFeeds.flatMap(feed => 
+          feed.items.map(item => ({ feed, item }))
+        );
+      }
+      
+      // Filter by feed inclusion/exclusion
+      const filteredRssItems = rssItemsToProcess.filter(({ feed, item }) => {
+        // Check if feed is explicitly excluded
+        if (rssSettings.excludedFeedIds.includes(feed.id)) return false;
+        
+        // Check if feed is explicitly included (if inclusion list is not empty)
+        if (rssSettings.includedFeedIds.length > 0) {
+          return rssSettings.includedFeedIds.includes(feed.id);
+        }
+        
+        return true;
+      });
+      
+      // Sort by date if preferRecent is enabled
+      if (rssSettings.preferRecent) {
+        filteredRssItems.sort((a, b) => 
+          new Date(b.item.pubDate).getTime() - new Date(a.item.pubDate).getTime()
+        );
+      }
+      
+      // Limit items per session
+      const limitedRssItems = rssSettings.maxItemsPerSession > 0 
+        ? filteredRssItems.slice(0, rssSettings.maxItemsPerSession)
+        : filteredRssItems;
+      
+      rssItems = limitedRssItems.map(({ feed, item }) => ({
+        id: `rss-${item.id}`,
+        type: "rss",
+        documentTitle: item.title,
+        rssItem: item,
+        rssFeed: feed,
+        category: feed.category ?? "rss",
+        estimatedTime: 5,
+        // Use stable random based on item ID
+        engagementScore: 4 + getStableRandom(item.id, 3),
+      }));
+    }
 
     // Create extract items
     const extractItems: ScrollItem[] = dueExtracts.map((extract) => {
@@ -542,7 +590,7 @@ export function QueueScrollPage() {
     const mixedItems = applyVarietyMixing(distributedItems);
     
     setScrollItems(mixedItems);
-  }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating, settings.scrollQueue, applyVarietyMixing]);
+  }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating, settings.scrollQueue, settings.rssQueue, applyVarietyMixing]);
 
   // Current item (for display during transition)
   const currentItem = scrollItems[currentIndex];
@@ -1544,6 +1592,14 @@ export function QueueScrollPage() {
                 <Settings2 className="w-4 h-4" />
                 Settings
               </button>
+              <button
+                onClick={() => setShowRssSettings(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/40 backdrop-blur-sm text-white text-sm transition-colors hover:bg-black/60"
+                title="RSS queue settings"
+              >
+                <Rss className="w-4 h-4" />
+                RSS
+              </button>
               <div className="text-white text-sm bg-black/40 backdrop-blur-sm px-3 py-2 rounded-lg max-w-[200px] sm:max-w-md truncate">
                 {currentItem.type === "document" && (
                   <span className="flex items-center gap-2 truncate">
@@ -1712,6 +1768,12 @@ export function QueueScrollPage() {
           {currentItem?.type !== "document" && "Scroll to edge to navigate • Alt+Arrows/Space to skip • H to toggle controls • Esc to exit"}
         </div>
       </div>
+      
+      {/* RSS Queue Settings Modal */}
+      <RSSQueueSettingsModal
+        isOpen={showRssSettings}
+        onClose={() => setShowRssSettings(false)}
+      />
     </div>
   );
 }

@@ -2143,6 +2143,9 @@ export function DocumentViewer({
               documentId={currentDocument.id}
               title={currentDocument.title}
               onLoad={handleYouTubeLoad}
+              onArchive={() => {
+                loadQueue();
+              }}
               onTranscriptLoad={(segments) => {
                 const transcriptText = segments.map(s => `[${formatTime(s.start)}] ${s.text}`).join("\n");
                 setVideoContext(prev => ({
