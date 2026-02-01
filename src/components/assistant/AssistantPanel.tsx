@@ -684,7 +684,7 @@ Available tools: ${toolNames}`;
 
   if (isCollapsed) {
     return (
-      <div className={`flex flex-col bg-card ${position === "right" ? "border-l" : "border-r"} border-border relative ${className}`}>
+      <div className={`flex flex-col h-full min-h-0 bg-card ${position === "right" ? "border-l" : "border-r"} border-border relative ${className}`}>
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 hover:bg-muted transition-colors"
@@ -709,7 +709,7 @@ Available tools: ${toolNames}`;
 
   return (
     <div
-      className={`flex flex-col bg-card ${position === "right" ? "border-l" : "border-r"} border-border relative ${className}`}
+      className={`flex flex-col h-full min-h-0 bg-card ${position === "right" ? "border-l" : "border-r"} border-border relative ${className}`}
       style={{ width: isCollapsed ? "auto" : width }}
     >
       {/* Header */}

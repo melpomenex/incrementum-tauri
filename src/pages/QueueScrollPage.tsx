@@ -1320,10 +1320,10 @@ export function QueueScrollPage() {
                 </button>
               ))}
             </div>
-            <div className="flex-shrink-0 z-10">
+            <div className="flex-shrink-0 h-full z-10">
               <AssistantPanel
                 context={assistantContext}
-                className="assistant-panel"
+                className="assistant-panel h-full"
                 onInputHoverChange={setAssistantInputActive}
                 appendContextMessages={false}
                 position={assistantPosition}
@@ -1441,10 +1441,10 @@ export function QueueScrollPage() {
         </div>
         {!isMobile && isAssistantVisible && renderedItem && renderedItem.type !== "flashcard" && assistantPosition === "right" && (
           <>
-            <div className="flex-shrink-0 z-10">
+            <div className="flex-shrink-0 h-full z-10">
               <AssistantPanel
                 context={assistantContext}
-                className="assistant-panel"
+                className="assistant-panel h-full"
                 onInputHoverChange={setAssistantInputActive}
                 appendContextMessages={false}
                 position={assistantPosition}
