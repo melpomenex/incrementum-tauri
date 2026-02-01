@@ -829,6 +829,34 @@ interface BackendRssArticle {
   date_added: string;
 }
 
+interface TauriRssFeed {
+  id: string;
+  url: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  update_interval: number;
+  last_fetched: string | null;
+  is_active: boolean;
+  date_added: string;
+  auto_queue: boolean;
+}
+
+interface TauriRssArticle {
+  id: string;
+  feed_id: string;
+  url: string;
+  title: string;
+  author: string | null;
+  published_date: string | null;
+  content: string | null;
+  summary: string | null;
+  image_url: string | null;
+  is_queued: boolean;
+  is_read: boolean;
+  date_added: string;
+}
+
 /**
  * Convert backend RSS feed format to frontend format
  */
@@ -862,6 +890,53 @@ function backendFeedToFrontend(feed: BackendRssFeed & { unread_count?: number },
     subscribeDate: feed.date_added,
     unreadCount: feed.unread_count ?? 0,
   };
+}
+
+function tauriFeedToFrontend(feed: TauriRssFeed, items: TauriRssArticle[] = []): Feed {
+  return {
+    id: feed.id,
+    title: feed.title,
+    description: feed.description || "",
+    link: feed.url,
+    feedUrl: feed.url,
+    imageUrl: undefined,
+    language: undefined,
+    category: feed.category || undefined,
+    lastUpdated: feed.date_added,
+    lastFetched: feed.last_fetched || feed.date_added,
+    updateInterval: Math.floor(feed.update_interval / 60),
+    items: items.map(item => ({
+      id: item.id,
+      title: item.title,
+      description: item.summary || "",
+      content: item.content || "",
+      link: item.url,
+      pubDate: item.published_date || item.date_added,
+      author: item.author || undefined,
+      categories: [],
+      guid: item.id,
+      read: item.is_read,
+      favorite: false,
+      feedId: feed.id,
+    })),
+    subscribeDate: feed.date_added,
+    unreadCount: items.filter(item => !item.is_read).length,
+  };
+}
+
+async function getFeedsViaTauri(): Promise<Feed[]> {
+  const feeds = await invokeCommand<TauriRssFeed[]>("get_rss_feeds");
+  const feedsWithItems = await Promise.all(
+    feeds.map(async (feed) => {
+      const articles = await invokeCommand<TauriRssArticle[]>("get_rss_articles", {
+        feed_id: feed.id,
+        limit: 50,
+      });
+      return tauriFeedToFrontend(feed, articles);
+    })
+  );
+
+  return feedsWithItems;
 }
 
 /**
@@ -1153,6 +1228,14 @@ export async function setRssPreferencesAuto(
  * Unified getSubscribedFeeds - works in both Tauri and Web mode
  */
 export async function getSubscribedFeedsAuto(): Promise<Feed[]> {
+  if (isTauri()) {
+    try {
+      return await getFeedsViaTauri();
+    } catch (error) {
+      console.warn("[RSS] Tauri backend unavailable, falling back to local feeds.", error);
+      return getSubscribedFeeds();
+    }
+  }
   if (shouldUseHttpBackend()) {
     try {
       return await getFeedsViaHttp();
@@ -1162,6 +1245,25 @@ export async function getSubscribedFeedsAuto(): Promise<Feed[]> {
     }
   }
   return getSubscribedFeeds();
+}
+
+export async function getUnreadItemsAuto(): Promise<Array<{ feed: Feed; item: FeedItem }>> {
+  const feeds = await getSubscribedFeedsAuto();
+  const results: Array<{ feed: Feed; item: FeedItem }> = [];
+
+  feeds.forEach((feed) => {
+    feed.items.forEach((item) => {
+      if (!item.read) {
+        results.push({ feed, item });
+      }
+    });
+  });
+
+  results.sort(
+    (a, b) => new Date(b.item.pubDate).getTime() - new Date(a.item.pubDate).getTime()
+  );
+
+  return results;
 }
 
 /**

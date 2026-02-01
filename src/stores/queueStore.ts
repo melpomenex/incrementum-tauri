@@ -74,7 +74,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     field: "priority",
     direction: "desc",
   },
-  queueFilterMode: "all-items", // Default to show all items so users can see their documents
+  queueFilterMode: "due-all", // Default to due-only to avoid resurfacing reviewed items
   bulkOperationLoading: false,
   bulkOperationResult: null,
 
@@ -82,7 +82,21 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   loadQueue: async () => {
     set({ isLoading: true, error: null });
     try {
-      const items = await getQueue();
+      const mode = get().queueFilterMode;
+      let items: QueueItem[] = [];
+      switch (mode) {
+        case "due-today":
+          items = await getDueDocumentsOnly();
+          break;
+        case "due-all":
+          items = await getDueQueueItems();
+          break;
+        case "all-items":
+        case "new-only":
+        default:
+          items = await getQueue();
+          break;
+      }
       set({
         items,
         isLoading: false,

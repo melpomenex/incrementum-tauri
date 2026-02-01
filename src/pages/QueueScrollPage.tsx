@@ -17,7 +17,7 @@ import { ExtractScrollItem } from "../components/review/ExtractScrollItem";
 import { ClozeCreatorPopup } from "../components/extracts/ClozeCreatorPopup";
 import { QACreatorPopup } from "../components/extracts/QACreatorPopup";
 import { submitReview } from "../api/review";
-import { getUnreadItems, getSubscribedFeeds, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemReadAuto } from "../api/rss";
+import { getUnreadItemsAuto, getSubscribedFeedsAuto, type FeedItem as RSSFeedItem, type Feed as RSSFeed, markItemReadAuto } from "../api/rss";
 import { cn } from "../utils";
 import type { QueueItem } from "../types";
 import { ItemDetailsPopover, type ItemDetailsTarget } from "../components/common/ItemDetailsPopover";
@@ -27,6 +27,33 @@ import { getDeviceInfo } from "../lib/pwa";
 import { RSSQueueSettingsModal } from "../components/settings/RSSQueueSettings";
 import { createDocument, updateDocumentContent } from "../api/documents";
 import { trimToTokenWindow } from "../utils/tokenizer";
+import { fetchYouTubeTranscript } from "../api/youtube";
+
+const buildTranscriptText = (segments: Array<{ text: string }>): string =>
+  segments
+    .map((segment) => segment.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const extractYouTubeId = (urlOrId: string): string => {
+  if (!urlOrId) return "";
+  if (/^[a-zA-Z0-9_-]{11}$/.test(urlOrId)) return urlOrId;
+
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = urlOrId.match(pattern);
+    if (match) return match[1];
+  }
+
+  return urlOrId;
+};
 
 /**
  * Unified scroll item type for documents, RSS articles, and flashcards
@@ -114,6 +141,8 @@ export function QueueScrollPage() {
     const saved = localStorage.getItem("assistant-panel-position");
     return saved === "left" ? "left" : "right";
   });
+  const transcriptCacheRef = useRef<Map<string, string>>(new Map());
+  const transcriptFetchInFlightRef = useRef<Set<string>>(new Set());
   const ASSISTANT_VISIBILITY_KEY = "scroll-mode-assistant-visible";
   const [isAssistantVisible, setIsAssistantVisible] = useState(() => {
     const stored = localStorage.getItem(ASSISTANT_VISIBILITY_KEY);
@@ -418,178 +447,188 @@ export function QueueScrollPage() {
   // Skip during rating to prevent race conditions
   useEffect(() => {
     if (isRating) return;
+    let cancelled = false;
 
-    // Create flashcard items from due learning items
-    const flashcardItems: ScrollItem[] = dueFlashcards.map((item) => ({
-      id: `flashcard-${item.id}`,
-      type: "flashcard" as const,
-      documentTitle: item.question.substring(0, 50) + (item.question.length > 50 ? "..." : ""),
-      learningItem: item,
-      category: item.tags?.[0] ?? "flashcards",
-      estimatedTime: 2, // Flashcards are quick
-      // Use stable random based on item ID to prevent re-render loops
-      engagementScore: 5 + getStableRandom(item.id, 1) * 2,
-    }));
-
-    // Create document items with engagement scoring
-    const docItems: ScrollItem[] = documentQueueItems
-      .map((item) => {
-      const doc = documents.find(d => d.id === item.documentId);
-      if (doc?.isArchived) {
-        return null;
-      }
-      const isImportedWebArticle = !!doc?.filePath
-        && /^https?:\/\//.test(doc.filePath)
-        && doc?.fileType !== "youtube";
-      
-      // Calculate engagement score based on priority and variety factors
-      const isNew = !doc?.dateLastReviewed;
-      const priority = item.priority ?? 5;
-      const recencyBoost = isNew ? 2 : 0;
-      const baseScore = priority + recencyBoost;
-      // Add stable "randomness" for serendipity (0-1.5 bonus)
-      const serendipityBonus = getStableRandom(item.id, 2) * 1.5;
-      
-      return {
-        id: item.id,
-        type: "document" as const,
-        documentId: item.documentId,
-        documentTitle: item.documentTitle,
-        isImportedWebArticle,
-        category: doc?.category ?? item.tags?.[0] ?? "uncategorized",
-        estimatedTime: item.estimatedTime ?? 10,
-        engagementScore: baseScore + serendipityBonus,
-      };
-    })
-      .filter((item): item is ScrollItem => item !== null);
-
-    // Load RSS items based on settings
-    const rssSettings = settings.rssQueue ?? defaultSettings.rssQueue;
-    let rssItems: ScrollItem[] = [];
-    
-    if (rssSettings.includeInQueue) {
-      // Get items based on unread setting
-      let rssItemsToProcess: { feed: RSSFeed; item: RSSFeedItem }[];
-      if (rssSettings.unreadOnly) {
-        rssItemsToProcess = getUnreadItems();
-      } else {
-        // Get all items from subscribed feeds
-        const allFeeds = getSubscribedFeeds();
-        rssItemsToProcess = allFeeds.flatMap(feed => 
-          feed.items.map(item => ({ feed, item }))
-        );
-      }
-      
-      // Filter by feed inclusion/exclusion
-      const filteredRssItems = rssItemsToProcess.filter(({ feed, item }) => {
-        // Check if feed is explicitly excluded
-        if (rssSettings.excludedFeedIds.includes(feed.id)) return false;
-        
-        // Check if feed is explicitly included (if inclusion list is not empty)
-        if (rssSettings.includedFeedIds.length > 0) {
-          return rssSettings.includedFeedIds.includes(feed.id);
-        }
-        
-        return true;
-      });
-      
-      // Sort by date if preferRecent is enabled
-      if (rssSettings.preferRecent) {
-        filteredRssItems.sort((a, b) => 
-          new Date(b.item.pubDate).getTime() - new Date(a.item.pubDate).getTime()
-        );
-      }
-      
-      // Limit items per session
-      const limitedRssItems = rssSettings.maxItemsPerSession > 0 
-        ? filteredRssItems.slice(0, rssSettings.maxItemsPerSession)
-        : filteredRssItems;
-      
-      rssItems = limitedRssItems.map(({ feed, item }) => ({
-        id: `rss-${item.id}`,
-        type: "rss",
-        documentTitle: item.title,
-        rssItem: item,
-        rssFeed: feed,
-        category: feed.category ?? "rss",
-        estimatedTime: 5,
-        // Use stable random based on item ID
-        engagementScore: 4 + getStableRandom(item.id, 3),
+    const buildScrollItems = async () => {
+      // Create flashcard items from due learning items
+      const flashcardItems: ScrollItem[] = dueFlashcards.map((item) => ({
+        id: `flashcard-${item.id}`,
+        type: "flashcard" as const,
+        documentTitle: item.question.substring(0, 50) + (item.question.length > 50 ? "..." : ""),
+        learningItem: item,
+        category: item.tags?.[0] ?? "flashcards",
+        estimatedTime: 2, // Flashcards are quick
+        // Use stable random based on item ID to prevent re-render loops
+        engagementScore: 5 + getStableRandom(item.id, 1) * 2,
       }));
-    }
 
-    // Create extract items
-    const extractItems: ScrollItem[] = dueExtracts.map((extract) => {
-      // Find document title
-      const doc = documents.find(d => d.id === extract.document_id);
-      const title = doc ? doc.title : "Unknown Document";
+      // Create document items with engagement scoring
+      const docItems: ScrollItem[] = documentQueueItems
+        .map((item) => {
+          const doc = documents.find(d => d.id === item.documentId);
+          if (doc?.isArchived) {
+            return null;
+          }
+          const isImportedWebArticle = !!doc?.filePath
+            && /^https?:\/\//.test(doc.filePath)
+            && doc?.fileType !== "youtube";
 
-      return {
-        id: `extract-${extract.id}`,
-        type: "extract" as const,
-        documentTitle: title,
-        extract: extract,
-        category: extract.category ?? doc?.category ?? "extracts",
-        estimatedTime: 3,
-        // Use stable random based on extract ID
-        engagementScore: 5 + getStableRandom(extract.id, 4) * 1.5,
-      };
-    });
+          // Calculate engagement score based on priority and variety factors
+          const isNew = !doc?.dateLastReviewed;
+          const priority = item.priority ?? 5;
+          const recencyBoost = isNew ? 2 : 0;
+          const baseScore = priority + recencyBoost;
+          // Add stable "randomness" for serendipity (0-1.5 bonus)
+          const serendipityBonus = getStableRandom(item.id, 2) * 1.5;
 
-    // Combine all review items (flashcards + extracts)
-    const allReviewItems = [...flashcardItems, ...extractItems];
-    
-    // Calculate target review item count based on percentage setting
-    const flashcardPercentage = settings.scrollQueue.flashcardPercentage;
-    const nonReviewItems = [...docItems, ...rssItems];
-    const totalNonReview = nonReviewItems.length;
+          return {
+            id: item.id,
+            type: "document" as const,
+            documentId: item.documentId,
+            documentTitle: item.documentTitle,
+            isImportedWebArticle,
+            category: doc?.category ?? item.tags?.[0] ?? "uncategorized",
+            estimatedTime: item.estimatedTime ?? 10,
+            engagementScore: baseScore + serendipityBonus,
+          };
+        })
+        .filter((item): item is ScrollItem => item !== null);
 
-    // Calculate target number of review items based on percentage
-    let targetReviewCount = 0;
-    if (flashcardPercentage < 100 && flashcardPercentage > 0) {
-      targetReviewCount = Math.round((flashcardPercentage * totalNonReview) / (100 - flashcardPercentage));
-    } else if (flashcardPercentage >= 100) {
-      targetReviewCount = allReviewItems.length;
-    }
+      // Load RSS items based on settings
+      const rssSettings = settings.rssQueue ?? defaultSettings.rssQueue;
+      let rssItems: ScrollItem[] = [];
 
-    // Limit review items to available count
-    const limitedReviewItems = allReviewItems.slice(0, targetReviewCount);
+      if (rssSettings.includeInQueue) {
+        // Get items based on unread setting
+        let rssItemsToProcess: { feed: RSSFeed; item: RSSFeedItem }[];
+        if (rssSettings.unreadOnly) {
+          rssItemsToProcess = await getUnreadItemsAuto();
+        } else {
+          // Get all items from subscribed feeds
+          const allFeeds = await getSubscribedFeedsAuto();
+          rssItemsToProcess = allFeeds.flatMap(feed =>
+            feed.items.map(item => ({ feed, item }))
+          );
+        }
 
-    // Distribute review items evenly throughout the queue with variety mixing
-    const distributedItems: ScrollItem[] = [];
-    
-    if (limitedReviewItems.length > 0 && nonReviewItems.length > 0) {
-      // Calculate interval for inserting review items
-      const interval = Math.max(1, Math.round(nonReviewItems.length / limitedReviewItems.length));
+        // Filter by feed inclusion/exclusion
+        const filteredRssItems = rssItemsToProcess.filter(({ feed }) => {
+          // Check if feed is explicitly excluded
+          if (rssSettings.excludedFeedIds.includes(feed.id)) return false;
 
-      let reviewIndex = 0;
-      for (let i = 0; i < nonReviewItems.length; i++) {
-        distributedItems.push(nonReviewItems[i]);
+          // Check if feed is explicitly included (if inclusion list is not empty)
+          if (rssSettings.includedFeedIds.length > 0) {
+            return rssSettings.includedFeedIds.includes(feed.id);
+          }
 
-        // Insert a review item after every 'interval' non-review items
-        if (reviewIndex < limitedReviewItems.length && (i + 1) % interval === 0) {
+          return true;
+        });
+
+        // Sort by date if preferRecent is enabled
+        if (rssSettings.preferRecent) {
+          filteredRssItems.sort((a, b) =>
+            new Date(b.item.pubDate).getTime() - new Date(a.item.pubDate).getTime()
+          );
+        }
+
+        // Limit items per session
+        const limitedRssItems = rssSettings.maxItemsPerSession > 0
+          ? filteredRssItems.slice(0, rssSettings.maxItemsPerSession)
+          : filteredRssItems;
+
+        rssItems = limitedRssItems.map(({ feed, item }) => ({
+          id: `rss-${item.id}`,
+          type: "rss",
+          documentTitle: item.title,
+          rssItem: item,
+          rssFeed: feed,
+          category: feed.category ?? "rss",
+          estimatedTime: 5,
+          // Use stable random based on item ID
+          engagementScore: 4 + getStableRandom(item.id, 3),
+        }));
+      }
+
+      // Create extract items
+      const extractItems: ScrollItem[] = dueExtracts.map((extract) => {
+        // Find document title
+        const doc = documents.find(d => d.id === extract.document_id);
+        const title = doc ? doc.title : "Unknown Document";
+
+        return {
+          id: `extract-${extract.id}`,
+          type: "extract" as const,
+          documentTitle: title,
+          extract: extract,
+          category: extract.category ?? doc?.category ?? "extracts",
+          estimatedTime: 3,
+          // Use stable random based on extract ID
+          engagementScore: 5 + getStableRandom(extract.id, 4) * 1.5,
+        };
+      });
+
+      // Combine all review items (flashcards + extracts)
+      const allReviewItems = [...flashcardItems, ...extractItems];
+
+      // Calculate target review item count based on percentage setting
+      const flashcardPercentage = settings.scrollQueue.flashcardPercentage;
+      const nonReviewItems = [...docItems, ...rssItems];
+      const totalNonReview = nonReviewItems.length;
+
+      // Calculate target number of review items based on percentage
+      let targetReviewCount = 0;
+      if (flashcardPercentage < 100 && flashcardPercentage > 0) {
+        targetReviewCount = Math.round((flashcardPercentage * totalNonReview) / (100 - flashcardPercentage));
+      } else if (flashcardPercentage >= 100) {
+        targetReviewCount = allReviewItems.length;
+      }
+
+      // Limit review items to available count
+      const limitedReviewItems = allReviewItems.slice(0, targetReviewCount);
+
+      // Distribute review items evenly throughout the queue with variety mixing
+      const distributedItems: ScrollItem[] = [];
+
+      if (limitedReviewItems.length > 0 && nonReviewItems.length > 0) {
+        // Calculate interval for inserting review items
+        const interval = Math.max(1, Math.round(nonReviewItems.length / limitedReviewItems.length));
+
+        let reviewIndex = 0;
+        for (let i = 0; i < nonReviewItems.length; i++) {
+          distributedItems.push(nonReviewItems[i]);
+
+          // Insert a review item after every 'interval' non-review items
+          if (reviewIndex < limitedReviewItems.length && (i + 1) % interval === 0) {
+            distributedItems.push(limitedReviewItems[reviewIndex]);
+            reviewIndex++;
+          }
+        }
+
+        // Add any remaining review items at the end
+        while (reviewIndex < limitedReviewItems.length) {
           distributedItems.push(limitedReviewItems[reviewIndex]);
           reviewIndex++;
         }
+      } else if (limitedReviewItems.length > 0) {
+        // Only review items
+        distributedItems.push(...limitedReviewItems);
+      } else {
+        // Only non-review items
+        distributedItems.push(...nonReviewItems);
       }
 
-      // Add any remaining review items at the end
-      while (reviewIndex < limitedReviewItems.length) {
-        distributedItems.push(limitedReviewItems[reviewIndex]);
-        reviewIndex++;
-      }
-    } else if (limitedReviewItems.length > 0) {
-      // Only review items
-      distributedItems.push(...limitedReviewItems);
-    } else {
-      // Only non-review items
-      distributedItems.push(...nonReviewItems);
-    }
+      // Apply variety mixing for engagement
+      const mixedItems = applyVarietyMixing(distributedItems);
 
-    // Apply variety mixing for engagement
-    const mixedItems = applyVarietyMixing(distributedItems);
-    
-    setScrollItems(mixedItems);
+      if (!cancelled) {
+        setScrollItems(mixedItems);
+      }
+    };
+
+    void buildScrollItems();
+    return () => {
+      cancelled = true;
+    };
   }, [documentQueueItems, documents, dueFlashcards, dueExtracts, isRating, settings.scrollQueue, settings.rssQueue, applyVarietyMixing]);
 
   // Current item (for display during transition)
@@ -688,7 +727,50 @@ export function QueueScrollPage() {
       if (assistantItem.type === "document" && assistantItem.documentId) {
         const doc = documents.find(d => d.id === assistantItem.documentId);
         const title = doc?.title || assistantItem.documentTitle;
-        const content = [title ? `Title: ${title}` : null, doc?.content]
+        const titleLine = title ? `Title: ${title}` : null;
+
+        if (doc?.fileType === "youtube") {
+          let transcriptText = transcriptCacheRef.current.get(doc.id);
+          if (!transcriptText && !transcriptFetchInFlightRef.current.has(doc.id)) {
+            transcriptFetchInFlightRef.current.add(doc.id);
+            try {
+              const videoId = extractYouTubeId(doc.filePath);
+              if (videoId) {
+                const segments = await fetchYouTubeTranscript(videoId);
+                if (segments.length > 0) {
+                  const text = buildTranscriptText(segments);
+                  if (text) {
+                    transcriptCacheRef.current.set(doc.id, text);
+                    transcriptText = text;
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn("[QueueScroll] Failed to fetch YouTube transcript for assistant context", doc.id, error);
+            } finally {
+              transcriptFetchInFlightRef.current.delete(doc.id);
+            }
+          }
+
+          if (transcriptText) {
+            const content = [titleLine, transcriptText].filter(Boolean).join("\n\n");
+            const trimmed = content ? await trimToTokenWindow(content, maxTokens, aiModel) : undefined;
+            if (!cancelled) {
+              setAssistantContext({
+                type: "video",
+                documentId: assistantItem.documentId,
+                content: trimmed || undefined,
+                contextWindowTokens: maxTokens,
+                metadata: {
+                  title: title || undefined,
+                },
+              });
+            }
+            return;
+          }
+        }
+
+        const content = [titleLine, doc?.content]
           .filter(Boolean)
           .join("\n\n");
         const trimmed = content ? await trimToTokenWindow(content, maxTokens, aiModel) : undefined;
@@ -1062,7 +1144,7 @@ export function QueueScrollPage() {
         setItemsReviewedThisSession(prev => prev + 1);
         
         // Reload RSS items to update the list
-        const rssUnread = getUnreadItems();
+        const rssUnread = await getUnreadItemsAuto();
         const rssItems: ScrollItem[] = rssUnread.map(({ feed, item }) => ({
           id: `rss-${item.id}`,
           type: "rss",

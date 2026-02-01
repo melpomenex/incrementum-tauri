@@ -1162,6 +1162,9 @@ const commandHandlers: Record<string, CommandHandler> = {
             scheduling_reason: `${priorityLabel} priority: ${intervalDays.toFixed(1)} days`,
         };
     },
+    rate_document_engaging: async (args) => {
+        return await commandHandlers.rate_document(args);
+    },
 
     rate_extract: async (args) => {
         const request = args.request as { extract_id: string; rating: number; time_taken?: number };
@@ -1982,7 +1985,14 @@ const commandHandlers: Record<string, CommandHandler> = {
                 contextPrompt += `\n\nSelected text:\n${context.selection}`;
             }
         } else if (context.type === 'web') {
-            contextPrompt = 'You are a helpful assistant that can search the web for information.';
+            if (normalizedContent) {
+                contextPrompt = `You are a helpful assistant analyzing the following web page content:\n\n${normalizedContent}\n\nAnswer questions based on this page.`;
+                if (context.selection && context.selection.trim().length > 0) {
+                    contextPrompt += `\n\nSelected text:\n${context.selection}`;
+                }
+            } else {
+                contextPrompt = 'You are a helpful assistant that can search the web for information.';
+            }
         } else {
             contextPrompt = 'You are a helpful assistant.';
         }
