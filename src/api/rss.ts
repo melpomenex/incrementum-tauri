@@ -791,7 +791,7 @@ function getApiBaseUrl(): string {
  * Check if HTTP RSS backend is available (web dev server)
  */
 function shouldUseHttpBackend(): boolean {
-  if ("__TAURI__" in window) {
+  if (isTauri()) {
     return false;
   }
   const host = window.location.hostname;
