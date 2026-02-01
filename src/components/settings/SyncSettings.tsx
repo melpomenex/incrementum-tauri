@@ -33,6 +33,7 @@ import {
   SyncLogEntry,
 } from "../../api/sync";
 import { createNewSyncRoomId, getSyncRoomId, setSyncRoomId } from "../../lib/yjsSync";
+import { QRCodeCanvas } from "qrcode.react";
 
 type ViewMode = "status" | "config" | "conflicts" | "log";
 
@@ -46,6 +47,7 @@ export function SyncSettings() {
   const [roomId, setRoomId] = useState("");
   const [joinRoomId, setJoinRoomId] = useState("");
   const [roomMessage, setRoomMessage] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(true);
 
   // Settings inputs
   const [endpoint, setEndpoint] = useState("");
@@ -60,6 +62,16 @@ export function SyncSettings() {
     setRoomId(getSyncRoomId());
     const interval = setInterval(loadSyncLog, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const isStandalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone;
+    setShowQr(!isStandalone);
   }, []);
 
   const loadConfig = () => {
@@ -242,6 +254,14 @@ export function SyncSettings() {
                   </button>
                 </div>
               </div>
+              {showQr && (
+                <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/30 p-3">
+                  <QRCodeCanvas value={roomId} size={120} />
+                  <div className="text-xs text-muted-foreground">
+                    Scan this QR code on your phone to join the same sync room.
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Join another code</label>
                 <div className="flex gap-2">

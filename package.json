@@ -62,6 +62,7 @@
     "ts-fsrs": "^5.2.3",
     "typings": "^2.1.1",
     "uuid": "^10.0.0",
+    "qrcode.react": "^4.2.0",
     "y-indexeddb": "^9.0.12",
     "y-websocket": "^1.5.4",
     "yjs": "^13.6.14",
