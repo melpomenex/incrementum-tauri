@@ -10,6 +10,7 @@ const BLOCKED_KEYS = new Set([
   "incrementum_user",
   "incrementum_last_sync_version",
   "incrementum_youtube_cookies",
+  "incrementum_sync_room",
   "llm-providers-storage",
   "mcp-servers-storage",
   "integration_settings",

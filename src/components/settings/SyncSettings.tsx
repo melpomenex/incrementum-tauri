@@ -32,6 +32,7 @@ import {
   SyncResult,
   SyncLogEntry,
 } from "../../api/sync";
+import { createNewSyncRoomId, getSyncRoomId, setSyncRoomId } from "../../lib/yjsSync";
 
 type ViewMode = "status" | "config" | "conflicts" | "log";
 
@@ -42,6 +43,9 @@ export function SyncSettings() {
   const [viewMode, setViewMode] = useState<ViewMode>("status");
   const [syncLog, setSyncLog] = useState<SyncLogEntry[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [roomId, setRoomId] = useState("");
+  const [joinRoomId, setJoinRoomId] = useState("");
+  const [roomMessage, setRoomMessage] = useState<string | null>(null);
 
   // Settings inputs
   const [endpoint, setEndpoint] = useState("");
@@ -53,6 +57,7 @@ export function SyncSettings() {
   useEffect(() => {
     loadConfig();
     loadSyncLog();
+    setRoomId(getSyncRoomId());
     const interval = setInterval(loadSyncLog, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -121,6 +126,35 @@ export function SyncSettings() {
     }
   };
 
+  const handleCopyRoom = async () => {
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setRoomMessage("Copied sync code to clipboard.");
+    } catch {
+      setRoomMessage("Failed to copy. You can still select and copy it manually.");
+    }
+  };
+
+  const handleJoinRoom = () => {
+    if (!joinRoomId.trim()) {
+      setRoomMessage("Enter a sync code to join.");
+      return;
+    }
+    const nextRoom = joinRoomId.trim();
+    setSyncRoomId(nextRoom);
+    setRoomId(nextRoom);
+    setRoomMessage("Sync code updated. Reload to connect.");
+  };
+
+  const handleRotateRoom = () => {
+    if (!confirm("Create a new sync code? This will stop syncing with devices on the old code.")) {
+      return;
+    }
+    const next = createNewSyncRoomId();
+    setRoomId(next);
+    setRoomMessage("New sync code created. Share it with your other devices.");
+  };
+
   const nextSyncTime = config ? getNextSyncTime(config) : null;
 
   return (
@@ -179,6 +213,59 @@ export function SyncSettings() {
       {/* Status View */}
       {viewMode === "status" && (
         <div className="space-y-4">
+          <div className="bg-card border border-border rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-2">Device Sync (No Login)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Use this sync code to connect your own devices. Anyone with the code can sync the
+              same data.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Your sync code</label>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 px-3 py-2 bg-background border border-border rounded text-xs font-mono"
+                    value={roomId}
+                    readOnly
+                  />
+                  <button
+                    onClick={handleCopyRoom}
+                    className="px-3 py-2 bg-muted text-foreground rounded text-xs"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={handleRotateRoom}
+                    className="px-3 py-2 bg-destructive text-destructive-foreground rounded text-xs"
+                  >
+                    New
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Join another code</label>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 px-3 py-2 bg-background border border-border rounded text-xs font-mono"
+                    value={joinRoomId}
+                    onChange={(e) => setJoinRoomId(e.target.value)}
+                    placeholder="Paste sync code..."
+                  />
+                  <button
+                    onClick={handleJoinRoom}
+                    className="px-3 py-2 bg-primary text-primary-foreground rounded text-xs"
+                  >
+                    Join
+                  </button>
+                </div>
+              </div>
+              {roomMessage && <div className="text-xs text-muted-foreground">{roomMessage}</div>}
+              <div className="text-xs text-muted-foreground">
+                After joining a code, reload the app on this device.
+              </div>
+            </div>
+          </div>
+
           {/* Sync status card */}
           <div className="bg-card border border-border rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
