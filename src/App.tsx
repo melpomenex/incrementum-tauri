@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import type { ChangeEvent } from "react";
 import { NewMainLayout, MainContent } from "./components/layout/NewMainLayout";
 import { useAnalyticsStore } from "./stores/analyticsStore";
 import { useDocumentStore } from "./stores/documentStore";
@@ -11,6 +12,7 @@ import { KeyboardShortcutsHelp } from "./components/common/KeyboardShortcutsHelp
 import { Breadcrumb } from "./components/common/Breadcrumb";
 import { useToast } from "./components/common/Toast";
 import { initializeNotifications } from "./utils/notificationService";
+import { getYjsSync } from "./lib/yjsSync";
 
 // Page components
 import { DocumentsPage } from "./pages/DocumentsPage";
@@ -234,6 +236,7 @@ function App() {
   return (
     <>
       <CommandCenter />
+      <SyncDebugPanel />
       <NewMainLayout
         activeItem={currentPage}
         onPageChange={setCurrentPage}
@@ -400,3 +403,70 @@ function DashboardPage({ onNavigate }: DashboardPageProps) {
 }
 
 export default App;
+
+function SyncDebugPanel() {
+  const [status, setStatus] = useState<"connected" | "disconnected">("disconnected");
+  const [synced, setSynced] = useState(false);
+  const [value, setValue] = useState("");
+  const [peers, setPeers] = useState(0);
+
+  useEffect(() => {
+    const sync = getYjsSync();
+    const yText = sync.doc.getText("sync-test");
+    const awareness = sync.provider.awareness;
+
+    const updateValue = () => setValue(yText.toString());
+    const updatePeers = () => setPeers(awareness.getStates().size);
+
+    const handleStatus = (event: { status: "connected" | "disconnected" }) => {
+      setStatus(event.status);
+    };
+
+    const handleSync = (isSynced: boolean) => {
+      setSynced(isSynced);
+    };
+
+    yText.observe(updateValue);
+    sync.provider.on("status", handleStatus);
+    sync.provider.on("sync", handleSync);
+    awareness.on("change", updatePeers);
+
+    updateValue();
+    updatePeers();
+
+    return () => {
+      yText.unobserve(updateValue);
+      sync.provider.off("status", handleStatus);
+      sync.provider.off("sync", handleSync);
+      awareness.off("change", updatePeers);
+    };
+  }, []);
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const sync = getYjsSync();
+    const yText = sync.doc.getText("sync-test");
+    const next = event.target.value;
+    sync.doc.transact(() => {
+      yText.delete(0, yText.length);
+      yText.insert(0, next);
+    });
+  };
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[1000] w-72 rounded border border-border bg-card p-3 shadow-lg">
+      <div className="mb-2 flex items-center justify-between text-xs text-foreground-secondary">
+        <span>Sync Test</span>
+        <span>{status === "connected" ? "Online" : "Offline"} · {synced ? "Synced" : "Syncing"} · {peers} peers</span>
+      </div>
+      <input
+        className="w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+        value={value}
+        onChange={handleChange}
+        placeholder="Type to sync..."
+      />
+      <div className="mt-1 text-[11px] text-foreground-secondary">
+        This box should mirror across devices.
+      </div>
+    </div>
+  );
+}
