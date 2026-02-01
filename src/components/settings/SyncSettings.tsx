@@ -34,6 +34,7 @@ import {
 } from "../../api/sync";
 import { createNewSyncRoomId, getSyncRoomId, setSyncRoomId } from "../../lib/yjsSync";
 import { QRCodeCanvas } from "qrcode.react";
+import { SyncQrScanner } from "./SyncQrScanner";
 
 type ViewMode = "status" | "config" | "conflicts" | "log";
 
@@ -48,6 +49,7 @@ export function SyncSettings() {
   const [joinRoomId, setJoinRoomId] = useState("");
   const [roomMessage, setRoomMessage] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(true);
+  const [showScanner, setShowScanner] = useState(false);
 
   // Settings inputs
   const [endpoint, setEndpoint] = useState("");
@@ -73,6 +75,17 @@ export function SyncSettings() {
       (window.navigator as any).standalone;
     setShowQr(!isStandalone);
   }, []);
+
+  useEffect(() => {
+    if (!showScanner) {
+      return;
+    }
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [showScanner]);
 
   const loadConfig = () => {
     setConfig(getSyncConfig());
@@ -277,6 +290,14 @@ export function SyncSettings() {
                   >
                     Join
                   </button>
+                  {!showQr && (
+                    <button
+                      onClick={() => setShowScanner(true)}
+                      className="px-3 py-2 bg-muted text-foreground rounded text-xs"
+                    >
+                      Scan
+                    </button>
+                  )}
                 </div>
               </div>
               {roomMessage && <div className="text-xs text-muted-foreground">{roomMessage}</div>}
@@ -285,6 +306,16 @@ export function SyncSettings() {
               </div>
             </div>
           </div>
+
+          {showScanner && (
+            <SyncQrScanner
+              onDetected={(value) => {
+                setJoinRoomId(value);
+                setRoomMessage("Sync code scanned. Tap Join to connect.");
+              }}
+              onClose={() => setShowScanner(false)}
+            />
+          )}
 
           {/* Sync status card */}
           <div className="bg-card border border-border rounded-lg p-6">
