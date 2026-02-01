@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { initializePWA } from "./lib/pwa";
 import { isTauri } from "./lib/tauri";
+import { initLocalStorageSync } from "./lib/localStorageSync";
 
 // Mobile PWA Components
 import { MobileLayoutWrapper } from "./components/mobile/MobileLayoutWrapper";
@@ -113,6 +114,9 @@ console.log('[main.tsx] Starting Incrementum app...');
 
 // Initialize PWA (works in both Tauri and Web)
 initializePWA();
+
+// Initialize localStorage -> Yjs sync (shared state across devices).
+initLocalStorageSync();
 
 // Dev/Tauri: ensure no service worker or cache is present to avoid stale assets.
 if ((import.meta.env.DEV || isTauri()) && "serviceWorker" in navigator) {
