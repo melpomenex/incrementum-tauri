@@ -173,6 +173,18 @@ export function SettingsPage() {
   
   const deviceInfo = getDeviceInfo();
   const isMobile = deviceInfo.isMobile || deviceInfo.isTablet;
+  const initialTabKey = "incrementum_settings_initial_tab";
+
+  useEffect(() => {
+    const initial = localStorage.getItem(initialTabKey) as SettingsTab | null;
+    if (initial && Object.values(SettingsTab).includes(initial)) {
+      setActiveTab(initial);
+      localStorage.removeItem(initialTabKey);
+      if (isMobile) {
+        setShowMobileMenu(false);
+      }
+    }
+  }, [isMobile]);
 
   // Filter tabs based on search
   const filteredTabs = useMemo(() => {

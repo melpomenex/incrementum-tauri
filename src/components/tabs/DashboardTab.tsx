@@ -5,6 +5,7 @@ import {
   ReviewTab,
   DocumentsTab,
   AnalyticsTab,
+  SettingsTab,
 } from "./TabRegistry";
 import { getDashboardStats, type DashboardStats } from "../../api/analytics";
 
@@ -111,6 +112,26 @@ export function DashboardTab() {
           <h3 className="font-semibold text-base md:text-lg text-foreground mb-1">Analytics</h3>
           <p className="text-xs md:text-sm text-muted-foreground">
             Track your progress
+          </p>
+        </button>
+
+        <button
+          onClick={() => {
+            localStorage.setItem("incrementum_settings_initial_tab", "sync");
+            addTab({
+              title: "Settings",
+              icon: "⚙️",
+              type: "settings",
+              content: SettingsTab,
+              closable: true,
+            });
+          }}
+          className="p-4 md:p-6 bg-card border border-border rounded-lg hover:shadow-md transition-shadow cursor-pointer text-left min-h-[120px] md:min-h-[140px] active:scale-[0.98] transition-transform"
+        >
+          <div className="text-2xl md:text-3xl mb-2">🔗</div>
+          <h3 className="font-semibold text-base md:text-lg text-foreground mb-1">Device Sync</h3>
+          <p className="text-xs md:text-sm text-muted-foreground">
+            Pair your phone and desktop
           </p>
         </button>
       </div>
