@@ -1,0 +1,19 @@
+# Replace with your domain, e.g. sync.readsync.org
+{$YJS_SYNC_HOSTNAME} {
+  encode zstd gzip
+
+  @ws {
+    header Connection *Upgrade*
+    header Upgrade websocket
+  }
+
+  respond /health 200
+
+  reverse_proxy @ws yjs-sync:1234
+  reverse_proxy yjs-sync:1234
+}
+
+{$TRANSCRIPT_HOSTNAME} {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:8766
+}

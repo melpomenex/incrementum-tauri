@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  yjs-sync:
+    image: node:20-alpine
+    working_dir: /app
+    command: >-
+      sh -c "
+        if [ ! -f package.json ]; then
+          npm init -y >/dev/null 2>&1;
+        fi;
+        npm install --no-save y-websocket@^1.5.4 >/dev/null 2>&1;
+        YPERSISTENCE=/data PORT=1234 node node_modules/y-websocket/bin/server.js
+      "
+    environment:
+      - YPERSISTENCE=/data
+      - PORT=1234
+    volumes:
+      - yjs_data:/data
+      - yjs_app:/app
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    env_file:
+      - .env
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - yjs-sync
+    restart: unless-stopped
+
+volumes:
+  yjs_data:
+  yjs_app:
+  caddy_data:
+  caddy_config:

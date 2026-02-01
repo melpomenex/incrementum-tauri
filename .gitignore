@@ -15,7 +15,9 @@ Vagrantfile
 
 # Ignore directories
 Incrementum-CPP
-vps-service
+vps-service/*
+!vps-service/yjs-sync/
+!vps-service/yjs-sync/**
 transcript-tester
 
 # Editor directories and files
